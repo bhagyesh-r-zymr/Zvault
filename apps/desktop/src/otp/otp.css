@@ -1,19 +1,23 @@
 .otp-code {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 10px;
 }
 
 .otp-code code {
-  font-size: 1.25rem;
-  letter-spacing: 0.05em;
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--iris-text);
   font-variant-numeric: tabular-nums;
 }
 
 .otp-ring {
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 26px;
+  height: 26px;
   transform: rotate(-90deg);
+  color: var(--iris-text);
 }
 
 .otp-ring circle {
@@ -22,7 +26,7 @@
 }
 
 .otp-ring-track {
-  stroke: color-mix(in srgb, currentColor 15%, transparent);
+  stroke: var(--line);
 }
 
 .otp-ring-fill {
@@ -31,13 +35,14 @@
   transition: stroke-dasharray 1s linear;
 }
 
-.otp-ring-low .otp-ring-fill {
-  stroke: #d64545;
+.otp-ring-low {
+  color: var(--attn);
 }
 
 .otp-ring text {
-  font-size: 11px;
-  fill: currentColor;
+  font-size: 12px;
+  font-weight: 600;
+  fill: var(--text-2);
   transform: rotate(90deg);
   transform-origin: 18px 18px;
 }
@@ -45,16 +50,35 @@
 .otp-editor {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 0.5rem;
+  align-items: stretch;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-sunken);
+}
+
+.otp-editor-set {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+.otp-editor-set .muted {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .otp-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: 8px;
   width: 100%;
 }
 
 .otp-actions input {
   flex: 1;
+  min-width: 0;
 }

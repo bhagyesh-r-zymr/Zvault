@@ -4,8 +4,12 @@
 
 use serde::Serialize;
 
+mod vault;
+
+pub use vault::Keyring;
+
 /// Must match `CRYPTO_VERSION` in `@zvault/shared`.
-const CRYPTO_VERSION: u32 = 1;
+pub(crate) const CRYPTO_VERSION: u32 = 1;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,7 +31,16 @@ fn core_info() -> CoreInfo {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![core_info])
+        .manage(Keyring::default())
+        .invoke_handler(tauri::generate_handler![
+            core_info,
+            vault::vault_create,
+            vault::vault_open,
+            vault::vault_lock,
+            vault::item_seal,
+            vault::item_open,
+            vault::item_summary,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Zvault");
 }

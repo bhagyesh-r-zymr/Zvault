@@ -4590,9 +4590,13 @@ dependencies = [
 name = "zvault-desktop"
 version = "0.0.0"
 dependencies = [
+ "base64 0.22.1",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
+ "thiserror 2.0.21",
+ "uuid",
+ "zeroize",
  "zvault-crypto",
 ]

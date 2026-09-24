@@ -5,12 +5,13 @@ import { AccessController, OrgsController } from './access.controller.js';
 import { ACCESS_CLOCK } from './clock.js';
 import { EnvironmentsService } from './environments.service.js';
 import { OrgsService } from './orgs.service.js';
+import { ProjectPolicy } from './project-policy.js';
 
 /**
  * Team access: organizations, members, groups, agents, per-environment grants,
  * wrapped environment keys and approval requests. Exports
- * `EnvironmentsService.require` so the secrets and agent modules can gate on a
- * principal's level.
+ * `EnvironmentsService.require` (a principal's level in an environment) and
+ * `ProjectPolicy` (team rules the projects API applies).
  */
 @Module({
   imports: [DevicesModule],
@@ -19,8 +20,9 @@ import { OrgsService } from './orgs.service.js';
     AccessFacts,
     OrgsService,
     EnvironmentsService,
+    ProjectPolicy,
     { provide: ACCESS_CLOCK, useValue: () => new Date() },
   ],
-  exports: [EnvironmentsService],
+  exports: [EnvironmentsService, ProjectPolicy],
 })
 export class AccessModule {}

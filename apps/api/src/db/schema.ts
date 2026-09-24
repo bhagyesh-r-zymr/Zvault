@@ -1,7 +1,9 @@
 import type { DeviceInfo, EncryptedBlob } from '@zvault/shared';
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   customType,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -111,6 +113,134 @@ export const sessions = pgTable(
   (t) => [index('sessions_account_idx').on(t.accountId)],
 );
 
+/**
+ * Vaults of login items. `seq` is the vault's change counter: every item
+ * write takes the next value, which becomes the item's sync cursor.
+ */
+export const vaults = pgTable(
+  'vaults',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    encryptedKey: jsonb('encrypted_key').$type<EncryptedBlob>().notNull(),
+    encryptedMeta: jsonb('encrypted_meta').$type<EncryptedBlob>().notNull(),
+    seq: integer('seq').notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index('vaults_owner_idx').on(t.ownerId)],
+);
+
+/** Vault items; a deleted item keeps its row (without blobs) as a tombstone. */
+export const vaultItems = pgTable(
+  'vault_items',
+  {
+    vaultId: uuid('vault_id')
+      .notNull()
+      .references(() => vaults.id, { onDelete: 'cascade' }),
+    id: uuid('id').notNull(),
+    revision: integer('revision').notNull(),
+    seq: integer('seq').notNull(),
+    deleted: boolean('deleted').notNull().default(false),
+    encryptedKey: jsonb('encrypted_key').$type<EncryptedBlob>(),
+    encryptedData: jsonb('encrypted_data').$type<EncryptedBlob>(),
+    updatedAt: ts('updated_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.vaultId, t.id] }),
+    index('vault_items_seq_idx').on(t.vaultId, t.seq),
+  ],
+);
+
+/**
+ * Projects of secrets. Everything readable about a project (its name, its
+ * environments' and folders' names, secret names and tags) is sealed with the
+ * project key, which the server never holds.
+ */
+export const projects = pgTable(
+  'projects',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    encryptedMeta: jsonb('encrypted_meta').$type<EncryptedBlob>().notNull(),
+    revision: integer('revision').notNull().default(1),
+    /** Change counter shared by all of the project's entries. */
+    seq: integer('seq').notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [index('projects_owner_idx').on(t.ownerId)],
+);
+
+/**
+ * Who holds which key. `resourceId` is the project id (the project key) or
+ * one of its environment ids (that environment's key); `wrappedKey` is the
+ * key wrapped for `accountId`. Holding a grant is what access means.
+ */
+export const keyGrants = pgTable(
+  'key_grants',
+  {
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    resourceId: uuid('resource_id').notNull(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    wrappedKey: jsonb('wrapped_key').$type<EncryptedBlob>().notNull(),
+    /**
+     * Set when a manager wrapped the key to this member's sharing key (team
+     * access); `wrappedKey` is then the box's ciphertext. Null for the
+     * owner's own grants, wrapped with their account key.
+     */
+    box: jsonb('box').$type<MemberWrapBox>(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.resourceId, t.accountId] }),
+    index('key_grants_account_idx').on(t.accountId),
+  ],
+);
+
+/** Environments, folders and secrets of a project. Deleted entries stay as tombstones. */
+export const projectEntries = pgTable(
+  'project_entries',
+  {
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    id: uuid('id').notNull(),
+    type: text('type').$type<'environment' | 'folder' | 'secret'>().notNull(),
+    revision: integer('revision').notNull(),
+    seq: integer('seq').notNull(),
+    deleted: boolean('deleted').notNull().default(false),
+    encryptedMeta: jsonb('encrypted_meta').$type<EncryptedBlob>(),
+    updatedAt: ts('updated_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.id] }),
+    index('project_entries_seq_idx').on(t.projectId, t.seq),
+  ],
+);
+
+/** A secret's value in one environment, sealed with that environment's key. */
+export const secretValues = pgTable(
+  'secret_values',
+  {
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    secretId: uuid('secret_id').notNull(),
+    environmentId: uuid('environment_id').notNull(),
+    encryptedValue: jsonb('encrypted_value').$type<EncryptedBlob>().notNull(),
+    updatedAt: ts('updated_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.secretId, t.environmentId] })],
+);
+
 // ---------------------------------------------------------------- team access
 
 export const orgRole = pgEnum('org_role', ['owner', 'admin', 'member']);
@@ -210,28 +340,46 @@ export const agents = pgTable(
   (t) => [index('agents_org_idx').on(t.orgId)],
 );
 
+/** A project shared with an organization, so its members can be granted access. */
+export const projectOrgs = pgTable('project_orgs', {
+  projectId: uuid('project_id')
+    .primaryKey()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  orgId: uuid('org_id')
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  linkedBy: uuid('linked_by')
+    .notNull()
+    .references(() => accounts.id),
+  createdAt: createdAt(),
+});
+
 /**
- * An environment under access control. `environmentId` is the id the projects
- * module gave it; the key version counts rotations.
+ * Access state of one environment of an org project. The key version counts
+ * rotations; names stay inside the project's ciphertext.
  */
 export const environmentAccess = pgTable(
   'environment_access',
   {
     environmentId: uuid('environment_id').primaryKey(),
-    projectId: uuid('project_id').notNull(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
     orgId: uuid('org_id')
       .notNull()
       .references(() => organizations.id, { onDelete: 'cascade' }),
-    name: text('name').notNull(),
     keyVersion: integer('key_version').notNull().default(1),
     /** Set when a key holder loses access; cleared by the next rotation. */
     rotationRequiredAt: ts('rotation_required_at'),
-    createdBy: uuid('created_by')
-      .notNull()
-      .references(() => accounts.id),
     createdAt: createdAt(),
   },
-  (t) => [index('environment_access_project_idx').on(t.projectId)],
+  (t) => [
+    index('environment_access_project_idx').on(t.projectId),
+    foreignKey({
+      columns: [t.projectId, t.environmentId],
+      foreignColumns: [projectEntries.projectId, projectEntries.id],
+    }).onDelete('cascade'),
+  ],
 );
 
 export const environmentGrants = pgTable(
@@ -255,37 +403,15 @@ export const environmentGrants = pgTable(
   ],
 );
 
-/** Wrapped environment key material; the server can't unwrap any of it. */
-export interface StoredWrapBox {
+/** The public half of a member wrap (see `keyGrants.box`). */
+export interface MemberWrapBox {
   recipientPublicKey: string;
   wrapperPublicKey: string;
   ephemeralPublicKey: string;
-  blob: EncryptedBlob;
+  /** Environment keys only: the key version the wrap is bound to. */
+  keyVersion: number | null;
+  wrappedBy: string;
 }
-
-/** One key version of one environment, wrapped to one member or agent. */
-export const environmentKeyWraps = pgTable(
-  'environment_key_wraps',
-  {
-    environmentId: uuid('environment_id')
-      .notNull()
-      .references(() => environmentAccess.environmentId, { onDelete: 'cascade' }),
-    keyVersion: integer('key_version').notNull(),
-    principalType: principalType('principal_type').notNull(),
-    principalId: uuid('principal_id').notNull(),
-    box: jsonb('box').$type<StoredWrapBox>().notNull(),
-    wrappedBy: uuid('wrapped_by')
-      .notNull()
-      .references(() => accounts.id),
-    createdAt: createdAt(),
-  },
-  (t) => [
-    primaryKey({
-      columns: [t.environmentId, t.keyVersion, t.principalType, t.principalId],
-    }),
-    index('environment_key_wraps_principal_idx').on(t.principalType, t.principalId),
-  ],
-);
 
 /** Values a manager sealed to the requester when approving. */
 export interface StoredRelease {

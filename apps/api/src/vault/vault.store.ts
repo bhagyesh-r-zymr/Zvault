@@ -34,8 +34,7 @@ export abstract class VaultStore {
 }
 
 /**
- * In-process store for development and tests. The production store plugs in
- * behind the same interface once the database choice lands.
+ * In-process store for unit tests. The app uses `DrizzleVaultStore`.
  */
 @Injectable()
 export class InMemoryVaultStore extends VaultStore {

@@ -14,7 +14,7 @@ export const RecordId = z.uuid();
 export type RecordId = z.infer<typeof RecordId>;
 
 /** Wrapped 32-byte key: 48 bytes of ciphertext including the tag. */
-const WrappedKey = EncryptedBlob.refine((b) => b.ct.length === 64, {
+export const WrappedKey = EncryptedBlob.refine((b) => b.ct.length === 64, {
   message: 'must be a wrapped 32-byte key',
 });
 

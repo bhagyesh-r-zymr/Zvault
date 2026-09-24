@@ -57,6 +57,21 @@ describe('effectiveLevel', () => {
   });
 });
 
+describe('project owner and agents', () => {
+  it('always gives the project owner manage', () => {
+    const owned = { ...org, projectOwnerId: 'riya' };
+    expect(
+      effectiveLevel({ type: 'account', id: 'riya' }, [g('account', 'riya', 'none')], owned, now),
+    ).toBe('manage');
+  });
+
+  it('never lets an agent hold a key', () => {
+    expect(
+      effectiveLevel({ type: 'agent', id: 'claude' }, [g('agent', 'claude', 'use')], org, now),
+    ).toBe('needs_approval');
+  });
+});
+
 describe('allLevels', () => {
   it('covers every active member and agent', () => {
     const levels = allLevels([g('group', 'backend', 'use')], org, now);

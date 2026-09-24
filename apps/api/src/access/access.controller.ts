@@ -13,7 +13,8 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import {
   AcceptInviteRequest,
-  AddWrapsRequest,
+  AddEnvironmentWrapsRequest,
+  AddProjectWrapsRequest,
   ApproveAccessRequest,
   ChangeRoleRequest,
   CreateAccessRequest,
@@ -23,14 +24,14 @@ import {
   PrincipalType,
   PutGrantRequest,
   RegisterAgentRequest,
-  RegisterEnvironmentRequest,
+  LinkProjectRequest,
   RotateEnvironmentKeyRequest,
   type AccessRequestView,
   type EnvironmentAccess,
   type Grant,
   type ListAccessRequestsResponse,
   type ListOrgsResponse,
-  type MyEnvironmentKeysResponse,
+  type MyProjectKeysResponse,
   type OrgAgent,
   type OrgDetail,
   type OrgGroup,
@@ -180,12 +181,14 @@ export class OrgsController {
 export class AccessController {
   constructor(private readonly envs: EnvironmentsService) {}
 
-  @Post('environments')
-  register(
+  /** Shares one of the caller's projects with an organization. */
+  @Put('projects/:projectId/org')
+  link(
     @CurrentSession() s: Session,
-    @Body(new ZodPipe(RegisterEnvironmentRequest)) body: RegisterEnvironmentRequest,
-  ): Promise<EnvironmentAccess> {
-    return this.envs.register(s.userId, body);
+    @Param('projectId', Id) projectId: string,
+    @Body(new ZodPipe(LinkProjectRequest)) body: LinkProjectRequest,
+  ): Promise<ProjectAccessResponse> {
+    return this.envs.linkProject(s.userId, projectId, body);
   }
 
   @Get('projects/:projectId')
@@ -224,22 +227,32 @@ export class AccessController {
     await this.envs.deleteGrant(s.userId, envId, { type, id: principalId });
   }
 
-  @Get('environments/:envId/keys/me')
+  @Get('projects/:projectId/keys/me')
   myKeys(
     @CurrentSession() s: Session,
-    @Param('envId', Id) envId: string,
-  ): Promise<MyEnvironmentKeysResponse> {
-    return this.envs.myKeys({ type: 'account', id: s.userId }, envId);
+    @Param('projectId', Id) projectId: string,
+  ): Promise<MyProjectKeysResponse> {
+    return this.envs.myKeys(s.userId, projectId);
+  }
+
+  @Post('projects/:projectId/keys')
+  @HttpCode(204)
+  async addProjectWraps(
+    @CurrentSession() s: Session,
+    @Param('projectId', Id) projectId: string,
+    @Body(new ZodPipe(AddProjectWrapsRequest)) body: AddProjectWrapsRequest,
+  ): Promise<void> {
+    await this.envs.addProjectWraps(s.userId, projectId, body);
   }
 
   @Post('environments/:envId/keys')
   @HttpCode(204)
-  async addWraps(
+  async addEnvironmentWraps(
     @CurrentSession() s: Session,
     @Param('envId', Id) envId: string,
-    @Body(new ZodPipe(AddWrapsRequest)) body: AddWrapsRequest,
+    @Body(new ZodPipe(AddEnvironmentWrapsRequest)) body: AddEnvironmentWrapsRequest,
   ): Promise<void> {
-    await this.envs.addWraps(s.userId, envId, body);
+    await this.envs.addEnvironmentWraps(s.userId, envId, body);
   }
 
   @Post('environments/:envId/rotate')

@@ -20,7 +20,7 @@
 //! except on the printed Emergency Kit.
 //!
 //! Vault and item encryption (per-item keys, padding, record binding) lives in
-//! [`vault`].
+//! [`vault`]; projects, environments and secrets in [`project`].
 
 mod access;
 mod aead;
@@ -28,6 +28,7 @@ mod error;
 mod kdf;
 mod key;
 mod keyset;
+pub mod project;
 mod random;
 mod secret_key;
 mod share;
@@ -35,8 +36,8 @@ pub mod srp;
 pub mod vault;
 
 pub use access::{
-    ACCESS_ID_LEN, generate_environment_key, open_release, seal_release, unwrap_environment_key,
-    wrap_environment_key,
+    ACCESS_ID_LEN, environment_key_wrap_aad, generate_environment_key, open_release,
+    project_key_wrap_aad, seal_release, unwrap_key_from_member, wrap_key_to_member,
 };
 pub use aead::{NONCE_LEN, Sealed, TAG_LEN, open, seal};
 pub use error::{Error, Result};

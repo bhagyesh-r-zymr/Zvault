@@ -7,3 +7,4 @@ export * from './encoding.js';
 export * from './sharing.js';
 export * from './two-factor.js';
 export * from './vault.js';
+export * from './projects.js';

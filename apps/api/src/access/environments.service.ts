@@ -12,20 +12,22 @@ import {
   levelAtLeast,
   type AccessLevel,
   type AccessRequestView,
-  type AddWrapsRequest,
+  type AddEnvironmentWrapsRequest,
+  type AddProjectWrapsRequest,
   type ApproveAccessRequest,
   type CreateAccessRequest,
   type EnvironmentAccess,
   type Grant,
+  type LinkProjectRequest,
   type ListAccessRequestsResponse,
-  type MyEnvironmentKeysResponse,
+  type MemberKeyWrap,
+  type MyProjectKeysResponse,
   type PendingWrap,
   type PrincipalRef,
   type ProjectAccessResponse,
   type PutGrantRequest,
-  type RegisterEnvironmentRequest,
   type RotateEnvironmentKeyRequest,
-  type WrappedEnvironmentKey,
+  type StoredMemberWrap,
 } from '@zvault/shared';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { DATABASE, type Database } from '../db/database.js';
@@ -35,16 +37,28 @@ import {
   agents,
   environmentAccess,
   environmentGrants,
-  environmentKeyWraps,
+  keyGrants,
   orgGroups,
   orgMembers,
+  projectEntries,
+  projectOrgs,
+  projects,
+  secretValues,
+  type MemberWrapBox,
 } from '../db/schema.js';
-import { ADMIN_ROLES, AccessFacts, type EnvironmentRow, type KeyHolder } from './access.facts.js';
+import {
+  ADMIN_ROLES,
+  AccessFacts,
+  type EnvironmentRow,
+  type KeyHolder,
+  type LinkedProject,
+} from './access.facts.js';
 import { ACCESS_CLOCK, type Clock } from './clock.js';
 import { allLevels, effectiveLevel, holderKey, type GrantFacts } from './levels.js';
 
 type GrantRow = typeof environmentGrants.$inferSelect;
 type RequestRow = typeof accessRequests.$inferSelect;
+type Env = EnvironmentRow & { ownerId: string };
 
 const toGrant = (g: GrantRow): Grant => ({
   principal: { type: g.principalType, id: g.principalId },
@@ -54,12 +68,19 @@ const toGrant = (g: GrantRow): Grant => ({
   createdAt: g.createdAt.toISOString(),
 });
 
+const isUniqueViolation = (e: unknown) =>
+  (e as { code?: string }).code === '23505' ||
+  (e as { cause?: { code?: string } }).cause?.code === '23505';
+
 /**
- * Who can reach each environment, and the wrapped copies of its key.
+ * Who can reach each environment of a project shared with an organization,
+ * and the member-wrapped copies of its keys, stored as the projects module's
+ * key grants.
  *
- * The server decides who may *fetch* a wrap, but it never holds an unwrapped
- * key: wraps are made on a manager's device, and when someone loses access the
- * environment is flagged until a manager's device rotates to a new key.
+ * The server decides who may *fetch* a grant, but never holds an unwrapped
+ * key: wraps are made on a manager's device, and when someone loses access
+ * their grants are deleted and the environment is flagged until a manager's
+ * device rotates it to a new key.
  */
 @Injectable()
 export class EnvironmentsService {
@@ -69,184 +90,75 @@ export class EnvironmentsService {
     private readonly facts: AccessFacts,
   ) {}
 
-  // ------------------------------------------------------------ setup
+  // ------------------------------------------------------------ projects
 
-  async register(accountId: string, req: RegisterEnvironmentRequest): Promise<EnvironmentAccess> {
-    const me = await this.facts.member(req.orgId, accountId);
-    const w = req.wrap;
-    if (w.recipient.type !== 'account' || w.recipient.id !== accountId) {
-      throw new UnprocessableEntityException('Wrap the first key version to yourself');
-    }
-    if (w.recipientPublicKey !== me.publicKey || w.wrapperPublicKey !== me.publicKey) {
-      throw new ConflictException('Your sharing key does not match the one on file');
-    }
-    const now = this.now();
+  /** Shares a project with an org. Only the project's owner, an active member, can. */
+  async linkProject(
+    accountId: string,
+    projectId: string,
+    req: LinkProjectRequest,
+  ): Promise<ProjectAccessResponse> {
+    const [project] = await this.db
+      .select({ ownerId: projects.ownerId })
+      .from(projects)
+      .where(eq(projects.id, projectId));
+    if (!project || project.ownerId !== accountId) throw new NotFoundException();
+    await this.facts.member(req.orgId, accountId);
     try {
-      await this.db.transaction(async (tx) => {
-        await tx.insert(environmentAccess).values({
-          environmentId: req.environmentId,
-          projectId: req.projectId,
-          orgId: req.orgId,
-          name: req.name,
-          keyVersion: 1,
-          createdBy: accountId,
-          createdAt: now,
-        });
-        await tx.insert(environmentGrants).values({
-          environmentId: req.environmentId,
-          principalType: 'account',
-          principalId: accountId,
-          level: 'manage',
-          grantedBy: accountId,
-          createdAt: now,
-        });
-        await tx
-          .insert(environmentKeyWraps)
-          .values(this.wrapRow(req.environmentId, 1, w, accountId, now));
-      });
+      await this.db
+        .insert(projectOrgs)
+        .values({ projectId, orgId: req.orgId, linkedBy: accountId, createdAt: this.now() });
     } catch (e) {
-      const code =
-        (e as { code?: string; cause?: { code?: string } }).code ??
-        (e as { cause?: { code?: string } }).cause?.code;
-      if (code === '23505') throw new ConflictException('Environment already registered');
+      if (isUniqueViolation(e)) throw new ConflictException('Already shared with an organization');
       throw e;
     }
-    return this.detail(accountId, req.environmentId);
+    return this.project(accountId, projectId);
   }
 
-  private wrapRow(
-    environmentId: string,
-    keyVersion: number,
-    w: WrappedEnvironmentKey,
-    wrappedBy: string,
-    now: Date,
-  ) {
-    return {
-      environmentId,
-      keyVersion,
-      principalType: w.recipient.type,
-      principalId: w.recipient.id,
-      box: {
-        recipientPublicKey: w.recipientPublicKey,
-        wrapperPublicKey: w.wrapperPublicKey,
-        ephemeralPublicKey: w.ephemeralPublicKey,
-        blob: w.blob,
-      },
-      wrappedBy,
-      createdAt: now,
-    };
-  }
-
-  // ------------------------------------------------------------ reading
-
-  /** Loads an environment the caller can see (any member of its org). */
-  private async visible(accountId: string, environmentId: string) {
-    const env = await this.facts.environment(environmentId);
-    const me = await this.facts.member(env.orgId, accountId);
+  /** The linked project the caller can see, reconciled against expiry. */
+  private async visibleProject(accountId: string, projectId: string) {
+    const project = await this.facts.linkedProject(projectId);
+    if (!project) throw new NotFoundException();
+    const me = await this.facts.member(project.orgId, accountId);
     const now = this.now();
-    await this.facts.reconcile([environmentId], now);
-    return { env: await this.facts.environment(environmentId), me, now };
+    await this.facts.reconcileProject(projectId, now);
+    return { project, me, now };
   }
 
-  async detail(accountId: string, environmentId: string): Promise<EnvironmentAccess> {
-    const { env, now } = await this.visible(accountId, environmentId);
-    const [grantRows, org] = await Promise.all([
-      this.db
-        .select()
-        .from(environmentGrants)
-        .where(eq(environmentGrants.environmentId, environmentId)),
-      this.facts.org(env.orgId),
-    ]);
-    const myLevel = effectiveLevel({ type: 'account', id: accountId }, grantRows, org, now);
-    return {
-      environmentId: env.environmentId,
-      projectId: env.projectId,
-      orgId: env.orgId,
-      name: env.name,
-      keyVersion: env.keyVersion,
-      rotationRequired: env.rotationRequiredAt !== null,
-      myLevel,
-      grants: grantRows.map(toGrant),
-      pendingWraps: levelAtLeast(myLevel, 'manage') ? await this.pending(env, grantRows, now) : [],
-    };
-  }
-
-  /** Key holders with standing access and no wrap of the current version. */
-  private async pending(
-    env: EnvironmentRow,
-    grants: GrantFacts[],
+  /** Can hand out the project key: holds it and is the owner, an admin, or a manager somewhere. */
+  private async canWrapProjectKey(
+    project: LinkedProject,
+    accountId: string,
+    role: string,
     now: Date,
-  ): Promise<PendingWrap[]> {
-    const org = await this.facts.org(env.orgId);
-    const wrapped = new Set(
-      (
-        await this.db
-          .select({ t: environmentKeyWraps.principalType, id: environmentKeyWraps.principalId })
-          .from(environmentKeyWraps)
-          .where(
-            and(
-              eq(environmentKeyWraps.environmentId, env.environmentId),
-              eq(environmentKeyWraps.keyVersion, env.keyVersion),
-            ),
-          )
-      ).map((w) => `${w.t}:${w.id}`),
-    );
-    const out: PendingWrap[] = [];
-    for (const [key, level] of allLevels(grants, org, now)) {
-      if (!holdsKey(level) || wrapped.has(key)) continue;
-      const [type, id] = key.split(':') as ['account' | 'agent', string];
-      out.push({
-        recipient: { type, id },
-        publicKey: org.keys.get(key) as PendingWrap['publicKey'],
-      });
-    }
-    return out;
+  ): Promise<boolean> {
+    const [held] = await this.db
+      .select({ a: keyGrants.accountId })
+      .from(keyGrants)
+      .where(
+        and(
+          eq(keyGrants.projectId, project.projectId),
+          eq(keyGrants.resourceId, project.projectId),
+          eq(keyGrants.accountId, accountId),
+        ),
+      );
+    if (!held) return false;
+    if (project.ownerId === accountId || ADMIN_ROLES.includes(role as never)) return true;
+    const { byEnv } = await this.facts.projectLevels(project, now);
+    return [...byEnv.values()].some((l) => l.get(holderKey('account', accountId)) === 'manage');
   }
 
   /** The "Project access" matrix: raw grants per principal and environment. */
   async project(accountId: string, projectId: string): Promise<ProjectAccessResponse> {
-    const all = await this.db
-      .select()
-      .from(environmentAccess)
-      .where(eq(environmentAccess.projectId, projectId))
-      .orderBy(environmentAccess.createdAt);
-    const orgIds = [...new Set(all.map((e) => e.orgId))];
-    const mine = await this.db
-      .select({ orgId: orgMembers.orgId, publicKey: orgMembers.publicKey })
-      .from(orgMembers)
-      .where(
-        and(
-          eq(orgMembers.accountId, accountId),
-          inArray(orgMembers.orgId, orgIds.length ? orgIds : [projectId]),
-        ),
-      );
-    const allowed = new Set(mine.filter((m) => m.publicKey).map((m) => m.orgId));
-    const envs = all.filter((e) => allowed.has(e.orgId));
-    if (envs.length === 0) throw new NotFoundException();
-    const now = this.now();
-    await this.facts.reconcile(
-      envs.map((e) => e.environmentId),
-      now,
-    );
-    const fresh = await this.db
-      .select()
-      .from(environmentAccess)
-      .where(
-        inArray(
-          environmentAccess.environmentId,
-          envs.map((e) => e.environmentId),
-        ),
-      )
-      .orderBy(environmentAccess.createdAt);
-    const grants = await this.db
-      .select()
-      .from(environmentGrants)
-      .where(
-        inArray(
-          environmentGrants.environmentId,
-          fresh.map((e) => e.environmentId),
-        ),
-      );
+    const { project, me, now } = await this.visibleProject(accountId, projectId);
+    const envs = await this.facts.register(project, now);
+    const ids = envs.map((e) => e.environmentId);
+    const grants = ids.length
+      ? await this.db
+          .select()
+          .from(environmentGrants)
+          .where(inArray(environmentGrants.environmentId, ids))
+      : [];
 
     const principals = new Map<string, PrincipalRef>();
     for (const g of grants) {
@@ -261,7 +173,7 @@ export class EnvironmentsService {
       .map(([key, principal]) => ({
         principal,
         name: names.get(key) ?? 'Removed',
-        cells: fresh.map((e) => {
+        cells: envs.map((e) => {
           const g = grants.find(
             (x) =>
               x.environmentId === e.environmentId && `${x.principalType}:${x.principalId}` === key,
@@ -277,14 +189,37 @@ export class EnvironmentsService {
       .sort(
         (a, b) => order[a.principal.type] - order[b.principal.type] || a.name.localeCompare(b.name),
       );
+
+    let pendingProjectWraps: PendingWrap[] = [];
+    if (await this.canWrapProjectKey(project, accountId, me.role, now)) {
+      const holders = await this.facts.projectKeyHolders(project, now);
+      const held = new Set(
+        (
+          await this.db
+            .select({ a: keyGrants.accountId })
+            .from(keyGrants)
+            .where(and(eq(keyGrants.projectId, projectId), eq(keyGrants.resourceId, projectId)))
+        ).map((r) => r.a),
+      );
+      const org = await this.facts.org(project.orgId, project.ownerId);
+      pendingProjectWraps = [...holders]
+        .filter((id) => !held.has(id) && org.keys.has(holderKey('account', id)))
+        .map((id) => ({
+          accountId: id,
+          publicKey: org.keys.get(holderKey('account', id)) as PendingWrap['publicKey'],
+        }));
+    }
+
     return {
       projectId,
-      environments: fresh.map((e) => ({
+      orgId: project.orgId,
+      environments: envs.map((e) => ({
         id: e.environmentId,
-        name: e.name,
+        keyVersion: e.keyVersion,
         rotationRequired: e.rotationRequiredAt !== null,
       })),
       rows,
+      pendingProjectWraps,
     };
   }
 
@@ -320,6 +255,66 @@ export class EnvironmentsService {
     return out;
   }
 
+  // ------------------------------------------------------------ environments
+
+  /** Loads an environment the caller can see (any active member of its org). */
+  private async visible(accountId: string, environmentId: string) {
+    const env0 = await this.facts.environment(environmentId);
+    const me = await this.facts.member(env0.orgId, accountId);
+    const now = this.now();
+    await this.facts.reconcileProject(env0.projectId, now);
+    return { env: await this.facts.environment(environmentId), me, now };
+  }
+
+  async detail(accountId: string, environmentId: string): Promise<EnvironmentAccess> {
+    const { env, now } = await this.visible(accountId, environmentId);
+    const [grantRows, org] = await Promise.all([
+      this.db
+        .select()
+        .from(environmentGrants)
+        .where(eq(environmentGrants.environmentId, environmentId)),
+      this.facts.org(env.orgId, env.ownerId),
+    ]);
+    const myLevel = effectiveLevel({ type: 'account', id: accountId }, grantRows, org, now);
+    return {
+      environmentId: env.environmentId,
+      projectId: env.projectId,
+      orgId: env.orgId,
+      keyVersion: env.keyVersion,
+      rotationRequired: env.rotationRequiredAt !== null,
+      myLevel,
+      grants: grantRows.map(toGrant),
+      pendingWraps: levelAtLeast(myLevel, 'manage') ? await this.pending(env, grantRows, now) : [],
+    };
+  }
+
+  /** Members with standing access and no grant of the environment key. */
+  private async pending(env: Env, grants: GrantFacts[], now: Date): Promise<PendingWrap[]> {
+    const org = await this.facts.org(env.orgId, env.ownerId);
+    const held = new Set(
+      (
+        await this.db
+          .select({ a: keyGrants.accountId })
+          .from(keyGrants)
+          .where(
+            and(
+              eq(keyGrants.projectId, env.projectId),
+              eq(keyGrants.resourceId, env.environmentId),
+            ),
+          )
+      ).map((r) => r.a),
+    );
+    const out: PendingWrap[] = [];
+    for (const [key, level] of allLevels(grants, org, now)) {
+      if (!key.startsWith('account:') || !holdsKey(level)) continue;
+      const id = key.slice('account:'.length);
+      const publicKey = org.keys.get(key);
+      if (held.has(id) || !publicKey) continue;
+      out.push({ accountId: id, publicKey: publicKey as PendingWrap['publicKey'] });
+    }
+    return out;
+  }
+
   // ------------------------------------------------------------ grants
 
   /** Managers of the environment, or org owners and admins, can change grants. */
@@ -327,42 +322,30 @@ export class EnvironmentsService {
     const { env, me, now } = await this.visible(accountId, environmentId);
     if (!ADMIN_ROLES.includes(me.role)) {
       const level = await this.facts.levelOf(env, { type: 'account', id: accountId }, now);
-      if (!levelAtLeast(level, 'manage'))
+      if (!levelAtLeast(level, 'manage')) {
         throw new ForbiddenException('You cannot manage access here');
+      }
     }
     return { env, now };
   }
 
-  /** Refuses a change that would leave no member able to manage (and wrap) the environment. */
-  private async ensureAManagerRemains(env: EnvironmentRow, grants: GrantFacts[], now: Date) {
-    const org = await this.facts.org(env.orgId);
-    const levels = allLevels(grants, org, now);
-    const managers = [...levels.entries()].filter(
-      ([key, level]) => key.startsWith('account:') && level === 'manage',
-    );
-    if (managers.length === 0) {
-      throw new ConflictException('At least one member must keep Manage access');
-    }
-  }
-
   private async principalInOrg(orgId: string, p: PrincipalRef): Promise<void> {
-    const table =
+    const rows =
       p.type === 'group'
-        ? this.db
+        ? await this.db
             .select({ id: orgGroups.id })
             .from(orgGroups)
             .where(and(eq(orgGroups.id, p.id), eq(orgGroups.orgId, orgId)))
         : p.type === 'agent'
-          ? this.db
+          ? await this.db
               .select({ id: agents.id })
               .from(agents)
               .where(and(eq(agents.id, p.id), eq(agents.orgId, orgId)))
-          : this.db
+          : await this.db
               .select({ id: orgMembers.accountId })
               .from(orgMembers)
               .where(and(eq(orgMembers.accountId, p.id), eq(orgMembers.orgId, orgId)));
-    if ((await table).length === 0)
-      throw new NotFoundException(`No such ${p.type} in this organization`);
+    if (rows.length === 0) throw new NotFoundException(`No such ${p.type} in this organization`);
   }
 
   async putGrant(accountId: string, environmentId: string, req: PutGrantRequest): Promise<Grant> {
@@ -370,6 +353,11 @@ export class EnvironmentsService {
     await this.principalInOrg(env.orgId, req.principal);
     if (req.principal.type === 'group' && req.level === 'none') {
       throw new UnprocessableEntityException('Remove the group’s grant instead');
+    }
+    if (req.principal.type === 'agent' && holdsKey(req.level)) {
+      throw new UnprocessableEntityException(
+        'Agents ask each time: give them Needs approval or No access',
+      );
     }
     const expiresAt = req.expiresAt ? new Date(req.expiresAt) : null;
     if (expiresAt && expiresAt <= now) {
@@ -384,10 +372,6 @@ export class EnvironmentsService {
       grantedBy: accountId,
       createdAt: now,
     };
-    const others = (await this.facts.grants(environmentId)).filter(
-      (g) => !(g.principalType === row.principalType && g.principalId === row.principalId),
-    );
-    await this.ensureAManagerRemains(env, [...others, row], now);
     await this.db
       .insert(environmentGrants)
       .values(row)
@@ -399,19 +383,13 @@ export class EnvironmentsService {
         ],
         set: { level: row.level, expiresAt, grantedBy: accountId, createdAt: now },
       });
-    await this.facts.reconcile([environmentId], now);
+    await this.facts.reconcileProject(env.projectId, now);
     return toGrant(row);
   }
 
   async deleteGrant(accountId: string, environmentId: string, principal: PrincipalRef) {
     const { env, now } = await this.requireGrantManager(accountId, environmentId);
-    const grants = await this.facts.grants(environmentId);
-    const rest = grants.filter(
-      (g) => !(g.principalType === principal.type && g.principalId === principal.id),
-    );
-    if (rest.length === grants.length) throw new NotFoundException();
-    await this.ensureAManagerRemains(env, rest, now);
-    await this.db
+    const removed = await this.db
       .delete(environmentGrants)
       .where(
         and(
@@ -419,117 +397,219 @@ export class EnvironmentsService {
           eq(environmentGrants.principalType, principal.type),
           eq(environmentGrants.principalId, principal.id),
         ),
-      );
-    await this.facts.reconcile([environmentId], now);
+      )
+      .returning();
+    if (removed.length === 0) throw new NotFoundException();
+    await this.facts.reconcileProject(env.projectId, now);
   }
 
   // ------------------------------------------------------------ keys
 
-  /** A key holder's wraps, only while they have standing access. */
-  async myKeys(holder: KeyHolder, environmentId: string): Promise<MyEnvironmentKeysResponse> {
-    const env0 = await this.facts.environment(environmentId);
-    if (holder.type === 'account') await this.facts.member(env0.orgId, holder.id);
-    const now = this.now();
-    await this.facts.reconcile([environmentId], now);
-    const env = await this.facts.environment(environmentId);
-    const level = await this.facts.levelOf(env, holder, now);
-    if (!holdsKey(level)) throw new ForbiddenException('No standing access to this environment');
-    const rows = await this.db
-      .select()
-      .from(environmentKeyWraps)
-      .where(
-        and(
-          eq(environmentKeyWraps.environmentId, environmentId),
-          eq(environmentKeyWraps.principalType, holder.type),
-          eq(environmentKeyWraps.principalId, holder.id),
-        ),
-      )
-      .orderBy(desc(environmentKeyWraps.keyVersion));
+  private toStored(
+    accountId: string,
+    wrappedKey: MemberKeyWrap['blob'],
+    box: MemberWrapBox,
+  ): StoredMemberWrap {
     return {
-      environmentId,
-      keyVersion: env.keyVersion,
-      wraps: rows.map((r) => ({
-        recipient: { type: holder.type, id: holder.id },
-        ...r.box,
-        keyVersion: r.keyVersion,
-        wrappedBy: r.wrappedBy,
-        createdAt: r.createdAt.toISOString(),
-      })) as MyEnvironmentKeysResponse['wraps'],
+      recipientId: accountId,
+      recipientPublicKey: box.recipientPublicKey,
+      wrapperPublicKey: box.wrapperPublicKey,
+      ephemeralPublicKey: box.ephemeralPublicKey,
+      blob: wrappedKey,
+      keyVersion: box.keyVersion,
+      wrappedBy: box.wrappedBy,
+    } as StoredMemberWrap;
+  }
+
+  /** The caller's member wraps and levels across a project. */
+  async myKeys(accountId: string, projectId: string): Promise<MyProjectKeysResponse> {
+    const { project, now } = await this.visibleProject(accountId, projectId);
+    const { envs, byEnv } = await this.facts.projectLevels(project, now);
+    const held = await this.db
+      .select()
+      .from(keyGrants)
+      .where(and(eq(keyGrants.projectId, projectId), eq(keyGrants.accountId, accountId)));
+    const wrapOf = (resourceId: string) => {
+      const g = held.find((h) => h.resourceId === resourceId);
+      return g?.box ? this.toStored(accountId, g.wrappedKey as MemberKeyWrap['blob'], g.box) : null;
+    };
+    return {
+      projectId,
+      projectKey: wrapOf(projectId),
+      environments: envs.map((e) => ({
+        environmentId: e.environmentId,
+        keyVersion: e.keyVersion,
+        level: byEnv.get(e.environmentId)?.get(holderKey('account', accountId)) ?? 'none',
+        wrap: wrapOf(e.environmentId),
+      })),
     };
   }
 
-  /** Checks wraps from a manager against the keys on file and current access. */
-  private async checkWraps(
-    env: EnvironmentRow,
-    accountId: string,
-    wraps: WrappedEnvironmentKey[],
+  /** Checks wraps against the keys on file; `allowed` is who may receive this key. */
+  private checkWraps(
+    wraps: MemberKeyWrap[],
+    wrapperKey: string | null,
+    keys: Map<string, string>,
+    allowed: (accountId: string) => boolean,
+  ): void {
+    const seen = new Set<string>();
+    for (const w of wraps) {
+      if (seen.has(w.recipientId)) throw new UnprocessableEntityException('Duplicate recipient');
+      seen.add(w.recipientId);
+      if (!allowed(w.recipientId)) {
+        throw new UnprocessableEntityException(`${w.recipientId} has no access to this key`);
+      }
+      if (keys.get(holderKey('account', w.recipientId)) !== w.recipientPublicKey) {
+        throw new ConflictException(`The key on file for ${w.recipientId} changed; fetch it again`);
+      }
+      if (w.wrapperPublicKey !== wrapperKey) {
+        throw new ConflictException('Your sharing key does not match the one on file');
+      }
+    }
+  }
+
+  private grantRow(
+    projectId: string,
+    resourceId: string,
+    w: MemberKeyWrap,
+    keyVersion: number | null,
+    wrappedBy: string,
     now: Date,
   ) {
-    const me = await this.facts.member(env.orgId, accountId);
+    return {
+      projectId,
+      resourceId,
+      accountId: w.recipientId,
+      wrappedKey: w.blob,
+      box: {
+        recipientPublicKey: w.recipientPublicKey,
+        wrapperPublicKey: w.wrapperPublicKey,
+        ephemeralPublicKey: w.ephemeralPublicKey,
+        keyVersion,
+        wrappedBy,
+      },
+      createdAt: now,
+    };
+  }
+
+  /** Managers hand the environment's current key to members who don't have it. */
+  async addEnvironmentWraps(
+    accountId: string,
+    environmentId: string,
+    req: AddEnvironmentWrapsRequest,
+  ): Promise<void> {
+    const { env, me, now } = await this.visible(accountId, environmentId);
     const [grants, org] = await Promise.all([
-      this.facts.grants(env.environmentId),
-      this.facts.org(env.orgId),
+      this.facts.grants(environmentId),
+      this.facts.org(env.orgId, env.ownerId),
     ]);
     if (
       !levelAtLeast(effectiveLevel({ type: 'account', id: accountId }, grants, org, now), 'manage')
     ) {
       throw new ForbiddenException('Only managers can hand out the key');
     }
-    const levels = allLevels(grants, org, now);
-    const seen = new Set<string>();
-    for (const w of wraps) {
-      const key = holderKey(w.recipient.type, w.recipient.id);
-      if (seen.has(key)) throw new UnprocessableEntityException('Duplicate recipient');
-      seen.add(key);
-      if (!holdsKey(levels.get(key) ?? 'none')) {
-        throw new UnprocessableEntityException(`${key} has no standing access`);
-      }
-      if (org.keys.get(key) !== w.recipientPublicKey) {
-        throw new ConflictException(`The key on file for ${key} changed; fetch it again`);
-      }
-      if (w.wrapperPublicKey !== me.publicKey) {
-        throw new ConflictException('Your sharing key does not match the one on file');
-      }
-    }
-    return { levels, seen };
-  }
-
-  async addWraps(accountId: string, environmentId: string, req: AddWrapsRequest): Promise<void> {
-    const { env, now } = await this.visible(accountId, environmentId);
     if (req.keyVersion !== env.keyVersion) {
       throw new ConflictException('The environment key was rotated; wrap the current version');
     }
-    await this.checkWraps(env, accountId, req.wraps, now);
+    const levels = allLevels(grants, org, now);
+    this.checkWraps(req.wraps, me.publicKey, org.keys, (id) =>
+      holdsKey(levels.get(holderKey('account', id)) ?? 'none'),
+    );
     await this.db
-      .insert(environmentKeyWraps)
-      .values(req.wraps.map((w) => this.wrapRow(environmentId, env.keyVersion, w, accountId, now)))
+      .insert(keyGrants)
+      .values(
+        req.wraps.map((w) =>
+          this.grantRow(env.projectId, environmentId, w, env.keyVersion, accountId, now),
+        ),
+      )
+      .onConflictDoNothing();
+  }
+
+  /** Hands the project key (names and other metadata) to members who need it. */
+  async addProjectWraps(
+    accountId: string,
+    projectId: string,
+    req: AddProjectWrapsRequest,
+  ): Promise<void> {
+    const { project, me, now } = await this.visibleProject(accountId, projectId);
+    if (!(await this.canWrapProjectKey(project, accountId, me.role, now))) {
+      throw new ForbiddenException('You cannot hand out this project’s key');
+    }
+    const holders = await this.facts.projectKeyHolders(project, now);
+    const org = await this.facts.org(project.orgId, project.ownerId);
+    this.checkWraps(req.wraps, me.publicKey, org.keys, (id) => holders.has(id));
+    await this.db
+      .insert(keyGrants)
+      .values(req.wraps.map((w) => this.grantRow(projectId, projectId, w, null, accountId, now)))
       .onConflictDoNothing();
   }
 
   /**
-   * Moves to the next key version. The manager's device has already re-sealed
-   * the environment's secrets; `wraps` must reach exactly the current key
-   * holders, so nobody who lost access is handed the new key.
+   * Moves an environment to a new key. The manager's device re-sealed every
+   * value in it; `wraps` must reach exactly the members who have standing
+   * access, so nobody who lost access is handed the new key. Old grants and
+   * values are replaced in one transaction.
    */
   async rotate(
     accountId: string,
     environmentId: string,
     req: RotateEnvironmentKeyRequest,
   ): Promise<EnvironmentAccess> {
-    const { env, now } = await this.visible(accountId, environmentId);
+    const { env, me, now } = await this.visible(accountId, environmentId);
+    const [grants, org] = await Promise.all([
+      this.facts.grants(environmentId),
+      this.facts.org(env.orgId, env.ownerId),
+    ]);
+    if (
+      !levelAtLeast(effectiveLevel({ type: 'account', id: accountId }, grants, org, now), 'manage')
+    ) {
+      throw new ForbiddenException('Only managers can rotate the key');
+    }
     if (req.fromVersion !== env.keyVersion) {
       throw new ConflictException('Someone else rotated this environment first');
     }
-    const { levels, seen } = await this.checkWraps(env, accountId, req.wraps, now);
-    const missing = [...levels.entries()].filter(([k, l]) => holdsKey(l) && !seen.has(k));
+    const levels = allLevels(grants, org, now);
+    const holders = [...levels.entries()]
+      .filter(([k, l]) => k.startsWith('account:') && holdsKey(l) && org.keys.has(k))
+      .map(([k]) => k.slice('account:'.length));
+    this.checkWraps(req.wraps, me.publicKey, org.keys, (id) => holders.includes(id));
+    const missing = holders.filter((id) => !req.wraps.some((w) => w.recipientId === id));
     if (missing.length > 0) {
       throw new UnprocessableEntityException(
-        `Wrap the new key for everyone with access: ${missing.map(([k]) => k).join(', ')}`,
+        `Wrap the new key for everyone with access: ${missing.join(', ')}`,
       );
+    }
+    if (req.values.some((v) => v.encryptedValue.kid !== environmentId)) {
+      throw new UnprocessableEntityException('Values must be sealed with this environment’s key');
     }
     const next = env.keyVersion + 1;
     await this.db.transaction(async (tx) => {
-      const [updated] = await tx
+      const [project] = await tx
+        .select({ seq: projects.seq })
+        .from(projects)
+        .where(eq(projects.id, env.projectId))
+        .for('update');
+      const current = await tx
+        .select({ secretId: secretValues.secretId })
+        .from(secretValues)
+        .where(
+          and(
+            eq(secretValues.projectId, env.projectId),
+            eq(secretValues.environmentId, environmentId),
+          ),
+        );
+      const want = new Set(current.map((c) => c.secretId));
+      const got = new Set(req.values.map((v) => v.secretId));
+      if (
+        want.size !== got.size ||
+        [...want].some((id) => !got.has(id)) ||
+        got.size !== req.values.length
+      ) {
+        throw new ConflictException(
+          'Re-seal exactly the environment’s current values; sync and retry',
+        );
+      }
+      const [bumped] = await tx
         .update(environmentAccess)
         .set({ keyVersion: next, rotationRequiredAt: null })
         .where(
@@ -539,10 +619,44 @@ export class EnvironmentsService {
           ),
         )
         .returning();
-      if (!updated) throw new ConflictException('Someone else rotated this environment first');
+      if (!bumped) throw new ConflictException('Someone else rotated this environment first');
+
       await tx
-        .insert(environmentKeyWraps)
-        .values(req.wraps.map((w) => this.wrapRow(environmentId, next, w, accountId, now)));
+        .delete(keyGrants)
+        .where(
+          and(eq(keyGrants.projectId, env.projectId), eq(keyGrants.resourceId, environmentId)),
+        );
+      await tx
+        .insert(keyGrants)
+        .values(
+          req.wraps.map((w) =>
+            this.grantRow(env.projectId, environmentId, w, next, accountId, now),
+          ),
+        );
+      for (const v of req.values) {
+        await tx
+          .update(secretValues)
+          .set({ encryptedValue: v.encryptedValue, updatedAt: now })
+          .where(
+            and(
+              eq(secretValues.projectId, env.projectId),
+              eq(secretValues.secretId, v.secretId),
+              eq(secretValues.environmentId, environmentId),
+            ),
+          );
+      }
+      // Move the environment and its secrets to the end of the change feed so
+      // clients pick up the new key and values on their next sync.
+      const touched = [environmentId, ...req.values.map((v) => v.secretId)];
+      let seq = project!.seq;
+      for (const id of touched) {
+        seq += 1;
+        await tx
+          .update(projectEntries)
+          .set({ seq, updatedAt: now })
+          .where(and(eq(projectEntries.projectId, env.projectId), eq(projectEntries.id, id)));
+      }
+      await tx.update(projects).set({ seq }).where(eq(projects.id, env.projectId));
     });
     return this.detail(accountId, environmentId);
   }

@@ -38,7 +38,7 @@ export type OrgRole = z.infer<typeof OrgRole>;
 export const AccessLevel = z.enum(['manage', 'edit', 'use', 'needs_approval', 'none']);
 export type AccessLevel = z.infer<typeof AccessLevel>;
 
-/** Levels that get a standing copy of the environment key. */
+/** Levels that get a standing copy of the environment key (members only). */
 export const KEY_HOLDING_LEVELS = ['manage', 'edit', 'use'] as const satisfies AccessLevel[];
 
 const RANK: Record<AccessLevel, number> = {
@@ -66,7 +66,7 @@ export type PrincipalType = z.infer<typeof PrincipalType>;
 export const PrincipalRef = z.object({ type: PrincipalType, id: Uuid });
 export type PrincipalRef = z.infer<typeof PrincipalRef>;
 
-/** A principal that can hold a wrapped key: a member or an agent. */
+/** A principal with a key of its own, which can ask for approved values: a member or an agent. */
 export const KeyHolderRef = z.object({ type: z.enum(['account', 'agent']), id: Uuid });
 export type KeyHolderRef = z.infer<typeof KeyHolderRef>;
 
@@ -156,10 +156,14 @@ export type CreateGroupRequest = z.infer<typeof CreateGroupRequest>;
 export const RegisterAgentRequest = z.object({ name: Name, publicKey: SharingPublicKey });
 export type RegisterAgentRequest = z.infer<typeof RegisterAgentRequest>;
 
-// ---------------------------------------------------------------- environment keys
+// ---------------------------------------------------------------- keys
 
-/** The `kid` of a wrapped environment key. The plaintext is a 32-byte key. */
-export const ENV_KEY_WRAP_KID = 'env-key-wrap' as const;
+/**
+ * `kid` of a project or environment key wrapped to a member's sharing key
+ * (`wrap_key_to_member` in zvault-crypto). Grants with `kid` "account" are the
+ * owner's own, wrapped with their account key.
+ */
+export const MEMBER_KEY_WRAP_KID = 'member-key-wrap' as const;
 /** The `kid` of values a manager released for an approved request. */
 export const ACCESS_RELEASE_KID = 'access-release' as const;
 
@@ -167,75 +171,84 @@ export const ACCESS_RELEASE_KID = 'access-release' as const;
 const WRAPPED_KEY_CT = base64UrlOfLength(48);
 
 /**
- * One environment key version wrapped to one key holder, sealed on the
- * wrapper's device with `wrap_environment_key` (zvault-crypto).
+ * A project or environment key wrapped on a manager's device to one member.
+ * Stored as that member's key grant, so the projects API serves it like any
+ * other grant; the public halves come from `GET /access/projects/:id/keys/me`.
  */
-export const WrappedEnvironmentKey = z.object({
-  recipient: KeyHolderRef,
+export const MemberKeyWrap = z.object({
+  recipientId: Uuid,
   /** The recipient key the wrapper sealed to; must match the one on file. */
   recipientPublicKey: SharingPublicKey,
   /** The wrapper's own key; must match theirs on file. Needed to unwrap. */
   wrapperPublicKey: SharingPublicKey,
   ephemeralPublicKey: SharingPublicKey,
-  blob: EncryptedBlob.extend({ kid: z.literal(ENV_KEY_WRAP_KID), ct: WRAPPED_KEY_CT }),
+  blob: EncryptedBlob.extend({ kid: z.literal(MEMBER_KEY_WRAP_KID), ct: WRAPPED_KEY_CT }),
 });
-export type WrappedEnvironmentKey = z.infer<typeof WrappedEnvironmentKey>;
+export type MemberKeyWrap = z.infer<typeof MemberKeyWrap>;
 
 const KeyVersion = z.number().int().min(1);
+const Wraps = z.array(MemberKeyWrap).min(1).max(500);
+
+/** Shares a project with an organization. Only the project's owner can. */
+export const LinkProjectRequest = z.object({ orgId: OrgId });
+export type LinkProjectRequest = z.infer<typeof LinkProjectRequest>;
+
+/** Wraps of an environment's current key for members who don't have one yet. */
+export const AddEnvironmentWrapsRequest = z.object({ keyVersion: KeyVersion, wraps: Wraps });
+export type AddEnvironmentWrapsRequest = z.infer<typeof AddEnvironmentWrapsRequest>;
+
+/** Wraps of the project key (needed to read names) for members who don't have one. */
+export const AddProjectWrapsRequest = z.object({ wraps: Wraps });
+export type AddProjectWrapsRequest = z.infer<typeof AddProjectWrapsRequest>;
 
 /**
- * Puts an environment under access control. The caller becomes its first
- * manager and sends key version 1 wrapped to themselves.
- */
-export const RegisterEnvironmentRequest = z.object({
-  environmentId: EnvironmentId,
-  projectId: ProjectId,
-  orgId: OrgId,
-  name: Name,
-  wrap: WrappedEnvironmentKey,
-});
-export type RegisterEnvironmentRequest = z.infer<typeof RegisterEnvironmentRequest>;
-
-/** Wraps of the current key version for principals who don't have one yet. */
-export const AddWrapsRequest = z.object({
-  keyVersion: KeyVersion,
-  wraps: z.array(WrappedEnvironmentKey).min(1).max(500),
-});
-export type AddWrapsRequest = z.infer<typeof AddWrapsRequest>;
-
-/**
- * Moves an environment to `fromVersion + 1`. `wraps` must cover exactly the
- * key holders who have standing access now, the caller included.
+ * Moves an environment to a new key, `fromVersion + 1`. The manager's device
+ * re-seals every value in the environment (`values`, one per secret that has a
+ * value there, `kid` = environment id) and wraps the new key to exactly the
+ * members who have standing access now, the caller included.
  */
 export const RotateEnvironmentKeyRequest = z.object({
   fromVersion: KeyVersion,
-  wraps: z.array(WrappedEnvironmentKey).min(1).max(500),
+  wraps: Wraps,
+  values: z.array(z.object({ secretId: Uuid, encryptedValue: EncryptedBlob })).max(10_000),
 });
 export type RotateEnvironmentKeyRequest = z.infer<typeof RotateEnvironmentKeyRequest>;
 
-export const StoredWrap = WrappedEnvironmentKey.extend({
-  keyVersion: KeyVersion,
+/** A member wrap as stored, for the recipient to unwrap. */
+export const StoredMemberWrap = MemberKeyWrap.extend({
+  /** Environment keys only. */
+  keyVersion: KeyVersion.nullable(),
   wrappedBy: Uuid,
-  createdAt: IsoDate,
 });
-export type StoredWrap = z.infer<typeof StoredWrap>;
+export type StoredMemberWrap = z.infer<typeof StoredMemberWrap>;
 
-export const MyEnvironmentKeysResponse = z.object({
-  environmentId: EnvironmentId,
-  keyVersion: KeyVersion,
-  /** Newest first; older versions stay until their secrets are re-sealed. */
-  wraps: z.array(StoredWrap),
+/**
+ * The caller's member wraps in one project. A key held through the owner's
+ * own account-key grant has no entry here (the projects API serves it).
+ */
+export const MyProjectKeysResponse = z.object({
+  projectId: ProjectId,
+  projectKey: StoredMemberWrap.nullable(),
+  environments: z.array(
+    z.object({
+      environmentId: EnvironmentId,
+      keyVersion: KeyVersion,
+      level: AccessLevel,
+      wrap: StoredMemberWrap.nullable(),
+    }),
+  ),
 });
-export type MyEnvironmentKeysResponse = z.infer<typeof MyEnvironmentKeysResponse>;
+export type MyProjectKeysResponse = z.infer<typeof MyProjectKeysResponse>;
 
-/** A key holder with standing access and no wrap of the current version yet. */
-export const PendingWrap = z.object({ recipient: KeyHolderRef, publicKey: SharingPublicKey });
+/** A member with access and no grant of a key yet. */
+export const PendingWrap = z.object({ accountId: Uuid, publicKey: SharingPublicKey });
 export type PendingWrap = z.infer<typeof PendingWrap>;
 
 // ---------------------------------------------------------------- grants
 
 export const PutGrantRequest = z.object({
   principal: PrincipalRef,
+  /** Agents can only be given `needs_approval` (asks each time) or `none`. */
   level: AccessLevel,
   /** When the grant lapses, e.g. a contractor's end date. Null = no end. */
   expiresAt: IsoDate.nullable().default(null),
@@ -256,7 +269,6 @@ export const EnvironmentAccess = z.object({
   environmentId: EnvironmentId,
   projectId: ProjectId,
   orgId: OrgId,
-  name: z.string(),
   keyVersion: KeyVersion,
   /**
    * Set once someone who held the key loses access. A manager's device should
@@ -270,11 +282,16 @@ export const EnvironmentAccess = z.object({
 });
 export type EnvironmentAccess = z.infer<typeof EnvironmentAccess>;
 
-/** The "Project access" matrix: one row per principal, one cell per environment. */
+/**
+ * The "Project access" matrix: one row per principal, one cell per
+ * environment. Environment names come from the project's own (encrypted)
+ * metadata.
+ */
 export const ProjectAccessResponse = z.object({
   projectId: ProjectId,
+  orgId: OrgId,
   environments: z.array(
-    z.object({ id: EnvironmentId, name: z.string(), rotationRequired: z.boolean() }),
+    z.object({ id: EnvironmentId, keyVersion: KeyVersion, rotationRequired: z.boolean() }),
   ),
   rows: z.array(
     z.object({
@@ -289,6 +306,8 @@ export const ProjectAccessResponse = z.object({
       ),
     }),
   ),
+  /** Only for those who can hand out the project key: members still without it. */
+  pendingProjectWraps: z.array(PendingWrap),
 });
 export type ProjectAccessResponse = z.infer<typeof ProjectAccessResponse>;
 

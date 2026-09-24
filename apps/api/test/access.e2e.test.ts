@@ -205,6 +205,7 @@ describe('Team access (e2e)', () => {
       .set(as(alice))
       .send({ email: ben.email })
       .expect(201);
+    expect(h.mailer.lastTo(ben.email)?.subject).toMatch(/invited you to Acme on Zvault$/);
     // Invited but not joined: the org is listed as an invitation, details stay hidden.
     const listed = await api().get('/v1/orgs').set(as(ben)).expect(200);
     expect(listed.body).toEqual({

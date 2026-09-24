@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
@@ -30,6 +31,8 @@ import {
   orgMembers,
   organizations,
 } from '../db/schema.js';
+import { Mailer } from '../mail/mailer.js';
+import { orgInviteEmail } from '../mail/templates.js';
 import { ACCESS_CLOCK, type Clock } from './clock.js';
 import { ADMIN_ROLES, AccessFacts } from './access.facts.js';
 
@@ -40,10 +43,13 @@ const isUniqueViolation = (e: unknown) =>
 /** Organizations, their members, groups and agents. */
 @Injectable()
 export class OrgsService {
+  private readonly logger = new Logger('OrgsService');
+
   constructor(
     @Inject(DATABASE) private readonly db: Database,
     @Inject(ACCESS_CLOCK) private readonly now: Clock,
     private readonly facts: AccessFacts,
+    private readonly mailer: Mailer,
   ) {}
 
   private async requireAdmin(orgId: string, accountId: string) {
@@ -165,6 +171,7 @@ export class OrgsService {
       if (isUniqueViolation(e)) throw new ConflictException('Already a member or invited');
       throw e;
     }
+    await this.sendInvite(orgId, accountId, invitee.email);
     return {
       accountId: invitee.id,
       email: invitee.email,
@@ -173,6 +180,24 @@ export class OrgsService {
       publicKey: null,
       groupIds: [],
     };
+  }
+
+  /** Emails the invitee. The invite is already saved, so a failed email is only logged. */
+  private async sendInvite(orgId: string, inviterId: string, to: string): Promise<void> {
+    try {
+      const [org] = await this.db
+        .select({ name: organizations.name })
+        .from(organizations)
+        .where(eq(organizations.id, orgId));
+      const [inviter] = await this.db
+        .select({ email: accounts.email })
+        .from(accounts)
+        .where(eq(accounts.id, inviterId));
+      if (!org || !inviter) return;
+      await this.mailer.send(orgInviteEmail(to, org.name, inviter.email));
+    } catch (err) {
+      this.logger.error(`Could not email an invite to org ${orgId}: ${String(err)}`);
+    }
   }
 
   /** The invitee accepts and publishes the key environment keys will be wrapped to. */

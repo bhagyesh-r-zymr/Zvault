@@ -4,8 +4,10 @@
 
 use serde::Serialize;
 
+mod sharing;
+
 /// Must match `CRYPTO_VERSION` in `@zvault/shared`.
-const CRYPTO_VERSION: u32 = 1;
+pub(crate) const CRYPTO_VERSION: u32 = 1;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,7 +29,15 @@ fn core_info() -> CoreInfo {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![core_info])
+        .manage(sharing::SharingState::default())
+        .invoke_handler(tauri::generate_handler![
+            core_info,
+            sharing::share_link_create,
+            sharing::sharing_identity,
+            sharing::sharing_fingerprint,
+            sharing::share_seal_to,
+            sharing::share_open,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Zvault");
 }

@@ -1,0 +1,57 @@
+:root {
+  color-scheme: light dark;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --muted: #6b7280;
+  --line: rgb(127 127 127 / 30%);
+}
+
+body {
+  margin: 0;
+  padding: 2rem 1rem;
+}
+
+main {
+  max-width: 34rem;
+  margin: 0 auto;
+}
+
+.field {
+  display: grid;
+  grid-template-columns: 6rem 1fr auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.field code {
+  overflow-wrap: anywhere;
+}
+
+.label,
+.hint {
+  color: var(--muted);
+}
+
+.actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+button {
+  font: inherit;
+  padding: 0.3rem 0.7rem;
+}
+
+button.primary {
+  padding: 0.6rem 1.2rem;
+}
+
+.error {
+  color: #dc2626;
+}

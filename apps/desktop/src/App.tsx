@@ -1,6 +1,7 @@
 import { CRYPTO_VERSION } from '@zvault/shared';
 import { useEffect, useState } from 'react';
 import { core, type CoreInfo } from './core.js';
+import { SharingPanel } from './sharing/SharingPanel.js';
 
 export function App() {
   const [info, setInfo] = useState<CoreInfo | null>(null);
@@ -30,6 +31,7 @@ export function App() {
           <dd>{info.aead}</dd>
         </dl>
       )}
+      <SharingPanel />
     </main>
   );
 }

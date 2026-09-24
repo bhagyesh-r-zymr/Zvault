@@ -22,9 +22,14 @@ mod kdf;
 mod key;
 mod random;
 mod secret_key;
+mod share;
 
 pub use aead::{NONCE_LEN, Sealed, TAG_LEN, open, seal};
 pub use error::{Error, Result};
 pub use kdf::{KdfParams, SALT_LEN, derive_unlock_key};
 pub use key::{KEY_LEN, SymmetricKey};
 pub use secret_key::SecretKey;
+pub use share::{
+    BoxedShare, LinkShare, PUBLIC_KEY_LEN, SHARE_ID_LEN, SharingKeyPair, fingerprint, open_from,
+    seal_to,
+};

@@ -16,3 +16,16 @@ dt {
 dd {
   margin: 0;
 }
+
+label {
+  display: block;
+  margin: 0.5rem 0;
+}
+
+.tabs [aria-selected='true'] {
+  font-weight: 600;
+}
+
+.hint {
+  opacity: 0.7;
+}

@@ -72,8 +72,7 @@ struct PendingLogin {
 
 struct Account {
     email: String,
-    /// Unwraps vault keys once vaults exist.
-    #[allow(dead_code)]
+    /// Unwraps vault keys and derives the sharing key pair.
     keyset: SymmetricKey,
 }
 
@@ -219,6 +218,15 @@ pub(crate) fn restore(app: &AppHandle, email: String, keyset: SymmetricKey) {
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     auth.pending = None;
     auth.account = Some(Account { email, keyset });
+}
+
+/// Runs `f` on the unlocked account's keyset, or returns None while locked.
+pub(crate) fn with_keyset<T>(app: &AppHandle, f: impl FnOnce(&SymmetricKey) -> T) -> Option<T> {
+    let state = app.state::<Mutex<AuthState>>();
+    let auth = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    auth.account.as_ref().map(|a| f(&a.keyset))
 }
 
 /// A second handle on the same key, for the parts of the app that each hold one.

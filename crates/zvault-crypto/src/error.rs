@@ -5,6 +5,8 @@ pub enum Error {
     InvalidKdfParams,
     #[error("invalid Secret Key")]
     InvalidSecretKey,
+    #[error("invalid public key")]
+    InvalidPublicKey,
     #[error("decryption failed")]
     Decrypt,
     #[error("encryption failed")]

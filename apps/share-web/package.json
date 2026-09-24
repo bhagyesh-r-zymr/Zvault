@@ -1,0 +1,23 @@
+{
+  "name": "@zvault/share-web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Static page that opens Zvault share links in the recipient's browser. Decrypts locally; the key never leaves the URL fragment.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
+    "@zvault/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^8.3.1",
+    "vitest": "^5.0.1"
+  }
+}

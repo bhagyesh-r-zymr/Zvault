@@ -11,6 +11,7 @@ mod emergency_kit;
 mod generator;
 mod platform;
 mod session;
+mod sharing;
 mod vault;
 
 use std::sync::Mutex;
@@ -77,6 +78,11 @@ pub fn run() {
             commands::enable_touch_id,
             commands::disable_touch_id,
             commands::unlock_with_touch_id,
+            sharing::share_link_create,
+            sharing::sharing_identity,
+            sharing::sharing_fingerprint,
+            sharing::share_seal_to,
+            sharing::share_open,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Zvault");

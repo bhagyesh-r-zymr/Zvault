@@ -29,6 +29,7 @@ mod key;
 mod keyset;
 mod random;
 mod secret_key;
+mod share;
 pub mod srp;
 pub mod vault;
 
@@ -38,3 +39,7 @@ pub use kdf::{AccountKeys, KdfParams, SALT_LEN, derive_account_keys, normalize_a
 pub use key::{KEY_LEN, SymmetricKey};
 pub use keyset::{KEYSET_KID, open_keyset, seal_keyset};
 pub use secret_key::SecretKey;
+pub use share::{
+    BoxedShare, LinkShare, PUBLIC_KEY_LEN, SHARE_ID_LEN, SharingKeyPair, fingerprint, open_from,
+    seal_to,
+};

@@ -33,6 +33,14 @@ Build a native **macOS app** with a backend on **AWS** that lets people store an
 | `crates/zvault-emergency-kit` | Renders the Emergency Kit PDF (sign-in address, email, Secret Key) on the device. `cargo run -p zvault-emergency-kit --example sample` writes a sample with a throwaway key. |
 | `packages/shared`             | Wire contracts (zod schemas + types) shared by the API and the app's UI.                                                                                                     |
 
+| Path                   | What it is                                                                                                        |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `apps/api`             | NestJS backend (TypeScript, ESM). Stores only ciphertext and public verifiers.                                    |
+| `apps/desktop`         | macOS app: [Tauri 2](https://tauri.app) shell, React UI in `src/`, Rust in `src-tauri/`.                          |
+| `crates/zvault-crypto` | Rust crypto core used by the app: Argon2id + Secret Key derivation (2SKD), XChaCha20-Poly1305, Secret Key format. |
+| `packages/shared`      | Wire contracts (zod schemas + types) shared by the API and the app's UI.                                          |
+| `apps/share-web`       | Static page that opens share links in the recipient's browser and decrypts them there.                            |
+
 pnpm workspaces and Turborepo drive the TypeScript side; a Cargo workspace at the root drives the Rust side.
 
 ## Getting started
@@ -91,3 +99,8 @@ The unlock key lives only in Rust (`apps/desktop/src-tauri/src/session.rs`) and 
 - **Clipboard.** Copied secrets are marked concealed so clipboard managers and Universal Clipboard skip them, and are cleared after 10–300 seconds (default 90) or when the vault locks, but only if the clipboard still holds what Zvault put there.
 
 Touch ID needs a signed build: the data-protection Keychain requires the app to be signed with a Team ID and a `keychain-access-groups` entitlement (plus a provisioning profile for Developer ID distribution). Unsigned `tauri dev` builds report a missing-entitlement error when Touch ID is turned on; everything else works unsigned. Settings are held in memory until local persistence lands.
+
+## Sharing
+
+- **Links.** The app generates a 256-bit link key and a 128-bit share id, encrypts the item, and builds `https://<share page>/#<id>.<key>`. The whole link lives in the fragment, which browsers never send anywhere. From the key it derives an encryption key and an access token (HKDF-SHA256); the API stores the ciphertext and `SHA-256(access token)` only. Opening a link (`POST /v1/shares/links/:id/open`) requires the token, counts one view, and deletes the ciphertext when the view limit is reached or the link is revoked. Expiry is 5 minutes to 30 days, views 1 to 100. The recipient page waits for a click before opening, so mail scanners and link previews do not use up views.
+- **Zvault users.** Each user publishes an X25519 sharing public key. Items are encrypted to the recipient with a key derived from ephemeral-static and static-static Diffie-Hellman, so the recipient knows which account sent it and the server cannot forge or redirect a share. Both people can compare a security code (key fingerprint) to rule out a substituted key. The recipient gets an email notice with no item data in it.

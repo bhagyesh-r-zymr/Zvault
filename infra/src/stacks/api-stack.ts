@@ -84,7 +84,7 @@ export class ApiStack extends Stack {
       encryptionKey: dataKey,
       generateSecretString: {
         secretStringTemplate: '{}',
-        generateStringKey: 'SESSION_SIGNING_KEY',
+        generateStringKey: 'SERVER_SECRET',
         passwordLength: 64,
         excludePunctuation: true,
       },
@@ -157,7 +157,8 @@ export class ApiStack extends Stack {
         DATABASE_HOST: props.database.clusterEndpoint.hostname,
         DATABASE_PORT: String(DATABASE_PORT),
         DATABASE_NAME,
-        DATABASE_SSL: 'require',
+        DATABASE_SSL: 'true',
+        MAIL_TRANSPORT: 'ses',
         SES_FROM_ADDRESS: props.emailFromAddress,
         SES_CONFIGURATION_SET: props.emailConfigurationSet.configurationSetName,
         APP_PUBLIC_URL: this.apiUrl,
@@ -165,7 +166,7 @@ export class ApiStack extends Stack {
       secrets: {
         DATABASE_USER: ecs.Secret.fromSecretsManager(databaseSecret, 'username'),
         DATABASE_PASSWORD: ecs.Secret.fromSecretsManager(databaseSecret, 'password'),
-        SESSION_SIGNING_KEY: ecs.Secret.fromSecretsManager(appSecret, 'SESSION_SIGNING_KEY'),
+        SERVER_SECRET: ecs.Secret.fromSecretsManager(appSecret, 'SERVER_SECRET'),
       },
     });
     // Node writes nothing to disk except temp files; give it a scratch volume.
@@ -381,6 +382,16 @@ export class ApiStack extends Stack {
     });
 
     new CfnOutput(this, 'ApiUrl', { value: this.apiUrl });
+    // Migrations run as a one-off task from the same image (the API's drizzle folder ships in it).
+    const appSubnetIds = vpc.selectSubnets({ subnetGroupName: 'app' }).subnetIds.join(',');
+    new CfnOutput(this, 'MigrateCommand', {
+      description: 'Runs database migrations as a one-off Fargate task',
+      value:
+        `aws ecs run-task --cluster ${cluster.clusterName} --task-definition ${taskDefinition.family}` +
+        ` --launch-type FARGATE --network-configuration "awsvpcConfiguration={subnets=[${appSubnetIds}],` +
+        `securityGroups=[${serviceSecurityGroup.securityGroupId}],assignPublicIp=DISABLED}"` +
+        ` --overrides '{"containerOverrides":[{"name":"api","command":["dist/db/migrate.js"]}]}'`,
+    });
     new CfnOutput(this, 'AlarmTopicArn', { value: alarmTopic.topicArn });
   }
 }

@@ -49,10 +49,14 @@ Sizes, retention and the rest are in `src/config.ts`. `prod` always keeps data o
 (deletion protection, snapshot on removal, retained keys and buckets).
 
 The API container gets these environment variables: `NODE_ENV`, `PORT`, `CORS_ORIGINS`,
-`DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_SSL=require`, `SES_FROM_ADDRESS`,
+`DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_SSL=true`, `MAIL_TRANSPORT=ses`, `SES_FROM_ADDRESS`,
 `SES_CONFIGURATION_SET`, `APP_PUBLIC_URL`; and these from Secrets Manager: `DATABASE_USER`,
-`DATABASE_PASSWORD`, `SESSION_SIGNING_KEY`. Send email with `@aws-sdk/client-sesv2`; the task role
+`DATABASE_PASSWORD`, `SERVER_SECRET`. Send email with `@aws-sdk/client-sesv2`; the task role
 supplies credentials.
+
+Database migrations run as a one-off Fargate task from the API image
+(`node dist/db/migrate.js`). After each deploy that changes the schema, run the command in the
+`MigrateCommand` output of the `Zvault-<stage>-Api` stack.
 
 ## Commands
 

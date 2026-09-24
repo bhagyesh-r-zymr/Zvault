@@ -120,7 +120,7 @@ describe.each(['dev', 'prod'] as const)('%s stage', (stage) => {
     expect(envNames.filter((n) => /PASSWORD|SECRET|KEY/.test(n))).toEqual([]);
     const secretNames = (container.Secrets as { Name: string }[]).map((s) => s.Name);
     expect(secretNames).toEqual(
-      expect.arrayContaining(['DATABASE_USER', 'DATABASE_PASSWORD', 'SESSION_SIGNING_KEY']),
+      expect.arrayContaining(['DATABASE_USER', 'DATABASE_PASSWORD', 'SERVER_SECRET']),
     );
     t.api.hasResourceProperties('AWS::ECS::Service', {
       NetworkConfiguration: {

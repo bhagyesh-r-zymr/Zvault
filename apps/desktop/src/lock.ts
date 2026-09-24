@@ -38,8 +38,6 @@ export const lock = {
   enableTouchId: () => invoke<void>('enable_touch_id'),
   disableTouchId: () => invoke<void>('disable_touch_id'),
   unlockWithTouchId: () => invoke<void>('unlock_with_touch_id'),
-  /** Debug builds only; release builds reject it. */
-  devUnlock: () => invoke<void>('dev_unlock'),
   /** Copies a secret; resolves to the seconds until it is cleared. */
   copySecret: (text: string) => invoke<number>('copy_secret', { text }),
   onLocked: (handler: (reason: LockReason) => void): Promise<UnlistenFn> =>

@@ -136,31 +136,22 @@ pub async fn unlock_with_touch_id(app: AppHandle) -> Result<(), String> {
         return Err(BiometricError::Expired.to_string());
     }
 
+    let keyset = crate::auth::copy_key(&record.key);
     app.state::<AppState>().session().unlock(
-        account_id,
+        account_id.clone(),
         record.key,
         UnlockMethod::TouchId,
         record.password_verified_at,
         Instant::now(),
     );
-    Ok(())
-}
-
-/// Development-only unlock with a throwaway key, so the lock, Touch ID and
-/// clipboard flows can be exercised before sign-in exists. Release builds
-/// refuse it.
-#[tauri::command]
-pub fn dev_unlock(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    if !cfg!(debug_assertions) {
-        return Err("not available in release builds".into());
-    }
-    let key = SymmetricKey::generate().map_err(|e| e.to_string())?;
-    unlocked_with_password(&app, &state, "dev@zvault.local".into(), key);
+    app.state::<crate::Keyring>()
+        .unlock(crate::auth::copy_key(&keyset));
+    crate::auth::restore(&app, account_id, keyset);
     Ok(())
 }
 
 /// Starts a session after the master password was verified, and refreshes the
-/// Touch ID record so quick unlock's expiry restarts. Sign-in will call this.
+/// Touch ID record so quick unlock's expiry restarts. Sign-in calls this.
 pub fn unlocked_with_password(
     app: &AppHandle,
     state: &AppState,

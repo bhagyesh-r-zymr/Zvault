@@ -5,9 +5,11 @@ interface Props {
   status: LockStatus;
   reason: LockReason | null;
   onUnlocked: () => void;
+  /** Signs out so the user can sign in again with their master password. */
+  onUsePassword: () => void;
 }
 
-export function LockScreen({ status, reason, onUnlocked }: Props) {
+export function LockScreen({ status, reason, onUnlocked, onUsePassword }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,12 +31,9 @@ export function LockScreen({ status, reason, onUnlocked }: Props) {
           Unlock with Touch ID
         </button>
       )}
-      <p className="muted">Master password unlock arrives with sign-in.</p>
-      {import.meta.env.DEV && (
-        <button type="button" disabled={busy} onClick={() => run(lock.devUnlock)}>
-          Dev unlock (throwaway key)
-        </button>
-      )}
+      <button type="button" disabled={busy} onClick={onUsePassword}>
+        Use master password
+      </button>
       {error && <p role="alert">{error}</p>}
     </section>
   );

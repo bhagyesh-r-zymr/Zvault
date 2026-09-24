@@ -59,6 +59,8 @@ pub fn lock(app: &AppHandle, reason: LockReason) {
         }
         session.lock()
     };
+    app.state::<crate::Keyring>().lock();
+    crate::auth::forget(app);
     state.clipboard.clear_if_ours(None);
     if was_unlocked {
         let _ = app.emit(LOCKED_EVENT, LockedEvent { reason });

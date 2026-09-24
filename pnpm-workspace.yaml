@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - infra
 
 # Only these packages may run install scripts (supply-chain hardening).
 onlyBuiltDependencies:

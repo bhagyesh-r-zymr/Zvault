@@ -40,6 +40,7 @@ Build a native **macOS app** with a backend on **AWS** that lets people store an
 | `crates/zvault-crypto` | Rust crypto core used by the app: Argon2id + Secret Key derivation (2SKD), XChaCha20-Poly1305, Secret Key format. |
 | `packages/shared`      | Wire contracts (zod schemas + types) shared by the API and the app's UI.                                          |
 | `apps/share-web`       | Static page that opens share links in the recipient's browser and decrypts them there.                            |
+| `infra`                | AWS CDK app for the API: VPC, Aurora PostgreSQL, SES, ECS Fargate + ALB, WAF, KMS, CloudTrail. See its README.    |
 
 pnpm workspaces and Turborepo drive the TypeScript side; a Cargo workspace at the root drives the Rust side.
 

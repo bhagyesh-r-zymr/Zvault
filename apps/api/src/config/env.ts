@@ -31,6 +31,11 @@ const EnvSchema = z
     DATABASE_USER: z.string().min(1).optional(),
     DATABASE_PASSWORD: z.string().min(1).optional(),
     DATABASE_SSL: z.stringbool().default(false),
+    /**
+     * Secrets Manager secret holding the database password (as set by the AWS
+     * stack). Read on connect, so password rotation needs no restart.
+     */
+    DATABASE_CREDENTIALS_ARN: z.string().startsWith('arn:').optional(),
 
     /** Keys the HMACs over verification codes and decoy logins. 32+ random chars. */
     SERVER_SECRET: z.string().min(32).optional(),

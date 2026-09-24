@@ -4,6 +4,7 @@ import pg from 'pg';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { DATABASE, PG_POOL } from './database.js';
+import { poolConfig } from './pool.js';
 import * as schema from './schema.js';
 
 class PoolCloser implements OnApplicationShutdown {
@@ -21,12 +22,7 @@ class PoolCloser implements OnApplicationShutdown {
       provide: PG_POOL,
       inject: [ENV],
       // The pool connects lazily, on the first query.
-      useFactory: (env: Env) =>
-        new pg.Pool({
-          connectionString: env.DATABASE_URL,
-          ssl: env.DATABASE_SSL ? { rejectUnauthorized: true } : false,
-          max: 10,
-        }),
+      useFactory: (env: Env) => new pg.Pool(poolConfig(env, 10)),
     },
     {
       provide: DATABASE,

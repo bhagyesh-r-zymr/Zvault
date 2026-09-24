@@ -9,6 +9,7 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/target/**',
       '**/src-tauri/gen/**',
+      '**/cdk.out/**',
       '**/*.config.*',
     ],
   },

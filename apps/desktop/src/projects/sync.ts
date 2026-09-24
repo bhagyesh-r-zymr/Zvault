@@ -182,6 +182,36 @@ export class ProjectsSync {
     return entry.id;
   }
 
+  /**
+   * Uploads one environment's value that the Rust core already sealed, for
+   * `zv set`. A new secret arrives with its sealed metadata; an existing one
+   * keeps its metadata, re-sealed here because every write carries it.
+   */
+  async putSealedValue(write: {
+    projectId: string;
+    secretId: string;
+    environmentId: string;
+    encryptedValue: EncryptedBlob;
+    encryptedMeta: EncryptedBlob | null;
+  }): Promise<void> {
+    const { projectId, secretId, environmentId } = write;
+    await this.pull(projectId);
+    const project = this.project(projectId);
+    const existing = project.secrets.get(secretId);
+    let encryptedMeta = write.encryptedMeta;
+    if (!encryptedMeta) {
+      if (!existing) throw new Error('This secret is no longer available.');
+      encryptedMeta = (await this.core.sealEntry(projectId, 'secret', secretId, existing.meta))
+        .encryptedMeta;
+    }
+    const body = {
+      baseRevision: existing?.revision ?? 0,
+      encryptedMeta,
+      values: { [environmentId]: write.encryptedValue },
+    };
+    await this.write(project, () => this.api.putSecret(projectId, secretId, body));
+  }
+
   async deleteSecret(projectId: string, secretId: string): Promise<void> {
     const project = this.project(projectId);
     const secret = project.secrets.get(secretId);

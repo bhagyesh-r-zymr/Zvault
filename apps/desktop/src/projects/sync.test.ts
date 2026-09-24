@@ -9,13 +9,27 @@ import type {
   PutSecretRequest,
   SyncProjectResponse,
 } from '@zvault/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { FindSecret, ListSecrets, SaveSecret } from '../agents/api.js';
+import { serveZv } from '../agents/bridge.js';
 import { EntryConflictError, type ProjectsApi } from './api.js';
 import type { ProjectsCore } from './core.js';
 import { secretRef, toView, valueSource, type ProjectState } from './model.js';
 import { ProjectsSync } from './sync.js';
 
 const NOW = '2026-01-01T00:00:00.000Z';
+
+const served = vi.hoisted((): { find?: unknown; list?: unknown; save?: unknown } => ({}));
+vi.mock('../agents/api.js', () => {
+  const stop = () => Promise.resolve(() => undefined);
+  return {
+    agents: {
+      serveResolves: (f: unknown) => ((served.find = f), stop()),
+      serveLists: (l: unknown) => ((served.list = l), stop()),
+      serveWrites: (w: unknown) => ((served.save = w), stop()),
+    },
+  };
+});
 
 function blob(kid: string, value: unknown): EncryptedBlob {
   return {
@@ -130,9 +144,15 @@ class FakeServer {
   }
 
   putSecret(pid: string, id: string, body: PutSecretRequest): Promise<ProjectEntry> {
-    const values = Object.entries(body.values).flatMap(([environmentId, v]) =>
-      v ? [{ environmentId, encryptedValue: v, updatedAt: NOW }] : [],
-    );
+    // Like the API, environments left out keep their current value.
+    const current = this.entries.get(id);
+    const kept = current?.type === 'secret' && !current.deleted ? current.values : [];
+    const values = [
+      ...kept.filter((v) => !(v.environmentId in body.values)),
+      ...Object.entries(body.values).flatMap(([environmentId, v]) =>
+        v ? [{ environmentId, encryptedValue: v, updatedAt: NOW }] : [],
+      ),
+    ];
     return this.save(pid, id, body.baseRevision, {
       type: 'secret',
       encryptedMeta: body.encryptedMeta,
@@ -355,5 +375,86 @@ describe('toView', () => {
     expect(secrets[0]!.folder).toBeNull();
     expect(valueSource(project, secrets[0]!, 'stg')).toBe('dev');
     expect(secretRef(project, project.environments[1]!, secrets[0]!)).toBe('zv://p/staging/S');
+  });
+});
+
+describe('zv bridge', () => {
+  it('resolves, lists and writes zv:// paths against synced projects', async () => {
+    const server = new FakeServer();
+    const mine = device(server);
+    await mine.load();
+    const projectId = await mine.createProject('Payments API');
+    const [dev, stg, prod] = mine.get().projects[0]!.environments;
+    const folderId = await mine.createFolder(projectId, 'Billing');
+    const secretId = await mine.createSecret(projectId, {
+      name: 'Stripe',
+      key: 'STRIPE_KEY',
+      folderId,
+      tags: [],
+      values: { [dev!.id]: 'sk_test', [prod!.id]: 'sk_live' },
+    });
+    serveZv(mine);
+    const find = served.find as FindSecret;
+    const list = served.list as ListSecrets;
+    const save = served.save as SaveSecret;
+
+    const found = await find('zv://payments-api/production/billing/STRIPE_KEY');
+    expect(found).toMatchObject({ projectId, environmentId: prod!.id, secretId, folderId });
+    expect(decode(found!.encryptedValue!)).toEqual({ value: 'sk_live' });
+    expect(found!.valueEnvironmentId).toBe(prod!.id);
+
+    // Staging has no value yet; the path still resolves so `zv set` can fill it.
+    expect(await find('zv://payments-api/staging/billing/STRIPE_KEY')).toMatchObject({
+      secretId,
+      encryptedValue: null,
+    });
+    expect(await find('zv://payments-api/staging/STRIPE_KEY')).toMatchObject({
+      secretId: null,
+      folderId: null,
+    });
+    expect(await find('zv://nope/staging/STRIPE_KEY')).toBeNull();
+    expect(await find('zv://payments-api/qa/STRIPE_KEY')).toBeNull();
+    expect(await find('zv://payments-api/staging/nope/STRIPE_KEY')).toBeNull();
+
+    expect(await list('zv://payments-api/production/*')).toEqual([
+      'zv://payments-api/production/billing/STRIPE_KEY',
+    ]);
+    expect((await list(null)).sort()).toEqual([
+      'zv://payments-api/development/billing/STRIPE_KEY',
+      'zv://payments-api/production/billing/STRIPE_KEY',
+    ]);
+
+    // `zv set` on an existing secret, then on a new one.
+    await save({
+      reference: 'zv://payments-api/staging/billing/STRIPE_KEY',
+      projectId,
+      environmentId: stg!.id,
+      secretId,
+      encryptedValue: await fakeCore.sealValue(projectId, secretId, stg!.id, 'sk_stg'),
+      encryptedMeta: null,
+      created: false,
+    });
+    const sealed = await fakeCore.sealEntry(projectId, 'secret', null, {
+      name: 'DB_URL',
+      key: 'DB_URL',
+      folderId: null,
+      tags: [],
+    });
+    await save({
+      reference: 'zv://payments-api/development/DB_URL',
+      projectId,
+      environmentId: dev!.id,
+      secretId: sealed.id,
+      encryptedValue: await fakeCore.sealValue(projectId, sealed.id, dev!.id, 'postgres://'),
+      encryptedMeta: sealed.encryptedMeta,
+      created: true,
+    });
+
+    const other = device(server);
+    await other.load();
+    expect(await other.openValue(projectId, secretId, stg!.id)).toBe('sk_stg');
+    expect(await other.openValue(projectId, secretId, prod!.id)).toBe('sk_live');
+    expect(await other.openValue(projectId, sealed.id, dev!.id)).toBe('postgres://');
+    expect(other.get().secrets.find((s) => s.id === secretId)!.name).toBe('Stripe');
   });
 });

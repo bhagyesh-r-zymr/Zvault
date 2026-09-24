@@ -1,128 +1,101 @@
-import { useState } from 'react';
-import { PreviewNote } from '../projects/ProjectsView.js';
-import { Sheet } from '../ui/controls.js';
+import { useCallback, useEffect, useState } from 'react';
+import { ErrorLine, Sheet } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
+import { agents, type ActivityEntry, type Agent, type ApprovalMode } from './api.js';
 import './agents.css';
 
 /**
- * Local AI agents that use secrets through the `zv` CLI. The CLI and the
- * app's approval bridge are being built separately; until they land this
- * screen runs on sample agents so the flow can be reviewed.
+ * Local AI agents that use secrets through the `zv` CLI. Pairing starts in
+ * a terminal (`zv agent pair`) and is approved in the prompt the app shows;
+ * this screen lists paired agents and changes what they may use.
  */
 
-type Policy = 'ask' | 'session' | 'unlocked';
-
-interface Grant {
-  name: string;
-  where: string;
-  ref: string;
-}
-
-interface Agent {
-  id: string;
-  name: string;
-  initials: string;
-  status: 'active' | 'idle' | 'paused';
-  policy: Policy;
-  key: string;
-  paired: string;
-  folder: string;
-  grants: Grant[];
-  activity: { ok: boolean; text: string; when: string }[];
-}
-
-const POLICIES: { value: Policy; title: string; detail: string }[] = [
-  { value: 'ask', title: 'Ask me each time', detail: 'Touch ID on every use' },
-  { value: 'session', title: 'Allow for a session', detail: 'Ask again after 15 min' },
-  { value: 'unlocked', title: 'Allow while unlocked', detail: 'No prompt, still logged' },
+const POLICIES: { value: ApprovalMode; title: string; detail: string }[] = [
+  { value: 'askEveryTime', title: 'Ask me each time', detail: 'Touch ID on every use' },
+  { value: 'session15m', title: 'Allow for a session', detail: 'Ask again after 15 min' },
+  { value: 'whileUnlocked', title: 'Allow while unlocked', detail: 'No prompt, still logged' },
 ];
 
-const POLICY_SHORT: Record<Policy, string> = {
-  ask: 'asks each time',
-  session: '15 min sessions',
-  unlocked: 'while unlocked',
+const POLICY_SHORT: Record<ApprovalMode, string> = {
+  askEveryTime: 'asks each time',
+  session15m: '15 min sessions',
+  whileUnlocked: 'while unlocked',
 };
 
-const SAMPLE: Agent[] = [
-  {
-    id: 'claude-code',
-    name: 'Claude Code',
-    initials: 'CC',
-    status: 'active',
-    policy: 'ask',
-    key: '7F3A·C1E9·04B2',
-    paired: 'Sep 20',
-    folder: '~/code/zvault-api',
-    grants: [
-      {
-        name: 'Stripe secret key',
-        where: 'Payments API · Dev',
-        ref: 'zv://payments-api/dev/stripe/secret_key',
-      },
-      { name: 'Postgres', where: 'Zvault · Staging', ref: 'zv://zvault/staging/postgres/password' },
-      {
-        name: 'GitHub deploy key',
-        where: 'Zvault · Dev',
-        ref: 'zv://zvault/dev/github-deploy/key',
-      },
-    ],
-    activity: [
-      { ok: true, text: 'Used Stripe secret key for npm test', when: '4 min ago' },
-      { ok: false, text: 'Denied: asked for Zvault · Production (never allowed)', when: '1 h ago' },
-    ],
-  },
-  {
-    id: 'cursor',
-    name: 'Cursor',
-    initials: 'C',
-    status: 'idle',
-    policy: 'session',
-    key: '19BE·77D0·A3C4',
-    paired: 'Sep 18',
-    folder: '~/code/customer-portal',
-    grants: [
-      {
-        name: 'Auth0 client secret',
-        where: 'Customer portal · Dev',
-        ref: 'zv://customer-portal/dev/auth0/client_secret',
-      },
-    ],
-    activity: [{ ok: true, text: 'Used Auth0 client secret for npm run dev', when: 'yesterday' }],
-  },
-  {
-    id: 'deploy',
-    name: 'deploy-script',
-    initials: '>_',
-    status: 'paused',
-    policy: 'unlocked',
-    key: 'C0DE·4411·9E2F',
-    paired: 'Sep 2',
-    folder: '~/code/zvault-infra',
-    grants: [
-      {
-        name: 'AWS account',
-        where: 'Zvault · Staging',
-        ref: 'zv://zvault/staging/aws/secret_access_key',
-      },
-      {
-        name: 'GitHub deploy key',
-        where: 'Zvault · Staging',
-        ref: 'zv://zvault/staging/github-deploy/key',
-      },
-    ],
-    activity: [],
-  },
-];
+function initials(name: string): string {
+  const words = name.split(/[\s_-]+/).filter(Boolean);
+  return (words.length > 1 ? words[0]![0]! + words[1]![0]! : name.slice(0, 2)).toUpperCase();
+}
+
+function when(unix: number): string {
+  const secs = Date.now() / 1000 - unix;
+  if (secs < 60) return 'just now';
+  if (secs < 3600) return `${Math.floor(secs / 60)} min ago`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)} h ago`;
+  return new Date(unix * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function describe(a: ActivityEntry): string {
+  const what = a.refs.length === 1 ? a.refs[0]! : `${a.refs.length} secrets`;
+  const cmd = a.purpose?.command.length ? ` for ${a.purpose.command.join(' ')}` : '';
+  switch (a.outcome) {
+    case 'paired':
+      return 'Paired';
+    case 'unpaired':
+      return 'Unpaired';
+    case 'denied':
+      return `Denied${a.refs.length ? ` ${what}` : ''}${a.reason ? ` (${a.reason})` : ''}`;
+    default:
+      return a.refs.length ? `Used ${what}${cmd}` : `Allowed ${a.purpose?.kind ?? 'request'}`;
+  }
+}
 
 export function AgentsView() {
-  const [agents, setAgents] = useState(SAMPLE);
-  const [selected, setSelected] = useState(SAMPLE[0]!.id);
-  const [reviewing, setReviewing] = useState(false);
-  const [requests, setRequests] = useState(1);
-  const agent = agents.find((a) => a.id === selected) ?? agents[0]!;
+  const [list, setList] = useState<Agent[] | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [activity, setActivity] = useState<ActivityEntry[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [newScope, setNewScope] = useState('');
+  const [pairing, setPairing] = useState(false);
 
-  const update = (patch: Partial<Agent>) =>
-    setAgents(agents.map((a) => (a.id === agent.id ? { ...a, ...patch } : a)));
+  const agent = list?.find((a) => a.id === selected) ?? list?.[0] ?? null;
+
+  const reload = useCallback(async () => {
+    try {
+      setList(await agents.list());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
+  useEffect(() => {
+    void reload();
+    const stop = agents.onActivity(() => void reload());
+    return () => void stop.then((unlisten) => unlisten());
+  }, [reload]);
+
+  const agentId = agent?.id ?? null;
+  useEffect(() => {
+    if (!agentId) return setActivity([]);
+    agents.activity(agentId, 20).then(setActivity, () => setActivity([]));
+  }, [agentId, list]);
+
+  const update = async (changes: Parameters<typeof agents.update>[1]) => {
+    if (!agent) return;
+    setError(null);
+    try {
+      await agents.update(agent.id, changes);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const addScope = () => {
+    const scope = newScope.trim();
+    if (!agent || !scope) return;
+    void update({ scopes: [...agent.scopes, scope] }).then(() => setNewScope(''));
+  };
 
   return (
     <div className="split agents">
@@ -130,7 +103,7 @@ export function AgentsView() {
         <div className="list-head">
           <div className="title-row">
             <h2>Agents</h2>
-            <button type="button" className="primary" disabled title="Arrives with the zv CLI">
+            <button type="button" className="primary" onClick={() => setPairing(true)}>
               Pair an agent
             </button>
           </div>
@@ -139,251 +112,238 @@ export function AgentsView() {
             get what you allow.
           </p>
         </div>
-        {requests > 0 && (
-          <div className="request-banner">
-            <span className="pulse" />
-            <span>
-              {requests} request{requests === 1 ? '' : 's'} waiting for you
-            </span>
-            <button type="button" className="link" onClick={() => setReviewing(true)}>
-              Review
-            </button>
-          </div>
-        )}
         <div className="list-body">
-          {agents.map((a) => (
+          {list?.map((a) => (
             <button
               key={a.id}
               type="button"
               className="list-item"
-              aria-current={a.id === agent.id}
+              aria-current={a.id === agent?.id}
               onClick={() => setSelected(a.id)}
             >
-              <span className="tile agent-tile">{a.initials}</span>
+              <span className="tile agent-tile">{initials(a.name)}</span>
               <span className="row-main">
                 <span className="row-title">{a.name}</span>
                 <span className="row-sub">
-                  {a.grants.length} secret{a.grants.length === 1 ? '' : 's'} ·{' '}
-                  {a.status === 'paused' ? 'paused' : POLICY_SHORT[a.policy]}
+                  {a.scopes.length} scope{a.scopes.length === 1 ? '' : 's'} ·{' '}
+                  {a.paused ? 'paused' : POLICY_SHORT[a.approval]}
                 </span>
               </span>
-              <span className={`agent-status ${a.status}`}>
-                {a.status === 'active' ? 'Active' : a.status === 'idle' ? 'Idle' : 'Paused'}
+              <span className={`agent-status ${a.paused ? 'paused' : 'active'}`}>
+                {a.paused ? 'Paused' : a.lastUsedAt ? when(a.lastUsedAt) : 'Idle'}
               </span>
             </button>
           ))}
+          {list?.length === 0 && (
+            <p className="hint" style={{ padding: 16 }}>
+              No agents yet. Run <code>zv agent pair --name &quot;Claude Code&quot;</code> in a
+              terminal to pair one.
+            </p>
+          )}
         </div>
       </section>
 
-      <section className="detail-pane" aria-label={`${agent.name} details`}>
+      <section className="detail-pane" aria-label={agent ? `${agent.name} details` : 'Agent'}>
         <div className="detail-body" style={{ paddingTop: 26 }}>
-          <PreviewNote>Sample agents. Pairing and approvals go live with the zv CLI.</PreviewNote>
-          <div className="item-head">
-            <span className="tile large agent-tile">{agent.initials}</span>
-            <div style={{ flexGrow: 1 }}>
-              <h1>{agent.name}</h1>
-              <span className="mono muted" style={{ fontSize: 12 }}>
-                key {agent.key} · paired {agent.paired} · {agent.folder}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => update({ status: agent.status === 'paused' ? 'idle' : 'paused' })}
-            >
-              <Icon name={agent.status === 'paused' ? 'arrowRight' : 'pause'} size={13} />
-              {agent.status === 'paused' ? 'Resume' : 'Pause'}
-            </button>
-          </div>
-
-          <div>
-            <div className="section-label">
-              <span>When it asks for a secret</span>
-            </div>
-            <div className="choices" role="radiogroup" aria-label="Approval policy">
-              {POLICIES.map((p) => (
-                <button
-                  key={p.value}
-                  type="button"
-                  role="radio"
-                  className="choice"
-                  aria-checked={agent.policy === p.value}
-                  onClick={() => update({ policy: p.value })}
-                >
-                  <strong>{p.title}</strong>
-                  <span>{p.detail}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="section-label">
-              <span>Secrets it can use</span>
-            </div>
-            <div className="panel rows">
-              {agent.grants.map((g) => (
-                <div key={g.ref} className="row">
-                  <div className="row-main">
-                    <span className="row-title">
-                      {g.name} <span className="muted">· {g.where}</span>
-                    </span>
-                    <span className="mono muted truncate" style={{ fontSize: 12 }}>
-                      {g.ref}
-                    </span>
-                  </div>
-                  <span className="hint">as env var</span>
-                  <button
-                    type="button"
-                    className="icon ghost small"
-                    aria-label={`Remove ${g.name}`}
-                    onClick={() => update({ grants: agent.grants.filter((x) => x.ref !== g.ref) })}
-                  >
-                    <Icon name="close" size={13} />
-                  </button>
+          <ErrorLine error={error} />
+          {!agent ? (
+            <CliSetup />
+          ) : (
+            <>
+              <div className="item-head">
+                <span className="tile large agent-tile">{initials(agent.name)}</span>
+                <div style={{ flexGrow: 1 }}>
+                  <h1>{agent.name}</h1>
+                  <span className="mono muted" style={{ fontSize: 12 }}>
+                    {agent.id} · paired {when(agent.createdAt)}
+                  </span>
                 </div>
-              ))}
-              {agent.grants.length === 0 && (
-                <div className="row muted">No secrets. This agent can't read anything.</div>
-              )}
-            </div>
-          </div>
+                <button type="button" onClick={() => void update({ paused: !agent.paused })}>
+                  <Icon name={agent.paused ? 'arrowRight' : 'pause'} size={13} />
+                  {agent.paused ? 'Resume' : 'Pause'}
+                </button>
+              </div>
 
-          <div>
-            <div className="section-label">
-              <span>Recent activity</span>
-            </div>
-            <ul className="activity">
-              {agent.activity.map((a) => (
-                <li key={a.text}>
-                  <span
-                    className="dot"
-                    style={{ background: a.ok ? 'var(--secure)' : 'var(--danger-dot)' }}
-                  />
-                  <span style={{ flexGrow: 1 }}>{a.text}</span>
-                  <span className="muted">{a.when}</span>
-                </li>
-              ))}
-              {agent.activity.length === 0 && <li className="muted">Nothing yet.</li>}
-            </ul>
-          </div>
+              <div>
+                <div className="section-label">
+                  <span>When it asks for a secret</span>
+                </div>
+                <div className="choices" role="radiogroup" aria-label="Approval policy">
+                  {POLICIES.map((p) => (
+                    <button
+                      key={p.value}
+                      type="button"
+                      role="radio"
+                      className="choice"
+                      aria-checked={agent.approval === p.value}
+                      onClick={() => void update({ approval: p.value })}
+                    >
+                      <strong>{p.title}</strong>
+                      <span>{p.detail}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'auto' }}>
-            <button
-              type="button"
-              className="danger"
-              onClick={() => {
-                const rest = agents.filter((a) => a.id !== agent.id);
-                setAgents(rest);
-                if (rest[0]) setSelected(rest[0].id);
-              }}
-              disabled={agents.length === 1}
-            >
-              Unpair {agent.name}
-            </button>
-          </div>
+              <div>
+                <div className="section-label">
+                  <span>Secrets it can use</span>
+                </div>
+                <div className="panel rows">
+                  {agent.scopes.map((s) => (
+                    <div key={s} className="row">
+                      <div className="row-main">
+                        <span className="mono truncate" style={{ fontSize: 12 }}>
+                          {s}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="icon ghost small"
+                        aria-label={`Remove ${s}`}
+                        onClick={() => void update({ scopes: agent.scopes.filter((x) => x !== s) })}
+                      >
+                        <Icon name="close" size={13} />
+                      </button>
+                    </div>
+                  ))}
+                  {agent.scopes.length === 0 && (
+                    <div className="row muted">
+                      No secrets. This agent can&apos;t read anything.
+                    </div>
+                  )}
+                  <form
+                    className="row"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      addScope();
+                    }}
+                  >
+                    <input
+                      className="mono"
+                      style={{ flexGrow: 1 }}
+                      value={newScope}
+                      placeholder="zv://web/development/*"
+                      aria-label="Add a scope"
+                      onChange={(e) => setNewScope(e.target.value)}
+                    />
+                    <button type="submit" disabled={!newScope.trim()}>
+                      Add
+                    </button>
+                  </form>
+                </div>
+              </div>
+
+              <div>
+                <div className="section-label">
+                  <span>Recent activity</span>
+                </div>
+                <ul className="activity">
+                  {activity.map((a, i) => (
+                    <li key={`${a.at}-${i}`}>
+                      <span
+                        className="dot"
+                        style={{
+                          background:
+                            a.outcome === 'denied' ? 'var(--danger-dot)' : 'var(--secure)',
+                        }}
+                      />
+                      <span style={{ flexGrow: 1 }} className="truncate">
+                        {describe(a)}
+                      </span>
+                      <span className="muted">{when(a.at)}</span>
+                    </li>
+                  ))}
+                  {activity.length === 0 && <li className="muted">Nothing yet.</li>}
+                </ul>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'auto' }}>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() =>
+                    void agents
+                      .unpair(agent.id)
+                      .then(reload)
+                      .catch((e: unknown) => setError(String(e)))
+                  }
+                >
+                  Unpair {agent.name}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </section>
 
-      {reviewing && (
-        <AgentRequestSheet
-          onClose={() => setReviewing(false)}
-          onDecided={() => {
-            setReviewing(false);
-            setRequests(0);
-          }}
-        />
+      {pairing && (
+        <Sheet
+          title="Pair an agent"
+          subtitle="Pairing starts from the terminal the agent uses"
+          onClose={() => setPairing(false)}
+          width={480}
+        >
+          <CliSetup />
+        </Sheet>
       )}
     </div>
   );
 }
 
-/** The prompt shown when an agent runs `zv run` and needs approval. */
-export function AgentRequestSheet({
-  onClose,
-  onDecided,
-}: {
-  onClose: () => void;
-  onDecided: () => void;
-}) {
+/** How to get `zv` onto the PATH and pair an agent. */
+function CliSetup() {
+  const [status, setStatus] = useState<{ bundled: boolean; installedAt: string | null } | null>(
+    null,
+  );
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    agents.cliStatus().then(setStatus, () => setStatus(null));
+  }, []);
+
+  const install = async () => {
+    setError(null);
+    try {
+      const r = await agents.installCli();
+      setResult(
+        r.onPath
+          ? `Installed at ${r.path}.`
+          : `Installed at ${r.path}. Add this to your shell profile: ${r.pathLine ?? ''}`,
+      );
+      setStatus(await agents.cliStatus());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   return (
-    <Sheet
-      title="Claude Code wants 2 secrets"
-      subtitle={
-        <span
-          style={{ color: 'var(--secure)', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-        >
-          <Icon name="check" size={12} strokeWidth={2.4} /> Paired agent, key matches
-        </span>
-      }
-      icon={
-        <span className="tile agent-tile" style={{ width: 44, height: 44, borderRadius: 13 }}>
-          CC
-        </span>
-      }
-      onClose={onClose}
-      width={480}
-    >
-      <dl className="request-facts">
-        <dt>Runs</dt>
-        <dd>npm test</dd>
-        <dt>Folder</dt>
-        <dd>~/code/zvault-api</dd>
-        <dt>Process</dt>
-        <dd>claude (pid 48213) via zv</dd>
-      </dl>
-      <div className="panel rows">
-        <div className="row">
-          <span className="tile" style={{ width: 30, height: 30 }}>
-            <Icon name="key" size={14} />
-          </span>
-          <div className="row-main">
-            <span className="row-title">
-              Stripe secret key <span className="muted">· Payments API · Dev</span>
-            </span>
-            <span className="row-sub">
-              secret_key → <code>STRIPE_SECRET_KEY</code>
-            </span>
-          </div>
-          <span className="hint" style={{ color: 'var(--secure)' }}>
-            Allowed
-          </span>
-        </div>
-        <div className="row">
-          <span className="tile" style={{ width: 30, height: 30 }}>
-            <Icon name="database" size={14} />
-          </span>
-          <div className="row-main">
-            <span className="row-title">
-              Postgres <span className="muted">· Zvault · Staging</span>
-            </span>
-            <span className="row-sub">
-              password → <code>DATABASE_PASSWORD</code>
-            </span>
-          </div>
-          <span className="hint" style={{ color: 'var(--secure)' }}>
-            Allowed
-          </span>
-        </div>
-      </div>
-      <p className="notice">
-        <Icon name="shield" size={14} />
-        Values go only into this command as environment variables and are masked in its output, so
-        they never land in the agent&apos;s chat.
-      </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <button type="button" className="primary large block" onClick={onDecided}>
-          <Icon name="fingerprint" size={18} strokeWidth={1.8} />
-          Allow once with Touch ID
-        </button>
-        <div className="grid-2" style={{ gap: 8 }}>
-          <button type="button" className="block" onClick={onDecided}>
-            Allow for 15 min
-          </button>
-          <button type="button" className="danger block" onClick={onDecided}>
-            Deny
-          </button>
-        </div>
-      </div>
-    </Sheet>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <ol className="hint" style={{ lineHeight: 1.7, paddingLeft: 18 }}>
+        <li>
+          Install the command-line tool:{' '}
+          {status?.installedAt ? (
+            <span className="mono">{status.installedAt}</span>
+          ) : status?.bundled ? (
+            <button type="button" className="link" onClick={() => void install()}>
+              Install zv
+            </button>
+          ) : (
+            'this build does not include zv'
+          )}
+        </li>
+        <li>
+          In the agent&apos;s terminal, run{' '}
+          <code>zv agent pair --name &quot;Claude Code&quot;</code>.
+        </li>
+        <li>Zvault asks you to confirm the code and choose what the agent may use.</li>
+        <li>
+          The agent then runs <code>zv run --env KEY=zv://project/env/KEY -- command</code>.
+        </li>
+      </ol>
+      {result && <p className="notice">{result}</p>}
+      <ErrorLine error={error} />
+    </div>
   );
 }

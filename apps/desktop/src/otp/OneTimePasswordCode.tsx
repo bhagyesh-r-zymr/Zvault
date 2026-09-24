@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { lock } from '../lock.js';
+import { Icon } from '../ui/Icon.js';
 import type { OtpCode } from './core.js';
 import { formatCode, secondsLeft, type FetchedCode } from './countdown.js';
 import './otp.css';
@@ -46,7 +47,12 @@ export function OneTimePasswordCode({ getCode, copy = lock.copySecret }: Props) 
     return () => clearInterval(timer);
   }, []);
 
-  if (error) return <span role="alert">{error}</span>;
+  if (error)
+    return (
+      <span role="alert" className="error">
+        {error}
+      </span>
+    );
   if (!fetched) return null;
 
   const { code, period } = fetched.code;
@@ -85,8 +91,14 @@ export function OneTimePasswordCode({ getCode, copy = lock.copySecret }: Props) 
           {left}
         </text>
       </svg>
-      <button type="button" onClick={onCopy}>
-        {copied ? 'Copied' : 'Copy'}
+      <button type="button" className="small" onClick={onCopy}>
+        {copied ? (
+          <>
+            <Icon name="check" size={13} /> Copied
+          </>
+        ) : (
+          'Copy'
+        )}
       </button>
     </span>
   );

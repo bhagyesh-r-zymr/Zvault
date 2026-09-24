@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { otpCore as defaultCore, type OtpCore, type OtpSetup } from './core.js';
+import { Icon } from '../ui/Icon.js';
 import { OneTimePasswordCode } from './OneTimePasswordCode.js';
 import './otp.css';
 
@@ -50,11 +51,11 @@ export function OneTimePasswordEditor({ value, onChange, core = defaultCore }: P
   if (value && setup) {
     const label = [setup.issuer, setup.account].filter(Boolean).join(' · ');
     return (
-      <div className="otp-editor">
+      <div className="otp-editor otp-editor-set">
         <OneTimePasswordCode key={setup.uri} getCode={getCode} />
-        {label && <span className="muted">{label}</span>}
-        <button type="button" className="link" onClick={() => onChange('')}>
-          Remove one-time password
+        <span className="muted">{label}</span>
+        <button type="button" className="small ghost" onClick={() => onChange('')}>
+          <Icon name="trash" size={13} /> Remove
         </button>
       </div>
     );
@@ -63,11 +64,16 @@ export function OneTimePasswordEditor({ value, onChange, core = defaultCore }: P
   return (
     <div className="otp-editor">
       <div className="otp-actions">
-        <button type="button" onClick={() => run(core.scanScreen)} disabled={busy}>
-          Scan QR code on screen
+        <button
+          type="button"
+          className="small"
+          onClick={() => run(core.scanScreen)}
+          disabled={busy}
+        >
+          <Icon name="search" size={13} /> Scan QR code on screen
         </button>
-        <button type="button" onClick={() => run(core.scanImage)} disabled={busy}>
-          Choose QR image…
+        <button type="button" className="small" onClick={() => run(core.scanImage)} disabled={busy}>
+          <Icon name="download" size={13} /> Choose QR image…
         </button>
       </div>
       <div className="otp-actions">
@@ -82,6 +88,7 @@ export function OneTimePasswordEditor({ value, onChange, core = defaultCore }: P
         />
         <button
           type="button"
+          className="primary"
           onClick={() => run(() => core.parse(typed))}
           disabled={busy || !typed.trim()}
         >
@@ -89,7 +96,7 @@ export function OneTimePasswordEditor({ value, onChange, core = defaultCore }: P
         </button>
       </div>
       {error && (
-        <p role="alert" className="error">
+        <p role="alert" className="error" style={{ margin: 0 }}>
           {error}
         </p>
       )}

@@ -200,7 +200,7 @@ export function AppShell(props: {
           {projectsStatus === 'failed' && (
             <button type="button" className="nav-item" onClick={() => void projectsSync.load()}>
               <Icon name="refresh" size={15} />
-              <span className="label">Couldn&apos;t load projects · Retry</span>
+              <span className="label">Couldn&apos;t load · Retry</span>
             </button>
           )}
           {projects.map((p) => {

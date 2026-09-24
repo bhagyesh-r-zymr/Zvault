@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 use zeroize::Zeroizing;
 use zvault_crypto::srp::{self, ClientSession};
 use zvault_crypto::{
@@ -166,6 +166,7 @@ pub async fn login_prove(
 /// Login step 2: checks the server's proof, then opens the keyset.
 #[tauri::command]
 pub fn login_finish(
+    app: AppHandle,
     state: AppState<'_>,
     srp_m2: String,
     encrypted_keyset: BlobDto,
@@ -179,6 +180,13 @@ pub fn login_finish(
     let keyset =
         open_keyset(&pending.unlock_key, &sealed, &pending.email).map_err(|_| LOGIN_FAILED)?;
     let email = pending.email.clone();
+    app.state::<crate::Keyring>().unlock(copy_key(&keyset));
+    crate::commands::unlocked_with_password(
+        &app,
+        &app.state::<crate::autolock::AppState>(),
+        email.clone(),
+        copy_key(&keyset),
+    );
     auth.account = Some(Account {
         email: email.clone(),
         keyset,
@@ -186,11 +194,36 @@ pub fn login_finish(
     Ok(Unlocked { email })
 }
 
-/// Forgets all key material.
+/// Locks the vault and forgets all key material.
 #[tauri::command]
-pub fn lock(state: AppState<'_>) -> Result<(), String> {
+pub fn lock(app: AppHandle, state: AppState<'_>) -> Result<(), String> {
+    crate::autolock::lock(&app, crate::session::LockReason::Manual);
     *lock_state(&state)? = AuthState::default();
     Ok(())
+}
+
+/// Drops the unlocked account. The auto-lock path calls this.
+pub(crate) fn forget(app: &AppHandle) {
+    let state = app.state::<Mutex<AuthState>>();
+    let mut auth = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    *auth = AuthState::default();
+}
+
+/// Reopens the account after a quick unlock (Touch ID) handed back its keyset.
+pub(crate) fn restore(app: &AppHandle, email: String, keyset: SymmetricKey) {
+    let state = app.state::<Mutex<AuthState>>();
+    let mut auth = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    auth.pending = None;
+    auth.account = Some(Account { email, keyset });
+}
+
+/// A second handle on the same key, for the parts of the app that each hold one.
+pub(crate) fn copy_key(key: &SymmetricKey) -> SymmetricKey {
+    SymmetricKey::from_bytes(*key.as_bytes())
 }
 
 /// The unlocked account, if any.

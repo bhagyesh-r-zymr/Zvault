@@ -81,3 +81,13 @@ SRP is SRP-6a over the RFC 5054 3072-bit group with SHA-256; the exact spec is i
 **Database:** PostgreSQL (Amazon RDS/Aurora in production) via Drizzle ORM; migrations live in `apps/api/drizzle`. API tests run against an in-process Postgres (PGlite), so no database is needed for `pnpm test`.
 
 **Email:** `MAIL_TRANSPORT=log` prints messages to the API log for development. Set `MAIL_TRANSPORT=smtp` and the `SMTP_*` variables in `apps/api/.env` (see `.env.example`) to send real mail through any provider, or `MAIL_TRANSPORT=ses` to use the Amazon SES API with the IAM role on AWS. Production refuses the log transport and plaintext SMTP.
+
+## Locking, Touch ID and the clipboard (desktop)
+
+The unlock key lives only in Rust (`apps/desktop/src-tauri/src/session.rs`) and is wiped when the vault locks. The UI never receives it.
+
+- **Auto-lock.** The vault locks after a configurable idle period (1–480 minutes, default 10) without interaction with Zvault, when the Mac sleeps, and when the screen locks or the user switches away. Sleep and screen lock come from `NSWorkspace` and the `com.apple.screenIsLocked` notification; a wall-clock versus monotonic-clock check catches any sleep those miss, and sleep time counts towards the idle timer.
+- **Touch ID.** After a master-password unlock, the account unlock key can be stored in the data-protection Keychain with `BiometryCurrentSet` access control and `WhenPasscodeSetThisDeviceOnly`. It never syncs to iCloud, and macOS deletes it if fingerprints change or the passcode is removed. Touch ID stops working 14 days after the master password was last entered.
+- **Clipboard.** Copied secrets are marked concealed so clipboard managers and Universal Clipboard skip them, and are cleared after 10–300 seconds (default 90) or when the vault locks, but only if the clipboard still holds what Zvault put there.
+
+Touch ID needs a signed build: the data-protection Keychain requires the app to be signed with a Team ID and a `keychain-access-groups` entitlement (plus a provisioning profile for Developer ID distribution). Unsigned `tauri dev` builds report a missing-entitlement error when Touch ID is turned on; everything else works unsigned. Settings are held in memory until local persistence lands.

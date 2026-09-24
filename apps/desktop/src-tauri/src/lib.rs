@@ -3,8 +3,14 @@
 //! must display them (for example the Secret Key on the Emergency Kit).
 
 mod auth;
+mod autolock;
+mod biometric;
+mod clipboard;
+mod commands;
 mod emergency_kit;
 mod generator;
+mod platform;
+mod session;
 mod vault;
 
 use std::sync::Mutex;
@@ -39,6 +45,11 @@ pub fn run() {
         .manage(Mutex::new(auth::AuthState::default()))
         .manage(emergency_kit::PendingKit::default())
         .manage(Keyring::default())
+        .manage(autolock::AppState::new())
+        .setup(|app| {
+            autolock::start(app.handle());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             core_info,
             auth::create_account,
@@ -58,6 +69,14 @@ pub fn run() {
             generator::generate_password,
             generator::generate_passphrase,
             generator::check_password_strength,
+            commands::lock_status,
+            commands::lock_vault,
+            commands::report_activity,
+            commands::set_lock_settings,
+            commands::copy_secret,
+            commands::enable_touch_id,
+            commands::disable_touch_id,
+            commands::unlock_with_touch_id,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Zvault");

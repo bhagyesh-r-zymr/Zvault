@@ -21,6 +21,7 @@ import {
   type SyncProjectResponse,
   type UpdateProjectRequest,
 } from '@zvault/shared';
+import { ProjectPolicy } from '../access/project-policy.js';
 import type { AuthenticatedUser } from '../vault/current-user.js';
 import {
   ProjectsStore,
@@ -43,9 +44,15 @@ const LIMITS = {
  */
 @Injectable()
 export class ProjectsService {
-  constructor(private readonly store: ProjectsStore) {}
+  constructor(
+    private readonly store: ProjectsStore,
+    private readonly policy: ProjectPolicy,
+  ) {}
 
   async list(user: AuthenticatedUser): Promise<ProjectRecord[]> {
+    for (const p of await this.store.listProjects(user.id)) {
+      await this.policy.beforeAccess(p.row.id);
+    }
     return (await this.store.listProjects(user.id)).map((p) => toRecord(p, user));
   }
 
@@ -71,6 +78,7 @@ export class ProjectsService {
   }
 
   async get(user: AuthenticatedUser, projectId: string): Promise<ProjectRecord> {
+    await this.policy.beforeAccess(projectId);
     const project = await this.store.getProject(projectId, user.id);
     if (!project) throw new NotFoundException();
     return toRecord(project, user);
@@ -81,7 +89,7 @@ export class ProjectsService {
     projectId: string,
     req: UpdateProjectRequest,
   ): Promise<ProjectRecord> {
-    this.assertOwner(await this.access(user, projectId), user);
+    await this.assertOwner(await this.access(user, projectId), user, projectId);
     if (req.encryptedMeta.kid !== projectId) {
       throw new BadRequestException({ error: 'key_mismatch' });
     }
@@ -94,7 +102,9 @@ export class ProjectsService {
   }
 
   async remove(user: AuthenticatedUser, projectId: string): Promise<void> {
-    this.assertOwner(await this.access(user, projectId), user);
+    // Deleting a whole project stays with its owner, even in an org.
+    const access = await this.access(user, projectId);
+    if (access.ownerId !== user.id) throw new ForbiddenException({ error: 'owner_only' });
     await this.store.deleteProject(projectId);
   }
 
@@ -117,7 +127,7 @@ export class ProjectsService {
     id: string,
     req: PutEnvironmentRequest,
   ): Promise<ProjectEntry> {
-    this.assertOwner(await this.access(user, projectId), user);
+    await this.assertOwner(await this.access(user, projectId), user, projectId);
     if (
       req.encryptedMeta.kid !== id ||
       (req.encryptedKey && req.encryptedKey.kid !== ACCOUNT_KID)
@@ -147,7 +157,7 @@ export class ProjectsService {
     id: string,
     req: PutFolderRequest,
   ): Promise<ProjectEntry> {
-    this.assertOwner(await this.access(user, projectId), user);
+    await this.assertOwner(await this.access(user, projectId), user, projectId);
     if (req.encryptedMeta.kid !== id) throw new BadRequestException({ error: 'key_mismatch' });
     return this.write(user, {
       projectId,
@@ -171,6 +181,7 @@ export class ProjectsService {
       // Writing a value needs that environment's key; the server enforces it too.
       if (!access.environments.has(envId)) throw new ForbiddenException({ error: 'no_access' });
     }
+    await this.policy.assertSecretWrite(projectId, user.id, Object.keys(req.values));
     return this.write(user, {
       projectId,
       id,
@@ -189,7 +200,8 @@ export class ProjectsService {
     baseRevision: number,
   ): Promise<ProjectEntry> {
     const access = await this.access(user, projectId);
-    if (type !== 'secret') this.assertOwner(access, user);
+    if (type !== 'secret') await this.assertOwner(access, user, projectId);
+    else await this.policy.assertSecretWrite(projectId, user.id, []);
     return this.write(user, { projectId, id, type, baseRevision, encryptedMeta: null });
   }
 
@@ -222,13 +234,19 @@ export class ProjectsService {
 
   /** Non-members get 404, so project ids can't be probed. */
   private async access(user: AuthenticatedUser, projectId: string): Promise<ProjectAccess> {
+    await this.policy.beforeAccess(projectId);
     const access = await this.store.getAccess(projectId, user.id);
     if (!access?.member) throw new NotFoundException();
     return access;
   }
 
-  private assertOwner(access: ProjectAccess, user: AuthenticatedUser): void {
-    if (access.ownerId !== user.id) throw new ForbiddenException({ error: 'owner_only' });
+  /** The owner, or (for projects shared with an org) its owners and admins. */
+  private async assertOwner(
+    access: ProjectAccess,
+    user: AuthenticatedUser,
+    projectId: string,
+  ): Promise<void> {
+    await this.policy.assertStructure(projectId, user.id, access.ownerId);
   }
 }
 

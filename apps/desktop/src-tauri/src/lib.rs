@@ -15,6 +15,7 @@ mod platform;
 mod projects;
 mod session;
 mod sharing;
+mod team;
 mod vault;
 
 use std::sync::Mutex;
@@ -96,6 +97,12 @@ pub fn run() {
             sharing::sharing_fingerprint,
             sharing::share_seal_to,
             sharing::share_open,
+            team::project_key_wrap,
+            team::environment_key_wrap,
+            team::environment_rotate,
+            team::environment_rotate_commit,
+            team::access_release_seal,
+            team::access_release_open,
             agents::agent_access_status,
             agents::agent_list,
             agents::agent_update,

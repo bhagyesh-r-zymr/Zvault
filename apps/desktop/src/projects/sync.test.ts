@@ -2,6 +2,7 @@ import type {
   CreateProjectRequest,
   EncryptedBlob,
   EntryType,
+  MyProjectKeysResponse,
   ProjectEntry,
   ProjectRecord,
   PutEnvironmentRequest,
@@ -77,9 +78,17 @@ class FakeServer {
   grants = new Set<string>();
   seq = 0;
   pageSize = 2;
+  /** Set to serve the project as shared with the caller through an org. */
+  memberKeys: MyProjectKeysResponse | null = null;
+
+  myKeys(): Promise<MyProjectKeysResponse> {
+    return this.memberKeys ? Promise.resolve(this.memberKeys) : Promise.reject(new Error('404'));
+  }
 
   listProjects(): Promise<ProjectRecord[]> {
-    return Promise.resolve([...this.projects.values()]);
+    const shared = (p: ProjectRecord) =>
+      this.memberKeys ? { ...p, owner: false, encryptedKey: blob('member-key-wrap', 'key') } : p;
+    return Promise.resolve([...this.projects.values()].map(shared));
   }
 
   createProject(req: CreateProjectRequest): Promise<ProjectRecord> {
@@ -178,9 +187,61 @@ class FakeServer {
   }
 }
 
-const device = (server: FakeServer) => new ProjectsSync(server as unknown as ProjectsApi, fakeCore);
+const device = (server: FakeServer, core: ProjectsCore = fakeCore) =>
+  new ProjectsSync(server as unknown as ProjectsApi, core);
 
 describe('ProjectsSync', () => {
+  it('opens a shared project and its environments with the member wraps', async () => {
+    const server = new FakeServer();
+    const projectId = await device(server).createProject('Shared');
+    const envIds = [...server.entries.values()].map((e) => e.id);
+    const wrap = (keyVersion: number | null) => ({
+      recipientId: crypto.randomUUID(),
+      recipientPublicKey: 'r',
+      wrapperPublicKey: 'w',
+      ephemeralPublicKey: 'e',
+      blob: blob('member-key-wrap', 'key'),
+      keyVersion,
+      wrappedBy: crypto.randomUUID(),
+    });
+    server.memberKeys = {
+      projectId,
+      projectKey: wrap(null),
+      environments: envIds.map((environmentId, i) => ({
+        environmentId,
+        keyVersion: 1,
+        level: i === 2 ? 'needs_approval' : 'use',
+        wrap: i === 2 ? null : wrap(1),
+      })),
+    } as MyProjectKeysResponse;
+
+    const passed: unknown[] = [];
+    const member = device(server, {
+      ...fakeCore,
+      openProject: (p, w) => {
+        passed.push(w);
+        return fakeCore.openProject(p);
+      },
+      openEnvironment: (pid, env, w) => {
+        passed.push(w);
+        return Promise.resolve({ meta: decode(env.encryptedMeta), unlocked: !!w });
+      },
+    });
+    await member.load();
+    expect(member.get().projects[0]).toMatchObject({ owner: false });
+    expect(member.get().projects[0]!.environments.map((e) => e.locked)).toEqual([
+      false,
+      false,
+      true,
+    ]);
+    expect(passed[0]).toEqual(server.memberKeys.projectKey);
+    expect(passed.slice(1)).toEqual([
+      server.memberKeys.environments[0]!.wrap,
+      server.memberKeys.environments[1]!.wrap,
+      null,
+    ]);
+  });
+
   it('creates a project, folder and secret, and another device syncs them in pages', async () => {
     const server = new FakeServer();
     const mine = device(server);

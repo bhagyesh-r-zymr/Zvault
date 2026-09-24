@@ -162,13 +162,18 @@ export class ApiStack extends Stack {
         SES_FROM_ADDRESS: props.emailFromAddress,
         SES_CONFIGURATION_SET: props.emailConfigurationSet.configurationSetName,
         APP_PUBLIC_URL: this.apiUrl,
+        // One ALB in front of the tasks, so rate limits key on the real client IP.
+        TRUST_PROXY_HOPS: '1',
+        // The API reads the password from this secret on connect, so the monthly rotation
+        // takes effect without restarting tasks.
+        DATABASE_CREDENTIALS_ARN: databaseSecret.secretArn,
       },
       secrets: {
         DATABASE_USER: ecs.Secret.fromSecretsManager(databaseSecret, 'username'),
-        DATABASE_PASSWORD: ecs.Secret.fromSecretsManager(databaseSecret, 'password'),
         SERVER_SECRET: ecs.Secret.fromSecretsManager(appSecret, 'SERVER_SECRET'),
       },
     });
+    databaseSecret.grantRead(taskDefinition.taskRole);
     // Node writes nothing to disk except temp files; give it a scratch volume.
     taskDefinition.addVolume({ name: 'tmp' });
     container.addMountPoints({ sourceVolume: 'tmp', containerPath: '/tmp', readOnly: false });

@@ -1,0 +1,20 @@
+[package]
+name = "zvault-passwords"
+version = "0.0.0"
+description = "Zvault password and passphrase generation (OS CSPRNG) and strength estimation. Runs only on the user's device."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+getrandom = "0.3"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+zxcvbn = { version = "3.1", default-features = false }
+
+[dev-dependencies]
+serde_json = "1"
+
+[lints]
+workspace = true

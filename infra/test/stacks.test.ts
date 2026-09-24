@@ -119,8 +119,11 @@ describe.each(['dev', 'prod'] as const)('%s stage', (stage) => {
     const envNames = (container.Environment as { Name: string }[]).map((e) => e.Name);
     expect(envNames.filter((n) => /PASSWORD|SECRET|KEY/.test(n))).toEqual([]);
     const secretNames = (container.Secrets as { Name: string }[]).map((s) => s.Name);
-    expect(secretNames).toEqual(
-      expect.arrayContaining(['DATABASE_USER', 'DATABASE_PASSWORD', 'SERVER_SECRET']),
+    expect(secretNames).toEqual(expect.arrayContaining(['DATABASE_USER', 'SERVER_SECRET']));
+    // The password is read from Secrets Manager at connect time, not frozen at task start.
+    expect(secretNames).not.toContain('DATABASE_PASSWORD');
+    expect(envNames).toEqual(
+      expect.arrayContaining(['DATABASE_CREDENTIALS_ARN', 'TRUST_PROXY_HOPS']),
     );
     t.api.hasResourceProperties('AWS::ECS::Service', {
       NetworkConfiguration: {

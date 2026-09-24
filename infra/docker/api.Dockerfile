@@ -13,7 +13,10 @@ RUN pnpm install --frozen-lockfile --filter "@zvault/api..." \
 
 # Distroless: no shell, no package manager, runs as uid 65532.
 FROM gcr.io/distroless/nodejs22-debian12:nonroot
-ENV NODE_ENV=production
+# Node doesn't trust the Amazon RDS certificate authorities by default; the API verifies the
+# database's TLS certificate against this bundle.
+ADD --chown=65532:65532 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/rds/global-bundle.pem
+ENV NODE_ENV=production NODE_EXTRA_CA_CERTS=/etc/ssl/rds/global-bundle.pem
 WORKDIR /app
 COPY --from=build --chown=65532:65532 /out /app
 USER 65532

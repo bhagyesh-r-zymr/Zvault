@@ -1,4 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Mailer } from '../mail/mailer.js';
+import { shareReceivedEmail } from '../mail/templates.js';
 
 export interface ShareReceivedNotice {
   shareId: string;
@@ -16,14 +18,22 @@ export interface ShareNotifier {
 
 export const SHARE_NOTIFIER = Symbol('SHARE_NOTIFIER');
 
-/** Development stand-in until the transactional mailer is wired in. */
+/**
+ * Emails the recipient with the configured mailer. The share is already stored
+ * and shows up in their app, so a failed email is logged, not raised.
+ */
 @Injectable()
-export class LoggingShareNotifier implements ShareNotifier {
+export class MailShareNotifier implements ShareNotifier {
   private readonly logger = new Logger('ShareNotifier');
 
-  shareReceived(notice: ShareReceivedNotice): Promise<void> {
-    // Ids only: email addresses are personal data and stay out of logs.
-    this.logger.log(`share ${notice.shareId} delivered; recipient notification pending mailer`);
-    return Promise.resolve();
+  constructor(private readonly mailer: Mailer) {}
+
+  async shareReceived(notice: ShareReceivedNotice): Promise<void> {
+    try {
+      await this.mailer.send(shareReceivedEmail(notice.recipientEmail, notice.senderEmail));
+    } catch (err) {
+      // Ids only: email addresses are personal data and stay out of logs.
+      this.logger.error(`Could not email the recipient of share ${notice.shareId}: ${String(err)}`);
+    }
   }
 }

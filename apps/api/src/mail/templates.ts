@@ -46,3 +46,24 @@ export function alreadyRegisteredEmail(to: string): MailMessage {
     ),
   };
 }
+
+/** Tells a Zvault user that someone shared an item with them. Carries no item data. */
+export function shareReceivedEmail(to: string, senderEmail: string): MailMessage {
+  return {
+    to,
+    subject: `${senderEmail} shared an item with you in Zvault`,
+    text: [
+      `${senderEmail} shared an item with you in Zvault.`,
+      '',
+      'Open the Zvault app and go to Sharing to see it. It is end-to-end encrypted, so only your Zvault can open it.',
+      '',
+      "If you don't know the sender, you can ignore this email.",
+    ].join('\n'),
+    html: layout(
+      'Something was shared with you',
+      `<p><strong>${escape(senderEmail)}</strong> shared an item with you in Zvault.</p>
+<p>Open the Zvault app and go to <strong>Sharing</strong> to see it. It is end-to-end encrypted, so only your Zvault can open it.</p>
+<p>If you don't know the sender, you can ignore this email.</p>`,
+    ),
+  };
+}

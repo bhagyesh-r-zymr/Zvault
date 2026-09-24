@@ -2,7 +2,7 @@ import type { EncryptedBlob, ItemRecord, PutItemRequest, SyncItemsResponse } fro
 import { describe, expect, it } from 'vitest';
 import { ApiError, ConflictError, VaultApi } from './api.js';
 import type { ItemCipher, ItemFields, VaultCore } from './core.js';
-import { VaultSync } from './sync.js';
+import { openDefaultVault, VaultSync } from './sync.js';
 
 const VAULT = { id: '0b9a4c3e-5f1d-4a2b-8c7d-6e5f4a3b2c1d', name: 'Personal' };
 
@@ -204,5 +204,30 @@ describe('VaultApi', () => {
       respond(404, {}),
     );
     await expect(api.listVaults()).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('openDefaultVault', () => {
+  it('creates one Personal vault when opened twice at once', async () => {
+    const created: unknown[] = [];
+    const api = {
+      listVaults: () => Promise.resolve(created.length ? [created[0]] : []),
+      createVault: (record: unknown) => {
+        created.push(record);
+        return Promise.resolve(record);
+      },
+    } as unknown as VaultApi;
+    const core = {
+      ...fakeCore,
+      createVault: () => Promise.resolve({ record: { id: VAULT.id }, summary: VAULT }),
+      openVault: () => Promise.resolve(VAULT),
+    } as unknown as VaultCore;
+
+    const [a, b] = await Promise.all([openDefaultVault(api, core), openDefaultVault(api, core)]);
+    expect(created).toHaveLength(1);
+    expect(a).toEqual(VAULT);
+    expect(b).toEqual(VAULT);
+    await expect(openDefaultVault(api, core)).resolves.toEqual(VAULT);
+    expect(created).toHaveLength(1);
   });
 });

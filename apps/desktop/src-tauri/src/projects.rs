@@ -16,6 +16,7 @@ use zvault_crypto::SymmetricKey;
 use zvault_crypto::project::aad;
 use zvault_crypto::vault::{open_padded, seal_padded, unwrap_key, wrap_key};
 
+use crate::team::{MEMBER_KEY_WRAP_KID, StoredMemberWrap};
 use crate::vault::{ACCOUNT_KID, Blob, Keyring, VaultError, canonical_id};
 
 type Result<T> = core::result::Result<T, VaultError>;
@@ -23,19 +24,25 @@ type Result<T> = core::result::Result<T, VaultError>;
 /// Project and environment keys unwrapped this session.
 #[derive(Default)]
 pub struct ProjectKeys {
-    projects: HashMap<String, SymmetricKey>,
+    pub(crate) projects: HashMap<String, SymmetricKey>,
     /// Keyed by (project id, environment id).
-    environments: HashMap<(String, String), SymmetricKey>,
+    pub(crate) environments: HashMap<(String, String), SymmetricKey>,
+    /// New environment keys made by a rotation the API hasn't accepted yet.
+    pub(crate) rotations: HashMap<(String, String), SymmetricKey>,
 }
 
 impl ProjectKeys {
-    fn project(&self, project_id: &str) -> Result<&SymmetricKey> {
+    pub(crate) fn project(&self, project_id: &str) -> Result<&SymmetricKey> {
         self.projects
             .get(project_id)
             .ok_or(VaultError::VaultNotOpen)
     }
 
-    fn environment(&self, project_id: &str, environment_id: &str) -> Result<&SymmetricKey> {
+    pub(crate) fn environment(
+        &self,
+        project_id: &str,
+        environment_id: &str,
+    ) -> Result<&SymmetricKey> {
         self.environments
             .get(&(project_id.to_owned(), environment_id.to_owned()))
             .ok_or(VaultError::VaultNotOpen)
@@ -105,8 +112,8 @@ pub struct SealedEntry {
 }
 
 #[derive(Serialize, Deserialize)]
-struct ValuePlaintext {
-    value: String,
+pub(crate) struct ValuePlaintext {
+    pub(crate) value: String,
 }
 
 impl Drop for ValuePlaintext {
@@ -115,7 +122,7 @@ impl Drop for ValuePlaintext {
     }
 }
 
-fn new_key() -> Result<SymmetricKey> {
+pub(crate) fn new_key() -> Result<SymmetricKey> {
     SymmetricKey::generate().map_err(|_| VaultError::Encrypt)
 }
 
@@ -189,16 +196,25 @@ impl Keyring {
         })
     }
 
-    /// Unwraps a project's key and returns its metadata.
-    pub fn open_project(&self, project: &ProjectCipher) -> Result<Value> {
+    /// Unwraps a project's key and returns its metadata. `member_wrap` is the
+    /// caller's wrap from `GET /access/projects/:id/keys/me`, for a project
+    /// someone else shared; without one the key must be the account's own.
+    pub fn open_project(
+        &self,
+        project: &ProjectCipher,
+        member_wrap: Option<&StoredMemberWrap>,
+    ) -> Result<Value> {
         let id = canonical_id(&project.id)?;
         self.with_project_keys(|account, keys| {
-            let project_key = unwrap_key(
-                account,
-                &project.encrypted_key.sealed(ACCOUNT_KID)?,
-                &aad::project_key(&id),
-            )
-            .map_err(|_| VaultError::Decrypt)?;
+            let project_key = match member_wrap {
+                Some(wrap) => wrap.unwrap_project_key(account, &id)?,
+                None => unwrap_key(
+                    account,
+                    &project.encrypted_key.sealed(ACCOUNT_KID)?,
+                    &aad::project_key(&id),
+                )
+                .map_err(|_| VaultError::Decrypt)?,
+            };
             let meta = open_json(
                 &project_key,
                 &project.encrypted_meta,
@@ -210,11 +226,13 @@ impl Keyring {
         })
     }
 
-    /// Returns an environment's metadata, and keeps its key if the account holds one.
+    /// Returns an environment's metadata, and keeps its key if the account
+    /// holds one: its own grant, or `member_wrap` for a shared environment.
     pub fn open_environment(
         &self,
         project_id: &str,
         env: &EnvironmentCipher,
+        member_wrap: Option<&StoredMemberWrap>,
     ) -> Result<EnvironmentView> {
         let project_id = canonical_id(project_id)?;
         let env_id = canonical_id(&env.id)?;
@@ -225,8 +243,16 @@ impl Keyring {
                 &aad::environment_meta(&project_id, &env_id),
                 &env_id,
             )?;
-            let unlocked = match &env.encrypted_key {
-                Some(blob) => {
+            let unlocked = match (member_wrap, &env.encrypted_key) {
+                (Some(wrap), _) => {
+                    let key = wrap.unwrap_environment_key(account, &project_id, &env_id)?;
+                    keys.environments.insert((project_id, env_id), key);
+                    true
+                }
+                // A member wrap served without its public halves can't be
+                // opened; show the environment as locked.
+                (None, Some(blob)) if blob.kid == MEMBER_KEY_WRAP_KID => false,
+                (None, Some(blob)) => {
                     let key = unwrap_key(
                         account,
                         &blob.sealed(ACCOUNT_KID)?,
@@ -236,7 +262,7 @@ impl Keyring {
                     keys.environments.insert((project_id, env_id), key);
                     true
                 }
-                None => false,
+                (None, None) => false,
             };
             Ok(EnvironmentView { meta, unlocked })
         })
@@ -379,8 +405,12 @@ pub fn project_create(
 
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
-pub fn project_open(keyring: tauri::State<'_, Keyring>, project: ProjectCipher) -> Result<Value> {
-    keyring.open_project(&project)
+pub fn project_open(
+    keyring: tauri::State<'_, Keyring>,
+    project: ProjectCipher,
+    member_wrap: Option<StoredMemberWrap>,
+) -> Result<Value> {
+    keyring.open_project(&project, member_wrap.as_ref())
 }
 
 #[tauri::command]
@@ -389,8 +419,9 @@ pub fn environment_open(
     keyring: tauri::State<'_, Keyring>,
     project_id: String,
     environment: EnvironmentCipher,
+    member_wrap: Option<StoredMemberWrap>,
 ) -> Result<EnvironmentView> {
-    keyring.open_environment(&project_id, &environment)
+    keyring.open_environment(&project_id, &environment, member_wrap.as_ref())
 }
 
 #[tauri::command]
@@ -509,9 +540,11 @@ mod tests {
 
         keyring.lock();
         keyring.unlock(SymmetricKey::from_bytes(bytes));
-        let meta = keyring.open_project(&cipher(&p)).unwrap();
+        let meta = keyring.open_project(&cipher(&p), None).unwrap();
         assert_eq!(meta["name"], "Payments API");
-        let env = keyring.open_environment(&p.id, &p.environments[1]).unwrap();
+        let env = keyring
+            .open_environment(&p.id, &p.environments[1], None)
+            .unwrap();
         assert_eq!(env.meta["slug"], "production");
         assert!(env.unlocked);
     }
@@ -572,10 +605,10 @@ mod tests {
         // Another session of a member who holds the project key but not Production's.
         let member = Keyring::default();
         member.unlock(SymmetricKey::from_bytes(bytes));
-        member.open_project(&cipher(&p)).unwrap();
+        member.open_project(&cipher(&p), None).unwrap();
         let mut prod = p.environments[1].clone();
         prod.encrypted_key = None;
-        let view = member.open_environment(&p.id, &prod).unwrap();
+        let view = member.open_environment(&p.id, &prod, None).unwrap();
         assert_eq!(view.meta["name"], "Production");
         assert!(!view.unlocked);
         let secret = Uuid::new_v4().to_string();

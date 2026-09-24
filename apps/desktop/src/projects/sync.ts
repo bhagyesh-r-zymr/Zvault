@@ -2,10 +2,12 @@ import {
   DEFAULT_ENVIRONMENTS,
   EnvironmentMeta,
   FolderMeta,
+  MEMBER_KEY_WRAP_KID,
   ProjectMeta,
   SecretMeta,
   slugify,
   type EncryptedBlob,
+  type MyProjectKeysResponse,
   type ProjectEntry,
   type ProjectRecord,
 } from '@zvault/shared';
@@ -32,6 +34,8 @@ export interface NewSecret {
 
 interface Tracked extends ProjectState {
   cursor: number;
+  /** For a project someone shared with this account: its member wraps. */
+  wraps: MyProjectKeysResponse | null;
 }
 
 /**
@@ -253,12 +257,14 @@ export class ProjectsSync {
   /** Unwraps a project's key and decrypts its metadata; `false` if it can't. */
   private async open(record: ProjectRecord): Promise<boolean> {
     try {
-      const meta = ProjectMeta.parse(await this.core.openProject(record));
+      const wraps =
+        record.encryptedKey.kid === MEMBER_KEY_WRAP_KID ? await this.api.myKeys(record.id) : null;
+      const meta = ProjectMeta.parse(await this.core.openProject(record, wraps?.projectKey));
       const known = this.projects.get(record.id);
       if (known) {
-        Object.assign(known, { meta, revision: record.revision, owner: record.owner });
+        Object.assign(known, { meta, revision: record.revision, owner: record.owner, wraps });
       } else {
-        this.projects.set(record.id, blank(record, meta));
+        this.projects.set(record.id, { ...blank(record, meta), wraps });
       }
       return true;
     } catch {
@@ -284,7 +290,8 @@ export class ProjectsSync {
     try {
       switch (entry.type) {
         case 'environment': {
-          const view = await this.core.openEnvironment(pid, entry);
+          const wrap = project.wraps?.environments.find((e) => e.environmentId === entry.id)?.wrap;
+          const view = await this.core.openEnvironment(pid, entry, wrap);
           project.environments.set(entry.id, {
             revision: entry.revision,
             meta: EnvironmentMeta.parse(view.meta),
@@ -332,6 +339,7 @@ function blank(record: ProjectRecord, meta: ProjectMeta): Tracked {
     owner: record.owner,
     meta,
     cursor: 0,
+    wraps: null,
     environments: new Map(),
     folders: new Map(),
     secrets: new Map(),

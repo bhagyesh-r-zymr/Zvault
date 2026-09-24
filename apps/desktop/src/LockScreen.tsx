@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { LOCK_REASON_TEXT, lock, type LockReason, type LockStatus } from './lock.js';
+import { AuthLayout } from './screens/Form.js';
+import { ErrorLine } from './ui/controls.js';
+import { BrandMark, Icon } from './ui/Icon.js';
 
 interface Props {
+  email: string;
   status: LockStatus;
   reason: LockReason | null;
   onUnlocked: () => void;
@@ -9,32 +13,50 @@ interface Props {
   onUsePassword: () => void;
 }
 
-export function LockScreen({ status, reason, onUnlocked, onUsePassword }: Props) {
+export function LockScreen({ email, status, reason, onUnlocked, onUsePassword }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const run = (action: () => Promise<void>) => {
+  const unlock = () => {
     setBusy(true);
     setError(null);
-    action().then(onUnlocked, (e: unknown) => {
+    lock.unlockWithTouchId().then(onUnlocked, (e: unknown) => {
       setError(String(e));
       setBusy(false);
     });
   };
 
   return (
-    <section aria-labelledby="lock-title" className="lock">
-      <h2 id="lock-title">Zvault is locked</h2>
-      {reason && <p>{LOCK_REASON_TEXT[reason]}</p>}
-      {status.touchId.enrolled && (
-        <button type="button" disabled={busy} onClick={() => run(lock.unlockWithTouchId)}>
-          Unlock with Touch ID
+    <AuthLayout>
+      <div className="auth-top">
+        <BrandMark size={68} />
+        <h1 id="lock-title">Zvault is locked</h1>
+        <span className="account-chip">
+          <span className="avatar">{email[0]?.toUpperCase()}</span>
+          {email}
+        </span>
+        {reason && <p>{LOCK_REASON_TEXT[reason]}</p>}
+      </div>
+      <div className="auth-form" aria-labelledby="lock-title">
+        {status.touchId.enrolled && (
+          <>
+            <button type="button" className="primary large block" disabled={busy} onClick={unlock}>
+              <Icon name="fingerprint" size={20} strokeWidth={1.8} />
+              {busy ? 'Waiting for Touch ID…' : 'Unlock with Touch ID'}
+            </button>
+            <div className="divider-or">or</div>
+          </>
+        )}
+        <button
+          type="button"
+          className={status.touchId.enrolled ? 'large block' : 'primary large block'}
+          disabled={busy}
+          onClick={onUsePassword}
+        >
+          Use master password
         </button>
-      )}
-      <button type="button" disabled={busy} onClick={onUsePassword}>
-        Use master password
-      </button>
-      {error && <p role="alert">{error}</p>}
-    </section>
+        <ErrorLine error={error} />
+      </div>
+    </AuthLayout>
   );
 }

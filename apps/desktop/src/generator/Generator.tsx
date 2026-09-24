@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { lock } from '../lock.js';
 import {
   generator,
   PASSPHRASE_WORDS,
@@ -10,6 +11,8 @@ import {
 } from './api.js';
 import { ratingFromEntropy } from './rating.js';
 import { StrengthMeter } from './StrengthMeter.js';
+import { ErrorLine, SecretText } from '../ui/controls.js';
+import { Icon } from '../ui/Icon.js';
 
 type Mode = 'password' | 'passphrase';
 
@@ -69,17 +72,17 @@ export function Generator() {
 
   const copy = () => {
     if (!result) return;
-    navigator.clipboard.writeText(result.value).then(
+    lock.copySecret(result.value).then(
       () => setCopied(true),
       (e: unknown) => setError(`Copy failed: ${String(e)}`),
     );
   };
 
   return (
-    <section className="card" aria-labelledby="generator-title">
+    <section className="panel gen" aria-labelledby="generator-title">
       <h2 id="generator-title">Generate</h2>
 
-      <div className="segmented" role="radiogroup" aria-label="Type">
+      <div className="seg large" role="radiogroup" aria-label="Type">
         {(['password', 'passphrase'] as const).map((m) => (
           <button
             key={m}
@@ -93,8 +96,8 @@ export function Generator() {
         ))}
       </div>
 
-      <output className="secret" aria-live="polite">
-        {result?.value ?? ' '}
+      <output className="gen-output" aria-live="polite">
+        <SecretText value={result?.value ?? '\u00a0'} />
       </output>
       {result && (
         <StrengthMeter
@@ -102,19 +105,21 @@ export function Generator() {
           detail={`${Math.floor(result.entropyBits)} bits`}
         />
       )}
-      <div className="row">
+      <div className="actions">
         <button type="button" onClick={regenerate} disabled={mode === 'password' && noClasses}>
+          <Icon name="refresh" size={13} />
           Regenerate
         </button>
-        <button type="button" onClick={copy} disabled={!result}>
+        <button type="button" className="primary" onClick={copy} disabled={!result}>
+          <Icon name="copy" size={13} />
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
 
       {mode === 'password' ? (
         <fieldset>
-          <label>
-            Length {password.length}
+          <label className="field">
+            <span>Length {password.length}</span>
             <input
               type="range"
               min={PASSWORD_LENGTH.min}
@@ -145,8 +150,8 @@ export function Generator() {
         </fieldset>
       ) : (
         <fieldset>
-          <label>
-            Words {passphrase.words}
+          <label className="field">
+            <span>Words {passphrase.words}</span>
             <input
               type="range"
               min={PASSPHRASE_WORDS.min}
@@ -155,8 +160,8 @@ export function Generator() {
               onChange={(e) => setPassphrase({ ...passphrase, words: Number(e.target.value) })}
             />
           </label>
-          <label>
-            Separator
+          <label className="field">
+            <span>Separator</span>
             <select
               value={passphrase.separator}
               onChange={(e) =>
@@ -181,7 +186,7 @@ export function Generator() {
         </fieldset>
       )}
 
-      {error && <p role="alert">{error}</p>}
+      <ErrorLine error={error} />
     </section>
   );
 }

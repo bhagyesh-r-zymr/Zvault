@@ -5,13 +5,16 @@ import { Generator } from '../generator/Generator.js';
 import { StrengthChecker } from '../generator/StrengthChecker.js';
 import { lock, type LockStatus } from '../lock.js';
 import { ProjectsApi } from '../projects/api.js';
-import { ProjectsContext } from '../projects/context.js';
+import { ProjectsContext, TeamContext } from '../projects/context.js';
 import { projectsCore } from '../projects/core.js';
 import { NewProjectSheet } from '../projects/NewProjectSheet.js';
 import { ProjectAccess } from '../projects/ProjectAccess.js';
 import { ProjectsView, ProjectTile } from '../projects/ProjectsView.js';
 import { ProjectsSync } from '../projects/sync.js';
+import { TeamStore } from '../projects/team.js';
+import { TeamApi } from '../projects/teamApi.js';
 import { API_URL, sharingApi } from '../sharing/api.js';
+import { sharingCore } from '../sharing/core.js';
 import { SharingCenter } from '../sharing/SharingCenter.js';
 import { Icon, type IconName } from '../ui/Icon.js';
 import { VaultApi } from '../vault/api.js';
@@ -58,6 +61,17 @@ export function AppShell(props: {
   const { projects, status: projectsStatus } = useSyncExternalStore(
     projectsSync.subscribe,
     projectsSync.get,
+  );
+  // Organizations and grants for the Access screen and "Who can use".
+  const team = useMemo(
+    () => ({
+      email: session.email,
+      store: new TeamStore(
+        new TeamApi({ baseUrl: API_URL, accessToken: () => session.token }),
+        async () => (await sharingCore.identity()).publicKey,
+      ),
+    }),
+    [session.token, session.email],
   );
   const expanded = openProjects ?? (projects[0] ? [projects[0].id] : []);
 
@@ -274,16 +288,24 @@ export function AppShell(props: {
         <main className="main">
           {route.name === 'vault' && <VaultScreen api={vaultApi} sharing={sharing} />}
           {route.name === 'project' && (
-            <ProjectsView
-              key={route.projectId}
-              projectId={route.projectId}
-              envId={route.envId}
-              onEnvChange={(envId) => setRoute({ ...route, envId })}
-              onOpenProject={(projectId, envId) => setRoute({ name: 'project', projectId, envId })}
-              onOpenAccess={() => setRoute({ name: 'access', projectId: route.projectId })}
-            />
+            <TeamContext.Provider value={team}>
+              <ProjectsView
+                key={route.projectId}
+                projectId={route.projectId}
+                envId={route.envId}
+                onEnvChange={(envId) => setRoute({ ...route, envId })}
+                onOpenProject={(projectId, envId) =>
+                  setRoute({ name: 'project', projectId, envId })
+                }
+                onOpenAccess={() => setRoute({ name: 'access', projectId: route.projectId })}
+              />
+            </TeamContext.Provider>
           )}
-          {route.name === 'access' && <ProjectAccess projectId={route.projectId} />}
+          {route.name === 'access' && (
+            <TeamContext.Provider value={team}>
+              <ProjectAccess projectId={route.projectId} />
+            </TeamContext.Provider>
+          )}
           {route.name === 'agents' && <AgentsView />}
           {route.name === 'sharing' && <SharingCenter api={sharing} />}
           {route.name === 'generator' && (

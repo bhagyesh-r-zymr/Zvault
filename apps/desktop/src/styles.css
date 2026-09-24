@@ -1,0 +1,18 @@
+:root {
+  color-scheme: light dark;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 2rem;
+}
+
+dt {
+  font-weight: 600;
+  margin-top: 0.75rem;
+}
+
+dd {
+  margin: 0;
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@zvault/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Zvault macOS app: Tauri shell with a Rust crypto core and a React UI.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "tauri": "tauri",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "@zvault/shared": "workspace:*",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.1"
+  }
+}

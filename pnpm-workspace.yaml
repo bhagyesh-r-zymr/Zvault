@@ -1,0 +1,8 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Only these packages may run install scripts (supply-chain hardening).
+onlyBuiltDependencies:
+  - '@swc/core'
+  - esbuild

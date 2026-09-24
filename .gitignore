@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+.turbo/
+target/
+*.log
+.DS_Store
+
+# Local env files may hold secrets. Never commit them.
+.env
+.env.*
+!.env.example
+
+apps/desktop/src-tauri/gen/

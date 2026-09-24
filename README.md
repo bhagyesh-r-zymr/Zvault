@@ -1,4 +1,4 @@
-# SecureVault
+# zvalt
 
 A 1Password-style password manager. End-to-end encrypted. Zero-knowledge.
 

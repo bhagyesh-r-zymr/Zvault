@@ -30,6 +30,7 @@ Build a native **macOS app** with a backend on **AWS** that lets people store an
 | `apps/api`             | NestJS backend (TypeScript, ESM). Stores only ciphertext and public verifiers.                                    |
 | `apps/desktop`         | macOS app: [Tauri 2](https://tauri.app) shell, React UI in `src/`, Rust in `src-tauri/`.                          |
 | `crates/zvault-crypto` | Rust crypto core used by the app: Argon2id + Secret Key derivation (2SKD), XChaCha20-Poly1305, Secret Key format. |
+| `crates/zvault-emergency-kit` | Renders the Emergency Kit PDF (sign-in address, email, Secret Key) on the device. `cargo run -p zvault-emergency-kit --example sample` writes a sample with a throwaway key. |
 | `packages/shared`      | Wire contracts (zod schemas + types) shared by the API and the app's UI.                                          |
 
 pnpm workspaces and Turborepo drive the TypeScript side; a Cargo workspace at the root drives the Rust side.

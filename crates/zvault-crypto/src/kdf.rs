@@ -22,6 +22,9 @@ impl KdfParams {
     /// Floor enforced everywhere; matches `KDF_MINIMUMS` in `@zvault/shared`.
     pub const MIN_MEMORY_KIB: u32 = 64 * 1024;
     pub const MIN_ITERATIONS: u32 = 3;
+    /// Upper bounds, so a hostile server can't make the client exhaust memory or CPU.
+    pub const MAX_MEMORY_KIB: u32 = 4 * 1024 * 1024;
+    pub const MAX_ITERATIONS: u32 = 64;
 
     /// Defaults for new accounts; matches `KDF_DEFAULTS` in `@zvault/shared`.
     pub fn new_default(salt: [u8; SALT_LEN]) -> Self {
@@ -39,8 +42,8 @@ impl KdfParams {
     }
 
     fn validate(&self) -> Result<Params> {
-        if self.memory_kib < Self::MIN_MEMORY_KIB
-            || self.iterations < Self::MIN_ITERATIONS
+        if !(Self::MIN_MEMORY_KIB..=Self::MAX_MEMORY_KIB).contains(&self.memory_kib)
+            || !(Self::MIN_ITERATIONS..=Self::MAX_ITERATIONS).contains(&self.iterations)
             || !(1..=16).contains(&self.parallelism)
         {
             return Err(Error::InvalidKdfParams);

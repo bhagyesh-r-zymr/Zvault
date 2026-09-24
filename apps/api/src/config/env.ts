@@ -20,6 +20,9 @@ const EnvSchema = z
           .filter(Boolean),
       ),
 
+    /** Reverse-proxy hops in front of the API (1 behind the ALB), so rate limits key on the client IP. */
+    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+
     DATABASE_URL: z.url().optional(),
     /** Alternative to DATABASE_URL, as set by the CDK stack (password from Secrets Manager). */
     DATABASE_HOST: z.string().min(1).optional(),

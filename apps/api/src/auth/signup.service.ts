@@ -45,24 +45,6 @@ export class SignupService {
    */
   async start(email: string): Promise<void> {
     const now = new Date();
-    const recent = await this.db
-      .select({ createdAt: emailVerifications.createdAt })
-      .from(emailVerifications)
-      .where(
-        and(
-          eq(emailVerifications.email, email),
-          gt(emailVerifications.createdAt, new Date(now.getTime() - 3_600_000)),
-        ),
-      )
-      .orderBy(desc(emailVerifications.createdAt));
-    const last = recent[0]?.createdAt;
-    if (
-      recent.length >= MAX_CODES_PER_HOUR ||
-      (last && now.getTime() - last.getTime() < RESEND_COOLDOWN_MS)
-    ) {
-      return;
-    }
-
     const [existing] = await this.db
       .select({ id: accounts.id })
       .from(accounts)
@@ -70,7 +52,28 @@ export class SignupService {
       .limit(1);
 
     const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
-    await this.db.transaction(async (tx) => {
+    const issued = await this.db.transaction(async (tx) => {
+      // Serialize per address so parallel requests can't each pass the rate
+      // check and open several live codes.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${email}))`);
+      const recent = await tx
+        .select({ createdAt: emailVerifications.createdAt })
+        .from(emailVerifications)
+        .where(
+          and(
+            eq(emailVerifications.email, email),
+            gt(emailVerifications.createdAt, new Date(now.getTime() - 3_600_000)),
+          ),
+        )
+        .orderBy(desc(emailVerifications.createdAt));
+      const last = recent[0]?.createdAt;
+      if (
+        recent.length >= MAX_CODES_PER_HOUR ||
+        (last && now.getTime() - last.getTime() < RESEND_COOLDOWN_MS)
+      ) {
+        return false;
+      }
+
       await tx
         .update(emailVerifications)
         .set({ closedAt: now })
@@ -89,7 +92,9 @@ export class SignupService {
         expiresAt: minutesFromNow(CODE_TTL_MINUTES, now),
         closedAt: existing ? now : null,
       });
+      return true;
     });
+    if (!issued) return;
 
     const message = existing
       ? alreadyRegisteredEmail(email)
@@ -125,7 +130,7 @@ export class SignupService {
         .update(emailVerifications)
         .set({
           attempts: sql`${emailVerifications.attempts} + 1`,
-          closedAt: sql`case when ${emailVerifications.attempts} + 1 >= ${MAX_CODE_ATTEMPTS} then now() else null end`,
+          closedAt: sql`case when ${emailVerifications.attempts} + 1 >= ${MAX_CODE_ATTEMPTS} then now() else ${emailVerifications.closedAt} end`,
         })
         .where(eq(emailVerifications.id, pending.id));
       throw new BadRequestException(INVALID_CODE);

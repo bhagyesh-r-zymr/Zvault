@@ -11,6 +11,7 @@ async function main(): Promise<void> {
   const env = app.get<Env>(ENV);
   // Request bodies carry ciphertext only; cap them to limit abuse.
   app.useBodyParser('json', { limit: '1mb' });
+  if (env.TRUST_PROXY_HOPS > 0) app.set('trust proxy', env.TRUST_PROXY_HOPS);
   configureApp(app, env);
   await app.listen(env.PORT);
 }

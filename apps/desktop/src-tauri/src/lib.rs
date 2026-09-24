@@ -9,6 +9,7 @@ mod clipboard;
 mod commands;
 mod emergency_kit;
 mod generator;
+mod otp;
 mod platform;
 mod session;
 mod sharing;
@@ -55,6 +56,7 @@ pub fn run() {
             core_info,
             auth::create_account,
             auth::login_prove,
+            auth::login_verify_server,
             auth::login_finish,
             auth::lock,
             auth::unlocked,
@@ -67,6 +69,10 @@ pub fn run() {
             vault::item_seal,
             vault::item_open,
             vault::item_summary,
+            vault::item_totp_code,
+            otp::otp_parse,
+            otp::otp_scan_image,
+            otp::otp_scan_screen,
             generator::generate_password,
             generator::generate_passphrase,
             generator::check_password_strength,

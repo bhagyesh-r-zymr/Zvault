@@ -16,12 +16,7 @@ import type { z } from 'zod';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { DATABASE, type Database } from '../db/database.js';
-import {
-  accounts,
-  loginTwoFactorChallenges,
-  srpChallenges,
-  type StoredKdf,
-} from '../db/schema.js';
+import { accounts, loginTwoFactorChallenges, srpChallenges, type StoredKdf } from '../db/schema.js';
 import { SessionStore } from '../devices/session.store.js';
 import { TwoFactorService } from '../two-factor/two-factor.service.js';
 import { createChallenge, pad, toInt, verifyClient } from './srp.js';

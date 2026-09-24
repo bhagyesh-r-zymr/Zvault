@@ -33,6 +33,8 @@ pub enum VaultError {
     Encrypt,
     #[error("invalid record")]
     InvalidRecord,
+    #[error("{0}")]
+    OneTimePassword(#[from] zvault_otp::OtpError),
 }
 
 impl Serialize for VaultError {
@@ -119,6 +121,10 @@ pub struct ItemFields {
     pub urls: Vec<String>,
     #[serde(default)]
     pub notes: String,
+    /// One-time password setup, as a canonical `otpauth://totp/` URI, or
+    /// empty. Like the password, it never leaves the encrypted item.
+    #[serde(default)]
+    pub totp: String,
 }
 
 impl std::fmt::Debug for ItemFields {
@@ -131,10 +137,13 @@ impl std::fmt::Debug for ItemFields {
 
 /// What the item list shows. Leaves the password and notes in Rust.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct ItemSummary {
     pub title: String,
     pub username: String,
     pub url: Option<String>,
+    /// Whether the item holds a one-time password.
+    pub has_totp: bool,
 }
 
 impl From<&ItemFields> for ItemSummary {
@@ -143,6 +152,7 @@ impl From<&ItemFields> for ItemSummary {
             title: f.title.clone(),
             username: f.username.clone(),
             url: f.urls.first().cloned(),
+            has_totp: !f.totp.is_empty(),
         }
     }
 }
@@ -272,7 +282,7 @@ impl Keyring {
         let plaintext = ItemPlaintext {
             v: 1,
             kind: ITEM_KIND_LOGIN.into(),
-            fields: normalize(fields),
+            fields: normalize(fields)?,
         };
         let json = Zeroizing::new(serde_json::to_vec(&plaintext).map_err(|_| VaultError::Encrypt)?);
         let sealed = seal_padded(&item_key, &json, &aad::item_data(&vault_id, &item_id))
@@ -335,14 +345,22 @@ fn canonical_id(id: &str) -> Result<String> {
     Ok(canonical)
 }
 
-fn normalize(mut fields: ItemFields) -> ItemFields {
+fn normalize(mut fields: ItemFields) -> Result<ItemFields> {
     fields.title = fields.title.trim().into();
     fields.username = fields.username.trim().into();
     fields.urls.retain(|u| !u.trim().is_empty());
     for url in &mut fields.urls {
         *url = url.trim().into();
     }
-    fields
+    // Store one canonical form, and refuse a key that can't produce codes.
+    if !fields.totp.trim().is_empty() {
+        let uri = zvault_otp::Totp::parse(&fields.totp)?.to_uri();
+        fields.totp.zeroize();
+        fields.totp.push_str(&uri);
+    } else {
+        fields.totp.clear();
+    }
+    Ok(fields)
 }
 
 #[tauri::command]
@@ -395,6 +413,23 @@ pub fn item_summary(
         .map(|f| ItemSummary::from(&f))
 }
 
+/// The item's current one-time password, or None when it has none. Computed
+/// here so the setup key stays in Rust while the code is on screen.
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub fn item_totp_code(
+    keyring: tauri::State<'_, Keyring>,
+    vault_id: String,
+    item: ItemCipher,
+) -> Result<Option<crate::otp::OtpCode>> {
+    let fields = keyring.open_item(&vault_id, &item)?;
+    if fields.totp.is_empty() {
+        return Ok(None);
+    }
+    let totp = zvault_otp::Totp::parse(&fields.totp)?;
+    Ok(Some(crate::otp::OtpCode::now(&totp)))
+}
+
 #[tauri::command]
 pub fn vault_lock(keyring: tauri::State<'_, Keyring>) {
     keyring.lock();
@@ -417,6 +452,7 @@ mod tests {
             password: "correct horse battery staple".into(),
             urls: vec!["https://example.com".into(), "  ".into()],
             notes: "recovery codes in the safe".into(),
+            totp: String::new(),
         }
     }
 
@@ -468,6 +504,35 @@ mod tests {
             keyring.open_item(&vault.id, &v2).unwrap().password,
             "new password"
         );
+    }
+
+    #[test]
+    fn stores_a_canonical_one_time_password() {
+        let keyring = unlocked();
+        let (vault, _) = keyring.create_vault("Personal").unwrap();
+        let mut fields = login();
+        fields.totp = " jbsw y3dp ehpk 3pxp ".into();
+        let item = keyring.seal_item(&vault.id, None, fields).unwrap();
+        let opened = keyring.open_item(&vault.id, &item).unwrap();
+        assert_eq!(opened.totp, "otpauth://totp/?secret=JBSWY3DPEHPK3PXP");
+        assert!(ItemSummary::from(&opened).has_totp);
+        let wire = serde_json::to_string(&item).unwrap();
+        assert!(!wire.contains("JBSW"));
+
+        let mut bad = login();
+        bad.totp = "not a key!".into();
+        assert!(matches!(
+            keyring.seal_item(&vault.id, None, bad),
+            Err(VaultError::OneTimePassword(_))
+        ));
+    }
+
+    #[test]
+    fn opens_items_saved_before_one_time_passwords() {
+        let old = r#"{"v":1,"kind":"login","title":"t","username":"u","password":"p","urls":[],"notes":""}"#;
+        let parsed: ItemPlaintext = serde_json::from_str(old).unwrap();
+        assert_eq!(parsed.fields.totp, "");
+        assert!(!ItemSummary::from(&parsed.fields).has_totp);
     }
 
     #[test]

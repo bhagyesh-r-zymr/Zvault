@@ -19,8 +19,15 @@ const fakeCore: VaultCore = {
   openItem: (_vaultId, item) => Promise.resolve(decode(item)),
   summarizeItem: (_vaultId, item) => {
     const f = decode(item);
-    return Promise.resolve({ title: f.title, username: f.username, url: f.urls[0] ?? null });
+    return Promise.resolve({
+      title: f.title,
+      username: f.username,
+      url: f.urls[0] ?? null,
+      hasTotp: f.totp !== '',
+    });
   },
+  totpCode: (_vaultId, item) =>
+    Promise.resolve(decode(item).totp ? { code: '123456', period: 30, remaining: 12 } : null),
   lock: () => Promise.resolve(),
 };
 
@@ -89,6 +96,7 @@ const login = (title: string, password = 'pw'): ItemFields => ({
   password,
   urls: [],
   notes: '',
+  totp: '',
 });
 
 function device(server: FakeServer) {

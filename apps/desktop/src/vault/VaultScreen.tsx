@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { OneTimePasswordCode, OneTimePasswordEditor } from '../otp/index.js';
 import { ConflictError, type VaultApi } from './api.js';
 import { vaultCore, type ItemFields, type VaultCore } from './core.js';
 import { openDefaultVault, VaultSync } from './sync.js';
@@ -7,7 +8,14 @@ import './vault.css';
 const SYNC_INTERVAL_MS = 30_000;
 const CLIPBOARD_CLEAR_MS = 30_000;
 
-const EMPTY: ItemFields = { title: '', username: '', password: '', urls: [], notes: '' };
+const EMPTY: ItemFields = {
+  title: '',
+  username: '',
+  password: '',
+  urls: [],
+  notes: '',
+  totp: '',
+};
 
 type Pane = { mode: 'view'; id: string } | { mode: 'edit'; id: string | null } | { mode: 'none' };
 
@@ -155,6 +163,8 @@ function ItemDetail(props: {
     sync.open(id).then(setFields, (e: unknown) => setError(message(e)));
   }, [sync, id]);
 
+  const totpCode = useCallback(() => sync.totpCode(id), [sync, id]);
+
   const remove = () => {
     if (!window.confirm(`Delete “${fields?.title || 'this item'}”?`)) return;
     sync.remove(id).then(onDeleted, (e: unknown) => setError(message(e)));
@@ -178,6 +188,14 @@ function ItemDetail(props: {
           </button>{' '}
           <CopyButton value={fields.password} />
         </dd>
+        {fields.totp && (
+          <>
+            <dt>One-time password</dt>
+            <dd>
+              <OneTimePasswordCode getCode={totpCode} />
+            </dd>
+          </>
+        )}
         {fields.urls.length > 0 && (
           <>
             <dt>Websites</dt>
@@ -268,6 +286,13 @@ function ItemEditor(props: {
           autoComplete="new-password"
         />
       </label>
+      <fieldset className="otp-field">
+        <legend>One-time password</legend>
+        <OneTimePasswordEditor
+          value={fields.totp}
+          onChange={(totp) => setFields({ ...fields, totp })}
+        />
+      </fieldset>
       <label>
         Websites (one per line)
         <textarea value={urls} onChange={(e) => setUrls(e.target.value)} rows={2} />

@@ -29,12 +29,23 @@ export interface ItemFields {
   password: string;
   urls: string[];
   notes: string;
+  /** One-time password setup as an `otpauth://totp/` URI, or ''. */
+  totp: string;
 }
 
 export interface ItemSummary {
   title: string;
   username: string;
   url: string | null;
+  hasTotp: boolean;
+}
+
+/** A one-time password as computed in Rust. */
+export interface OtpCode {
+  code: string;
+  period: number;
+  /** Seconds until the next code. */
+  remaining: number;
 }
 
 export interface VaultCore {
@@ -43,6 +54,8 @@ export interface VaultCore {
   sealItem(vaultId: string, existing: ItemCipher | null, fields: ItemFields): Promise<ItemCipher>;
   openItem(vaultId: string, item: ItemCipher): Promise<ItemFields>;
   summarizeItem(vaultId: string, item: ItemCipher): Promise<ItemSummary>;
+  /** The item's current one-time password, or null if it has none. */
+  totpCode(vaultId: string, item: ItemCipher): Promise<OtpCode | null>;
   lock(): Promise<void>;
 }
 
@@ -52,5 +65,6 @@ export const vaultCore: VaultCore = {
   sealItem: (vaultId, existing, fields) => invoke('item_seal', { vaultId, existing, fields }),
   openItem: (vaultId, item) => invoke('item_open', { vaultId, item }),
   summarizeItem: (vaultId, item) => invoke('item_summary', { vaultId, item }),
+  totpCode: (vaultId, item) => invoke('item_totp_code', { vaultId, item }),
   lock: () => invoke('vault_lock'),
 };

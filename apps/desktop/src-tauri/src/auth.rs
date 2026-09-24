@@ -162,6 +162,20 @@ pub async fn login_prove(
     Ok(proof)
 }
 
+/// Checks the server's SRP proof and keeps the login pending. Accounts with
+/// 2FA call this before sending a code, so a server that can't prove it holds
+/// the verifier never sees one.
+#[tauri::command]
+pub fn login_verify_server(state: AppState<'_>, srp_m2: String) -> Result<(), String> {
+    let auth = lock_state(&state)?;
+    let pending = auth.pending.as_ref().ok_or(LOGIN_FAILED)?;
+    let m2 = B64.decode(srp_m2).map_err(|_| LOGIN_FAILED)?;
+    pending
+        .srp
+        .verify_server(&m2)
+        .map_err(|_| LOGIN_FAILED.into())
+}
+
 /// Login step 2: checks the server's proof, then opens the keyset.
 #[tauri::command]
 pub fn login_finish(

@@ -1,3 +1,4 @@
+import { isTwoFactorRequired, type EncryptedBlob, type TwoFactorProof } from '@zvault/shared';
 import { api } from './api.js';
 import { core } from './core.js';
 import { thisDevice } from './device.js';
@@ -43,10 +44,29 @@ export async function createAccount(
 }
 
 /**
- * SRP login: the server sends its challenge, the Rust core answers it, and
- * the server's proof is checked before the keyset is opened.
+ * A login that passed the password step on an account with 2FA on. The
+ * server has already proved itself; `complete` sends the code and unlocks.
  */
-export async function signIn(email: string, password: string, secretKey: string): Promise<Session> {
+export interface TwoFactorChallenge {
+  twoFactor: true;
+  expiresAt: string;
+  /** Rejects with the server's error (e.g. a wrong code); the challenge can be retried. */
+  complete: (proof: TwoFactorProof) => Promise<Session>;
+}
+
+export const needsTwoFactor = (r: Session | TwoFactorChallenge): r is TwoFactorChallenge =>
+  'twoFactor' in r;
+
+/**
+ * SRP login: the server sends its challenge, the Rust core answers it, and
+ * the server's proof is checked before the keyset is opened. Accounts with
+ * 2FA get a `TwoFactorChallenge` to finish with a code.
+ */
+export async function signIn(
+  email: string,
+  password: string,
+  secretKey: string,
+): Promise<Session | TwoFactorChallenge> {
   const start = await api.loginStart(email);
   const proof = await core.loginProve({
     email,
@@ -60,12 +80,31 @@ export async function signIn(email: string, password: string, secretKey: string)
     ...proof,
     device: await thisDevice(),
   });
+  if (!isTwoFactorRequired(finish)) return unlock(finish.srpM2, finish);
+
+  // Never send a code to a server that can't prove it holds our verifier.
+  await core.loginVerifyServer(finish.srpM2);
+  return {
+    twoFactor: true,
+    expiresAt: finish.expiresAt,
+    complete: async (proof) => {
+      const session = await api.loginTwoFactor({ twoFactorToken: finish.twoFactorToken, proof });
+      return unlock(finish.srpM2, session);
+    },
+  };
+}
+
+/** Opens the keyset with the server's session, dropping the session if anything is off. */
+async function unlock(
+  srpM2: string,
+  session: { sessionToken: string; expiresAt: string; encryptedKeyset: EncryptedBlob },
+): Promise<Session> {
   try {
-    const unlocked = await core.loginFinish(finish.srpM2, finish.encryptedKeyset);
-    return { email: unlocked.email, token: finish.sessionToken, expiresAt: finish.expiresAt };
+    const unlocked = await core.loginFinish(srpM2, session.encryptedKeyset);
+    return { email: unlocked.email, token: session.sessionToken, expiresAt: session.expiresAt };
   } catch (e) {
     // The server's proof or keyset didn't check out: don't keep its session.
-    await api.logout(finish.sessionToken).catch(() => undefined);
+    await api.logout(session.sessionToken).catch(() => undefined);
     throw e;
   }
 }

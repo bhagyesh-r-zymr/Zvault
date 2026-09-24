@@ -1,5 +1,7 @@
 import { SHARE_LIMITS, type SharedItemPayload, type SharingKeyResponse } from '@zvault/shared';
 import { useState } from 'react';
+import { ErrorLine, Segmented } from '../ui/controls.js';
+import { Icon } from '../ui/Icon.js';
 import { SHARE_ORIGIN, type SharingApi } from './api.js';
 import { sharingCore } from './core.js';
 import { checkPin, pinKey, type PinCheck } from './pins.js';
@@ -19,14 +21,16 @@ export function ShareItem({ item, api }: { item: SharedItemPayload; api: Sharing
   const [mode, setMode] = useState<'link' | 'person'>('link');
   return (
     <section className="share">
-      <div role="tablist" className="tabs">
-        <button role="tab" aria-selected={mode === 'link'} onClick={() => setMode('link')}>
-          Secure link
-        </button>
-        <button role="tab" aria-selected={mode === 'person'} onClick={() => setMode('person')}>
-          Zvault user
-        </button>
-      </div>
+      <Segmented
+        large
+        label="Share with"
+        value={mode}
+        onChange={setMode}
+        options={[
+          { value: 'link', label: 'Secure link' },
+          { value: 'person', label: 'A Zvault user' },
+        ]}
+      />
       {mode === 'link' ? (
         <ShareByLink item={item} api={api} />
       ) : (
@@ -66,33 +70,51 @@ function ShareByLink({ item, api }: { item: SharedItemPayload; api: SharingApi }
 
   if (url) {
     return (
-      <div>
-        <p>Anyone with this link can view the item. It is shown only now.</p>
-        <input readOnly value={url} aria-label="Share link" onFocus={(e) => e.target.select()} />
-        <button onClick={() => void navigator.clipboard.writeText(url)}>Copy link</button>
-        <p className="hint">
-          Send it through a channel you trust. It stops working after {maxViews}{' '}
-          {maxViews === 1 ? 'view' : 'views'} or when it expires.
+      <div className="share-body">
+        <p className="secondary">Anyone with this link can view the item. It is shown only now.</p>
+        <div className="link-box">
+          <input
+            readOnly
+            value={url}
+            aria-label="Share link"
+            className="mono"
+            onFocus={(e) => e.target.select()}
+          />
+          <button
+            type="button"
+            className="primary"
+            onClick={() => void navigator.clipboard.writeText(url)}
+          >
+            Copy link
+          </button>
+        </div>
+        <p className="notice">
+          <Icon name="shield" size={14} />
+          The key is in the part after #, which browsers never send to our servers. It stops working
+          after {maxViews} {maxViews === 1 ? 'view' : 'views'} or when it expires.
         </p>
-        <button onClick={() => setUrl(null)}>Done</button>
+        <div className="sheet-actions">
+          <button type="button" onClick={() => setUrl(null)}>
+            Make another link
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div>
-      <label>
-        Expires after{' '}
-        <select value={expiresInSeconds} onChange={(e) => setExpiry(Number(e.target.value))}>
-          {EXPIRY_OPTIONS.map((o) => (
-            <option key={o.seconds} value={o.seconds}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Views allowed{' '}
+    <div className="share-body">
+      <div className="field">
+        <span>Link expires after</span>
+        <Segmented
+          label="Link expires after"
+          value={expiresInSeconds}
+          onChange={setExpiry}
+          options={EXPIRY_OPTIONS.map((o) => ({ value: o.seconds, label: o.label }))}
+        />
+      </div>
+      <label className="field">
+        <span>Views allowed</span>
         <input
           type="number"
           min={1}
@@ -103,10 +125,16 @@ function ShareByLink({ item, api }: { item: SharedItemPayload; api: SharingApi }
           }
         />
       </label>
-      <button disabled={busy} onClick={() => void create()}>
-        Create link
+      <ErrorLine error={error} />
+      <button
+        type="button"
+        className="primary large block"
+        disabled={busy}
+        onClick={() => void create()}
+      >
+        <Icon name="link" size={15} />
+        {busy ? 'Encrypting…' : 'Create secure link'}
       </button>
-      {error && <p role="alert">{error}</p>}
     </div>
   );
 }
@@ -164,17 +192,24 @@ function ShareWithPerson({ item, api }: { item: SharedItemPayload; api: SharingA
 
   if (sentTo) {
     return (
-      <div>
-        <p>Shared with {sentTo}. They will get an email and see it in Zvault.</p>
-        <button onClick={() => setSentTo(null)}>Share with someone else</button>
+      <div className="share-body">
+        <p className="notice">
+          <Icon name="shieldCheck" size={15} />
+          Shared with {sentTo}. They will get an email and see it in Zvault.
+        </p>
+        <div className="sheet-actions">
+          <button type="button" onClick={() => setSentTo(null)}>
+            Share with someone else
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div>
-      <label>
-        Email{' '}
+    <div className="share-body">
+      <label className="field">
+        <span>Their Zvault email</span>
         <input
           type="email"
           value={email}
@@ -185,16 +220,27 @@ function ShareWithPerson({ item, api }: { item: SharedItemPayload; api: SharingA
         />
       </label>
       {!recipient ? (
-        <button disabled={busy || !email.includes('@')} onClick={() => void lookUp()}>
+        <button
+          type="button"
+          className="primary large block"
+          disabled={busy || !email.includes('@')}
+          onClick={() => void lookUp()}
+        >
           Find
         </button>
       ) : (
-        <div>
-          <p>
-            Security code for {recipient.email}: <code>{recipient.fingerprint}</code>
-          </p>
+        <div className="share-body">
+          <div
+            className="panel panel-pad"
+            style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
+          >
+            <span className="row-label">Security code for {recipient.email}</span>
+            <code className="secret" style={{ fontSize: 14 }}>
+              {recipient.fingerprint}
+            </code>
+          </div>
           {recipient.pin === 'changed' && (
-            <p role="alert">
+            <p role="alert" className="alert">
               This security code is different from the one {recipient.email} had before. Someone may
               be pretending to be them. Check the code with them before sending.
             </p>
@@ -203,12 +249,17 @@ function ShareWithPerson({ item, api }: { item: SharedItemPayload; api: SharingA
             For sensitive items, ask them to read out the code in their Zvault settings. If it
             differs, do not send.
           </p>
-          <button disabled={busy} onClick={() => void send()}>
+          <button
+            type="button"
+            className="primary large block"
+            disabled={busy}
+            onClick={() => void send()}
+          >
             Share with {recipient.email}
           </button>
         </div>
       )}
-      {error && <p role="alert">{error}</p>}
+      <ErrorLine error={error} />
     </div>
   );
 }

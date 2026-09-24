@@ -33,9 +33,9 @@ export function StrengthChecker() {
   }, [password]);
 
   return (
-    <section className="card" aria-labelledby="strength-title">
+    <section className="panel gen" aria-labelledby="strength-title">
       <h2 id="strength-title">Check a password</h2>
-      <div className="row">
+      <div className="actions" style={{ flexWrap: 'nowrap' }}>
         <input
           type={visible ? 'text' : 'password'}
           value={password}
@@ -59,7 +59,7 @@ export function StrengthChecker() {
           />
           {strength.warning && <p className="warning">{strength.warning}</p>}
           {strength.suggestions.length > 0 && (
-            <ul>
+            <ul className="tips">
               {strength.suggestions.map((s) => (
                 <li key={s}>{s}</li>
               ))}
@@ -67,7 +67,11 @@ export function StrengthChecker() {
           )}
         </>
       )}
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <p role="alert" className="alert">
+          {error}
+        </p>
+      )}
     </section>
   );
 }

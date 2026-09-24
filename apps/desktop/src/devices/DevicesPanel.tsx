@@ -2,6 +2,7 @@ import type { DeviceSession } from '@zvault/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { DevicesApiError, type DevicesClient } from './client.js';
 import { lastActive, platformLabel } from './format.js';
+import { Icon } from '../ui/Icon.js';
 
 export interface DevicesPanelProps {
   client: DevicesClient;
@@ -69,17 +70,22 @@ export function DevicesPanel({ client, onSignedOut }: DevicesPanelProps) {
   function confirmButtons(key: string, label: string, onConfirm: () => void) {
     if (confirming !== key) {
       return (
-        <button type="button" disabled={busy !== null} onClick={() => setConfirming(key)}>
+        <button
+          type="button"
+          className="small"
+          disabled={busy !== null}
+          onClick={() => setConfirming(key)}
+        >
           {busy === key ? 'Signing out…' : label}
         </button>
       );
     }
     return (
-      <span className="confirm">
-        <button type="button" className="danger" onClick={onConfirm}>
+      <span className="actions">
+        <button type="button" className="small danger" onClick={onConfirm}>
           Confirm
         </button>
-        <button type="button" onClick={() => setConfirming(null)}>
+        <button type="button" className="small" onClick={() => setConfirming(null)}>
           Cancel
         </button>
       </span>
@@ -90,41 +96,68 @@ export function DevicesPanel({ client, onSignedOut }: DevicesPanelProps) {
 
   return (
     <section className="devices" aria-labelledby="devices-heading">
-      <header>
-        <h2 id="devices-heading">Devices</h2>
-        <p>Where your account is signed in. Sign out anything you don't recognise.</p>
-      </header>
+      <div className="section-label" style={{ marginBottom: 10 }}>
+        <h2 id="devices-heading" style={{ color: 'var(--text)' }}>
+          Signed-in devices
+        </h2>
+        {others > 0 &&
+          confirmButtons(
+            'others',
+            `Sign out ${others} other ${others === 1 ? 'device' : 'devices'}`,
+            signOutOthers,
+          )}
+      </div>
+      <p className="secondary" style={{ marginBottom: 12 }}>
+        Where your account is signed in. Sign out anything you don&apos;t recognise.
+      </p>
 
-      {error && <p role="alert">{error}</p>}
-      {devices === null && !error && <p aria-busy="true">Loading devices…</p>}
+      {error && (
+        <p role="alert" className="alert" style={{ marginBottom: 12 }}>
+          {error}
+        </p>
+      )}
+      {devices === null && !error && (
+        <p aria-busy="true" className="muted">
+          Loading devices…
+        </p>
+      )}
 
       {devices && (
-        <ul>
+        <ul className="panel rows">
           {devices.map((d) => (
-            <li key={d.id} aria-current={d.current ? 'true' : undefined}>
-              <div>
-                <strong>{d.device.name}</strong>
-                {d.current && <span className="badge">This device</span>}
-                <div className="meta">
+            <li key={d.id} className="row" aria-current={d.current ? 'true' : undefined}>
+              <Icon
+                name={d.device.platform === 'macos' ? 'laptop' : 'device'}
+                size={20}
+                className="secondary"
+                strokeWidth={1.8}
+              />
+              <div className="row-main">
+                <span className="row-title">
+                  {d.device.name}
+                  {d.current && (
+                    <span
+                      style={{
+                        color: 'var(--secure)',
+                        fontSize: 12,
+                        marginLeft: 8,
+                        fontWeight: 400,
+                      }}
+                    >
+                      This device
+                    </span>
+                  )}
+                </span>
+                <span className="row-sub">
                   {platformLabel(d.device.platform)} · Zvault {d.device.appVersion} ·{' '}
                   {d.current ? 'Active now' : lastActive(d.lastSeenAt)} · Signed in{' '}
                   {new Date(d.createdAt).toLocaleDateString()}
-                </div>
+                </span>
               </div>
               {confirmButtons(d.id, d.current ? 'Sign out here' : 'Sign out', () => signOut(d))}
             </li>
           ))}
         </ul>
-      )}
-
-      {others > 0 && (
-        <p className="others">
-          {confirmButtons(
-            'others',
-            `Sign out ${others} other ${others === 1 ? 'device' : 'devices'}`,
-            signOutOthers,
-          )}
-        </p>
       )}
     </section>
   );

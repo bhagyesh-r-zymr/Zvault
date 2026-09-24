@@ -7,6 +7,7 @@ export function SignupEmail(props: { onSent: (email: string) => void; onSignIn: 
   const [email, setEmail] = useState('');
   return (
     <Form
+      step="Email"
       title="Create your Zvault account"
       intro="We'll email you a six-digit code to confirm your address."
       submitLabel="Send code"
@@ -53,6 +54,7 @@ export function SignupCode(props: {
 
   return (
     <Form
+      step="Verify"
       title="Check your email"
       intro={
         <>
@@ -89,6 +91,8 @@ export function SignupCode(props: {
         inputMode="numeric"
         autoComplete="one-time-code"
         maxLength={7}
+        mono
+        placeholder="123 456"
         value={code}
         onChange={setCode}
         autoFocus
@@ -106,6 +110,7 @@ export function SignupPassword(props: {
   const [confirm, setConfirm] = useState('');
   return (
     <Form
+      step="Password"
       title="Choose a master password"
       intro="It unlocks everything in Zvault. We never see it and can't reset it, so pick something long you'll remember."
       submitLabel="Create account"

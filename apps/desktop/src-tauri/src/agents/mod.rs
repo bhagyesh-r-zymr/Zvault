@@ -86,6 +86,10 @@ pub struct ResolvedSecret {
     folder_id: Option<String>,
     #[serde(default)]
     encrypted_value: Option<Blob>,
+    /// The environment `encrypted_value` was sealed for, when the value is
+    /// inherited from another environment ("Same as Development").
+    #[serde(default)]
+    value_environment_id: Option<String>,
 }
 
 #[derive(Default)]

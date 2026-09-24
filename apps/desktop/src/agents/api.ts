@@ -117,6 +117,8 @@ export interface ResolvedSecret {
   folderId: string | null;
   /** The value record for that environment, or null if it has none. */
   encryptedValue: Blob | null;
+  /** When the value is inherited, the environment it was sealed for. */
+  valueEnvironmentId?: string | null;
 }
 
 /** Resolves a path, or null if its project, environment or folder does not exist. */

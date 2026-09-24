@@ -786,7 +786,15 @@ fn decrypt(
                 return Err(ErrorCode::NotFound);
             };
             let value = keyring
-                .open_secret_value(&place.project_id, secret_id, &place.environment_id, blob)
+                .open_secret_value(
+                    &place.project_id,
+                    secret_id,
+                    place
+                        .value_environment_id
+                        .as_deref()
+                        .unwrap_or(&place.environment_id),
+                    blob,
+                )
                 .map_err(vault_error)?;
             Ok(SecretValue {
                 reference: r.clone(),

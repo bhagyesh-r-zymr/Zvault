@@ -1,0 +1,271 @@
+//! The wire protocol between `zv` and the desktop app.
+//!
+//! One request and one response per connection, each a single line of JSON.
+//! The socket is only reachable by the same OS user (the app checks the peer's
+//! uid), so the protocol's own authentication is the per-agent bearer token
+//! issued at pairing, which the app stores only as a SHA-256 hash.
+
+use std::io::{BufRead, Write};
+
+use serde::{Deserialize, Serialize};
+use zeroize::Zeroizing;
+
+use crate::policy::ApprovalMode;
+use crate::reference::{ScopePattern, SecretRef};
+
+pub const PROTOCOL_VERSION: u32 = 1;
+/// Largest line either side accepts.
+pub const MAX_MESSAGE: usize = 256 * 1024;
+/// Most references one request may ask for.
+pub const MAX_REFS: usize = 64;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAuth {
+    pub agent_id: String,
+    pub token: Zeroizing<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Request {
+    pub v: u32,
+    #[serde(default)]
+    pub auth: Option<AgentAuth>,
+    pub body: RequestBody,
+}
+
+/// What the secret is for, shown in the approval prompt and the activity log.
+/// It is reported by the CLI, so the app labels it as such.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Purpose {
+    pub kind: PurposeKind,
+    /// The child command for `zv run`, trimmed to a few hundred bytes.
+    #[serde(default)]
+    pub command: Vec<String>,
+    #[serde(default)]
+    pub cwd: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PurposeKind {
+    Run,
+    Read,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum RequestBody {
+    /// Asks the user to pair a new agent. `code` is shown in the terminal and
+    /// in the app so the user can tell the prompt is for this terminal.
+    #[serde(rename_all = "camelCase")]
+    Pair { name: String, code: String },
+    /// Asks for secret values. Needs `auth`.
+    #[serde(rename_all = "camelCase")]
+    Fetch {
+        refs: Vec<SecretRef>,
+        purpose: Purpose,
+    },
+    /// Returns this agent's settings. Needs `auth`.
+    Status,
+    /// Removes this agent. Needs `auth`.
+    Unpair,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SecretValue {
+    pub reference: SecretRef,
+    pub value: Zeroizing<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentStatus {
+    pub agent_id: String,
+    pub name: String,
+    pub paused: bool,
+    pub approval: ApprovalMode,
+    pub scopes: Vec<ScopePattern>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum Response {
+    #[serde(rename_all = "camelCase")]
+    Paired {
+        agent_id: String,
+        name: String,
+        token: Zeroizing<String>,
+    },
+    Secrets {
+        values: Vec<SecretValue>,
+    },
+    Status(AgentStatus),
+    Ok,
+    Error {
+        code: ErrorCode,
+        message: String,
+    },
+}
+
+impl Response {
+    pub fn error(code: ErrorCode) -> Self {
+        Self::Error {
+            code,
+            message: code.message().into(),
+        }
+    }
+}
+
+/// Why a request failed. Denials say which rule applied, never anything about
+/// secrets the agent cannot see.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ErrorCode {
+    BadRequest,
+    UnsupportedVersion,
+    Unauthorized,
+    Paused,
+    OutOfScope,
+    Locked,
+    Denied,
+    Timeout,
+    NotFound,
+    Busy,
+    Internal,
+}
+
+impl ErrorCode {
+    pub fn message(self) -> &'static str {
+        match self {
+            Self::BadRequest => "the request was malformed",
+            Self::UnsupportedVersion => "this zv is not compatible with the running Zvault app",
+            Self::Unauthorized => "this agent is not paired with Zvault; run `zv agent pair`",
+            Self::Paused => "this agent is paused in Zvault",
+            Self::OutOfScope => "this agent is not allowed to use that secret",
+            Self::Locked => "Zvault is locked; unlock the app and try again",
+            Self::Denied => "the request was denied in Zvault",
+            Self::Timeout => "nobody answered the request in Zvault",
+            Self::NotFound => "that secret does not exist",
+            Self::Busy => "Zvault is already showing a request; try again",
+            Self::Internal => "Zvault could not complete the request",
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum WireError {
+    #[error("connection error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("message too large")]
+    TooLarge,
+    #[error("malformed message")]
+    Malformed,
+    #[error("connection closed")]
+    Closed,
+}
+
+/// Writes one message as a JSON line.
+pub fn write_message<T: Serialize>(w: &mut impl Write, msg: &T) -> Result<(), WireError> {
+    let mut line = Zeroizing::new(serde_json::to_vec(msg).map_err(|_| WireError::Malformed)?);
+    if line.len() > MAX_MESSAGE {
+        return Err(WireError::TooLarge);
+    }
+    line.push(b'\n');
+    w.write_all(&line)?;
+    w.flush()?;
+    Ok(())
+}
+
+/// Reads one JSON line, refusing to buffer more than [`MAX_MESSAGE`] bytes.
+pub fn read_message<T: for<'de> Deserialize<'de>>(r: &mut impl BufRead) -> Result<T, WireError> {
+    let mut line = Zeroizing::new(Vec::new());
+    loop {
+        let buf = r.fill_buf()?;
+        if buf.is_empty() {
+            return Err(WireError::Closed);
+        }
+        let (chunk, done) = match buf.iter().position(|&b| b == b'\n') {
+            Some(i) => (&buf[..i], Some(i + 1)),
+            None => (buf, None),
+        };
+        if line.len() + chunk.len() > MAX_MESSAGE {
+            return Err(WireError::TooLarge);
+        }
+        line.extend_from_slice(chunk);
+        let used = done.unwrap_or(buf.len());
+        r.consume(used);
+        if done.is_some() {
+            break;
+        }
+    }
+    serde_json::from_slice(&line).map_err(|_| WireError::Malformed)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use super::*;
+
+    #[test]
+    fn round_trips_a_request() {
+        let req = Request {
+            v: PROTOCOL_VERSION,
+            auth: Some(AgentAuth {
+                agent_id: "a1".into(),
+                token: Zeroizing::new("t".into()),
+            }),
+            body: RequestBody::Fetch {
+                refs: vec!["zv://web/dev/db".parse().unwrap()],
+                purpose: Purpose {
+                    kind: PurposeKind::Run,
+                    command: vec!["npm".into(), "test".into()],
+                    cwd: None,
+                },
+            },
+        };
+        let mut buf = Vec::new();
+        write_message(&mut buf, &req).unwrap();
+        assert_eq!(buf.last(), Some(&b'\n'));
+        let back: Request = read_message(&mut Cursor::new(buf)).unwrap();
+        match back.body {
+            RequestBody::Fetch { refs, purpose } => {
+                assert_eq!(refs[0].to_string(), "zv://web/dev/db");
+                assert_eq!(purpose.command, ["npm", "test"]);
+            }
+            _ => panic!("wrong body"),
+        }
+    }
+
+    #[test]
+    fn refuses_oversized_and_malformed_lines() {
+        let big = vec![b'x'; MAX_MESSAGE + 1];
+        assert!(matches!(
+            read_message::<Request>(&mut Cursor::new(big)),
+            Err(WireError::TooLarge)
+        ));
+        assert!(matches!(
+            read_message::<Request>(&mut Cursor::new(b"{nope}\n".to_vec())),
+            Err(WireError::Malformed)
+        ));
+        assert!(matches!(
+            read_message::<Request>(&mut Cursor::new(Vec::new())),
+            Err(WireError::Closed)
+        ));
+        // A bad reference fails the whole request.
+        let bad = br#"{"v":1,"body":{"type":"fetch","refs":["zv://x"],"purpose":{"kind":"read"}}}"#;
+        let mut line = bad.to_vec();
+        line.push(b'\n');
+        assert!(read_message::<Request>(&mut Cursor::new(line)).is_err());
+    }
+
+    #[test]
+    fn error_responses_carry_a_code() {
+        let json = serde_json::to_string(&Response::error(ErrorCode::OutOfScope)).unwrap();
+        assert!(json.contains("\"code\":\"outOfScope\""), "{json}");
+    }
+}

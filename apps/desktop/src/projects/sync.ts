@@ -281,7 +281,18 @@ export class ProjectsSync {
       secret: project.secrets,
     } as const;
     const known = maps[entry.type].get(entry.id);
-    if (known && known.revision >= entry.revision) return;
+    if (known && known.revision > entry.revision) return;
+    // A key rotation re-sends the environment and its values at the same
+    // revision, with a new key and re-sealed values; apply those again.
+    const rekeyed =
+      !entry.deleted &&
+      (entry.type === 'environment' ||
+        (entry.type === 'secret' &&
+          entry.values.some(
+            (v) =>
+              project.secrets.get(entry.id)?.values[v.environmentId]?.ct !== v.encryptedValue.ct,
+          )));
+    if (known && known.revision === entry.revision && !rekeyed) return;
     if (entry.deleted) {
       maps[entry.type].delete(entry.id);
       return;
@@ -290,8 +301,18 @@ export class ProjectsSync {
     try {
       switch (entry.type) {
         case 'environment': {
-          const wrap = project.wraps?.environments.find((e) => e.environmentId === entry.id)?.wrap;
-          const view = await this.core.openEnvironment(pid, entry, wrap);
+          const wrapOf = () =>
+            project.wraps?.environments.find((e) => e.environmentId === entry.id)?.wrap;
+          // The key was wrapped to this account by a manager (after a rotation
+          // even the owner's is): fetch the current wraps when ours is missing
+          // or may be for the previous key.
+          if (
+            entry.encryptedKey?.kid === MEMBER_KEY_WRAP_KID &&
+            (!wrapOf() || known?.revision === entry.revision)
+          ) {
+            project.wraps = await this.api.myKeys(pid).catch(() => project.wraps);
+          }
+          const view = await this.core.openEnvironment(pid, entry, wrapOf());
           project.environments.set(entry.id, {
             revision: entry.revision,
             meta: EnvironmentMeta.parse(view.meta),

@@ -1,18 +1,24 @@
 import {
   API_VERSION,
   ApiError as ApiErrorBody,
+  AccessRequestView,
   EnvironmentAccess,
   Grant,
+  ListAccessRequestsResponse,
   ListOrgsResponse,
   OrgDetail,
   OrgGroup,
   OrgMember,
   ProjectAccessResponse,
+  type AddEnvironmentWrapsRequest,
+  type AddProjectWrapsRequest,
+  type ApproveAccessRequest,
   type InviteMemberInput,
   type OrgRole,
   type OrgSummary,
   type PrincipalRef,
   type PutGrantInput,
+  type RotateEnvironmentKeyRequest,
 } from '@zvault/shared';
 import type { ApiSession } from '../vault/api.js';
 
@@ -28,8 +34,8 @@ export class TeamError extends Error {
 
 /**
  * HTTP client for organizations (`/orgs`) and per-environment access
- * (`/access`). Key wraps and rotation bodies are not sent from here: the
- * desktop core can't produce them yet (see ProjectAccess).
+ * (`/access`). Key wraps, rotations and releases are produced by the Rust
+ * core (`teamKeysCore`) and only passed through here.
  */
 export class TeamApi {
   constructor(
@@ -110,6 +116,45 @@ export class TeamApi {
     await this.request(
       'DELETE',
       `/access/environments/${envId}/grants/${principal.type}/${principal.id}`,
+    );
+  }
+
+  /** Hands the project key to members who have access but no key yet. */
+  async addProjectWraps(projectId: string, body: AddProjectWrapsRequest): Promise<void> {
+    await this.request('POST', `/access/projects/${projectId}/keys`, body);
+  }
+
+  /** Hands an environment's current key to members who have access but no key yet. */
+  async addEnvironmentWraps(envId: string, body: AddEnvironmentWrapsRequest): Promise<void> {
+    await this.request('POST', `/access/environments/${envId}/keys`, body);
+  }
+
+  /** 422 names the members the new key still has to be wrapped to. */
+  async rotateEnvironment(
+    envId: string,
+    body: RotateEnvironmentKeyRequest,
+  ): Promise<EnvironmentAccess> {
+    return EnvironmentAccess.parse(
+      await this.request('POST', `/access/environments/${envId}/rotate`, body),
+    );
+  }
+
+  /** Managers get the pending requests; everyone else gets their own. */
+  async listRequests(envId: string): Promise<AccessRequestView[]> {
+    return ListAccessRequestsResponse.parse(
+      await this.request('GET', `/access/environments/${envId}/requests`),
+    ).requests;
+  }
+
+  async approveRequest(requestId: string, body: ApproveAccessRequest): Promise<AccessRequestView> {
+    return AccessRequestView.parse(
+      await this.request('POST', `/access/requests/${requestId}/approve`, body),
+    );
+  }
+
+  async denyRequest(requestId: string): Promise<AccessRequestView> {
+    return AccessRequestView.parse(
+      await this.request('POST', `/access/requests/${requestId}/deny`),
     );
   }
 

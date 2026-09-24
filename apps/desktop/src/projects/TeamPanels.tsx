@@ -1,8 +1,17 @@
-import type { AccessLevel, OrgDetail, OrgRole, PrincipalType } from '@zvault/shared';
+import {
+  ACCESS_LIMITS,
+  type AccessLevel,
+  type AccessRequestView,
+  type OrgDetail,
+  type OrgRole,
+  type PrincipalType,
+} from '@zvault/shared';
 import { useId, useState, type FormEvent } from 'react';
-import { ErrorLine, Segmented, Sheet } from '../ui/controls.js';
+import { CopyButton, ErrorLine, Segmented, Sheet } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import { useTeamStore } from './context.js';
+import type { Project } from './model.js';
+import type { ProjectTeam } from './team.js';
 import { MANAGERS_ONLY, teamError } from './teamApi.js';
 import {
   LEVEL_LABELS,
@@ -30,8 +39,8 @@ export function PrincipalAvatar({ type, name }: { type: PrincipalType; name: str
   );
 }
 
-/** Runs one change at a time and keeps its error, for the panels below. */
-function useAction() {
+/** Runs one change at a time and keeps its error, for the team panels. */
+export function useAction() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const run = async (key: string, action: () => Promise<unknown>, fallback: string) => {
@@ -48,6 +57,151 @@ function useAction() {
     }
   };
   return { busy, error, run };
+}
+
+const STATUS_LABELS: Record<AccessRequestView['status'], string> = {
+  pending: 'Waiting',
+  approved: 'Approved',
+  denied: 'Denied',
+  expired: 'Expired',
+};
+
+const time = (iso: string) =>
+  new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+/**
+ * "Needs approval" requests: pending ones a manager can approve or deny, and
+ * this account's own, whose released values it can copy while they last.
+ */
+export function AccessRequests(props: {
+  project: Project;
+  team: ProjectTeam;
+  me: string | null;
+  envName: (id: string) => string;
+}) {
+  const { project, team, me, envName } = props;
+  const { store } = useTeamStore();
+  const { busy, error, run } = useAction();
+  const all = Object.values(team.requests).flatMap((list) => list ?? []);
+  const mine = (r: AccessRequestView) => r.requester.type === 'account' && r.requester.id === me;
+  const pending = all.filter(
+    (r) => r.status === 'pending' && !mine(r) && team.envs[r.environmentId]?.myLevel === 'manage',
+  );
+  const own = all.filter(mine);
+  if (pending.length === 0 && own.length === 0) return null;
+
+  return (
+    <>
+      {pending.length > 0 && (
+        <div>
+          <div className="section-label">
+            <span>Needs approval</span>
+            <span className="pill attn">{pending.length}</span>
+          </div>
+          <div className="panel rows">
+            {pending.map((r) => {
+              const locked =
+                project.environments.find((e) => e.id === r.environmentId)?.locked !== false;
+              return (
+                <div key={r.id} className="row" style={{ alignItems: 'flex-start' }}>
+                  <PrincipalAvatar type={r.requester.type} name={r.requesterName} />
+                  <div className="row-main" style={{ gap: 6 }}>
+                    <span className="row-title">
+                      {r.requesterName} <span className="muted">· {envName(r.environmentId)}</span>
+                    </span>
+                    <span className="row-sub">
+                      {r.reason} · expires {time(r.expiresAt)}
+                    </span>
+                    <div className="tags">
+                      {r.items.map((item) => (
+                        <span key={item} className="chip">
+                          <code>{item}</code>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <span style={{ display: 'inline-flex', gap: 6 }}>
+                    <button
+                      type="button"
+                      className="small"
+                      disabled={busy !== null}
+                      onClick={() =>
+                        void run(
+                          `deny:${r.id}`,
+                          () => store.deny(project.id, r.id),
+                          'The request could not be denied.',
+                        )
+                      }
+                    >
+                      {busy === `deny:${r.id}` ? 'Denying…' : 'Deny'}
+                    </button>
+                    <button
+                      type="button"
+                      className="small primary"
+                      disabled={busy !== null || locked}
+                      title={locked ? 'This device doesn’t hold this environment’s key' : undefined}
+                      onClick={() =>
+                        void run(
+                          `approve:${r.id}`,
+                          () => store.approve(project.id, r),
+                          'The request could not be approved.',
+                        )
+                      }
+                    >
+                      {busy === `approve:${r.id}` ? 'Approving…' : 'Approve'}
+                    </button>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="hint" style={{ marginTop: 8 }}>
+            Approving seals just these values to the requester on this device; the server never sees
+            them.
+          </p>
+        </div>
+      )}
+
+      {own.length > 0 && (
+        <div>
+          <div className="section-label">
+            <span>Your requests</span>
+          </div>
+          <div className="panel rows">
+            {own.map((r) => (
+              <div key={r.id} className="row" style={{ alignItems: 'flex-start' }}>
+                <div className="row-main" style={{ gap: 6 }}>
+                  <span className="row-title">
+                    {envName(r.environmentId)} <span className="muted">· {r.reason}</span>
+                  </span>
+                  <div className="tags">
+                    {r.items.map((item) => (
+                      <span key={item} className="chip">
+                        <code>{item}</code>
+                        {r.release && (
+                          <CopyButton
+                            value={() => store.releasedValue(r, item)}
+                            className="small ghost"
+                          />
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <span className={r.status === 'approved' ? 'pill' : 'pill attn'}>
+                  {STATUS_LABELS[r.status]}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="hint" style={{ marginTop: 8 }}>
+            Approved values can be copied for {ACCESS_LIMITS.releaseTtlSeconds / 60} minutes.
+          </p>
+        </div>
+      )}
+      <ErrorLine error={error} />
+    </>
+  );
 }
 
 /** The organization a project is shared with: its members, groups and agents. */

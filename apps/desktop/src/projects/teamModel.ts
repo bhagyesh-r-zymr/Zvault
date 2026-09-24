@@ -1,12 +1,19 @@
-import type {
-  AccessLevel,
-  EnvironmentAccess,
-  OrgDetail,
-  OrgRole,
-  PrincipalRef,
-  PrincipalType,
-  ProjectAccessResponse,
+import {
+  holdsKey,
+  parseSecretPath,
+  strongerLevel,
+  type AccessLevel,
+  type EncryptedBlob,
+  type EnvironmentAccess,
+  type OrgDetail,
+  type OrgRole,
+  type PendingWrap,
+  type PrincipalRef,
+  type PrincipalType,
+  type ProjectAccessResponse,
 } from '@zvault/shared';
+import type { ReleaseItem } from './core.js';
+import { valueSource, type Project, type ProjectSecret } from './model.js';
 
 /**
  * Pure mapping from the team access API to what the Access screen and the
@@ -194,7 +201,8 @@ export interface KeyHandOff {
 
 /**
  * Members who were given access but hold no wrapped key yet, per what the API
- * lists for this manager. Until a manager's device wraps it, they can't read.
+ * lists for this manager. Until a manager's device hands the key over, they
+ * see the environment as locked.
  */
 export function pendingHandOffs(
   access: ProjectAccessResponse,
@@ -258,3 +266,101 @@ export function canManageEnv(org: OrgDetail | null, env: EnvironmentAccess | und
 /** Owners and admins manage members, groups and agents. */
 export const isOrgAdmin = (org: OrgDetail | null): boolean =>
   !!org && (org.role === 'owner' || org.role === 'admin');
+
+/**
+ * Everyone who keeps the key when an environment is rotated, the way the API
+ * works it out: active members with a published key whose own grant, or else
+ * strongest group grant, is Use or above. `always` adds accounts that manage
+ * regardless of grants (this account, the project owner).
+ */
+export function keyHolders(
+  env: EnvironmentAccess,
+  org: OrgDetail,
+  always: string[],
+  now: number = Date.now(),
+): PendingWrap[] {
+  const live = env.grants.filter((g) => !g.expiresAt || Date.parse(g.expiresAt) > now);
+  const levelOf = (accountId: string, groupIds: string[]): AccessLevel => {
+    const direct = live.find((g) => g.principal.type === 'account' && g.principal.id === accountId);
+    if (direct) return direct.level;
+    return live
+      .filter((g) => g.principal.type === 'group' && groupIds.includes(g.principal.id))
+      .reduce<AccessLevel>((best, g) => strongerLevel(best, g.level), 'none');
+  };
+  return org.members.flatMap((m) => {
+    if (!m.publicKey) return [];
+    const keeps =
+      always.includes(m.accountId) ||
+      (m.status === 'active' && holdsKey(levelOf(m.accountId, m.groupIds)));
+    return keeps ? [{ accountId: m.accountId, publicKey: m.publicKey }] : [];
+  });
+}
+
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+/**
+ * Account ids in the API's "Wrap the new key for everyone with access: …"
+ * answer to a rotation, e.g. a project owner this account can't see as such.
+ */
+export const missingRecipients = (message: string): string[] => [
+  ...new Set((message.match(UUID) ?? []).map((id) => id.toLowerCase())),
+];
+
+/** Public keys on file for `ids`; `null` if any of them has none. */
+export function recipientsFor(org: OrgDetail, ids: string[]): PendingWrap[] | null {
+  const out: PendingWrap[] = [];
+  for (const id of ids) {
+    const m = org.members.find((x) => x.accountId === id);
+    if (!m?.publicKey) return null;
+    out.push({ accountId: id, publicKey: m.publicKey });
+  }
+  return out;
+}
+
+/** Every value an environment holds, as the rotation re-seals them. */
+export function environmentValues(
+  secrets: ProjectSecret[],
+  projectId: string,
+  envId: string,
+): { secretId: string; encryptedValue: EncryptedBlob }[] {
+  return secrets.flatMap((s) => {
+    const encryptedValue = s.projectId === projectId ? s.values[envId] : undefined;
+    return encryptedValue ? [{ secretId: s.id, encryptedValue }] : [];
+  });
+}
+
+/**
+ * The sealed values an access request asks for, matched by their `zv://`
+ * reference within its environment. Inherited values come from the
+ * environment that holds them. `missing` lists references with no value here.
+ */
+export function releaseItems(
+  project: Project,
+  secrets: ProjectSecret[],
+  envId: string,
+  items: string[],
+): { items: ReleaseItem[]; missing: string[] } {
+  const env = project.environments.find((e) => e.id === envId);
+  const out: ReleaseItem[] = [];
+  const missing: string[] = [];
+  for (const item of items) {
+    const path = parseSecretPath(item);
+    const secret =
+      env && path && path.project === project.slug && path.environment === env.slug
+        ? secrets.find(
+            (s) =>
+              s.projectId === project.id &&
+              s.key === path.key &&
+              (s.folder?.slug ?? null) === path.folder,
+          )
+        : undefined;
+    const source = secret ? valueSource(project, secret, envId) : null;
+    const encryptedValue = source ? secret?.values[source] : undefined;
+    if (secret && source && encryptedValue) {
+      out.push({ item, secretId: secret.id, environmentId: source, encryptedValue });
+    } else {
+      missing.push(item);
+    }
+  }
+  return { items: out, missing };
+}

@@ -322,6 +322,45 @@ describe('ProjectsSync', () => {
     expect(Object.keys(seen.secrets[0]!.values)).toEqual([envs[0]!.id, envs[1]!.id]);
   });
 
+  it('re-applies an environment and its values after a key rotation', async () => {
+    const server = new FakeServer();
+    const mine = device(server);
+    const projectId = await mine.createProject('Rotated');
+    const dev = mine.get().projects[0]!.environments[0]!;
+    const secretId = await mine.createSecret(projectId, {
+      name: 'Token',
+      key: 'TOKEN',
+      folderId: null,
+      tags: [],
+      values: { [dev.id]: 'old' },
+    });
+    const opened: string[] = [];
+    const member = device(server, {
+      ...fakeCore,
+      openEnvironment: (pid, env, w) => {
+        opened.push(env.id);
+        return fakeCore.openEnvironment(pid, env, w);
+      },
+    });
+    await member.load();
+    opened.length = 0;
+
+    // Like the API: new ciphertext, same revisions, moved to the end of the feed.
+    for (const id of [dev.id, secretId]) {
+      const entry = server.entries.get(id)!;
+      const moved = { ...entry, seq: ++server.seq };
+      if (moved.type === 'secret' && !moved.deleted) {
+        moved.values = [
+          { environmentId: dev.id, encryptedValue: blob(dev.id, { value: 'new' }), updatedAt: NOW },
+        ];
+      }
+      server.entries.set(id, moved);
+    }
+    await member.pull(projectId);
+    expect(opened).toEqual([dev.id]);
+    expect(await member.openValue(projectId, secretId, dev.id)).toBe('new');
+  });
+
   it('adds a custom environment after the others', async () => {
     const mine = device(new FakeServer());
     const projectId = await mine.createProject('Zvault');

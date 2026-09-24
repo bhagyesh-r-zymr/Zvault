@@ -256,7 +256,15 @@ function AccessMatrix({
   handOver: KeyHandOver | undefined;
 }) {
   const { store, email } = useTeamStore();
-  const access = team.access!;
+  // Columns follow the project's environment order, not the server's.
+  const position = (id: string) => {
+    const i = project.environments.findIndex((e) => e.id === id);
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+  };
+  const access = {
+    ...team.access!,
+    environments: [...team.access!.environments].sort((a, b) => position(a.id) - position(b.id)),
+  };
   const org = team.org;
   const me = org?.members.find((m) => m.email.toLowerCase() === email.toLowerCase())?.accountId;
   const [busy, setBusy] = useState<string | null>(null);

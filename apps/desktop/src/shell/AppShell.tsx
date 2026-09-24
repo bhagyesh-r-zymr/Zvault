@@ -18,6 +18,7 @@ import { TeamApi } from '../projects/teamApi.js';
 import { API_URL, sharingApi } from '../sharing/api.js';
 import { sharingCore } from '../sharing/core.js';
 import { SharingCenter } from '../sharing/SharingCenter.js';
+import { ErrorBoundary } from '../ui/ErrorBoundary.js';
 import { Icon, type IconName } from '../ui/Icon.js';
 import { VaultApi } from '../vault/api.js';
 import { FOCUS_SEARCH_EVENT, VaultScreen } from '../vault/VaultScreen.js';
@@ -292,55 +293,57 @@ export function AppShell(props: {
         </nav>
 
         <main className="main">
-          {route.name === 'vault' && <VaultScreen api={vaultApi} sharing={sharing} />}
-          {route.name === 'project' && (
-            <TeamContext.Provider value={team}>
-              <ProjectsView
-                key={route.projectId}
-                projectId={route.projectId}
-                envId={route.envId}
-                onEnvChange={(envId) => setRoute({ ...route, envId })}
-                onOpenProject={(projectId, envId) =>
-                  setRoute({ name: 'project', projectId, envId })
-                }
-                onOpenAccess={() => setRoute({ name: 'access', projectId: route.projectId })}
-              />
-            </TeamContext.Provider>
-          )}
-          {route.name === 'access' && (
-            <TeamContext.Provider value={team}>
-              <ProjectAccess projectId={route.projectId} />
-            </TeamContext.Provider>
-          )}
-          {route.name === 'agents' && <AgentsView />}
-          {route.name === 'sharing' && <SharingCenter api={sharing} />}
-          {route.name === 'generator' && (
-            <div className="page">
-              <div className="page-inner">
-                <div className="page-head">
-                  <div>
-                    <h1>Password generator</h1>
-                    <p>
-                      Every character is picked in the secure core from the system&apos;s random
-                      source.
-                    </p>
+          <ErrorBoundary key={JSON.stringify(route)}>
+            {route.name === 'vault' && <VaultScreen api={vaultApi} sharing={sharing} />}
+            {route.name === 'project' && (
+              <TeamContext.Provider value={team}>
+                <ProjectsView
+                  key={route.projectId}
+                  projectId={route.projectId}
+                  envId={route.envId}
+                  onEnvChange={(envId) => setRoute({ ...route, envId })}
+                  onOpenProject={(projectId, envId) =>
+                    setRoute({ name: 'project', projectId, envId })
+                  }
+                  onOpenAccess={() => setRoute({ name: 'access', projectId: route.projectId })}
+                />
+              </TeamContext.Provider>
+            )}
+            {route.name === 'access' && (
+              <TeamContext.Provider value={team}>
+                <ProjectAccess projectId={route.projectId} />
+              </TeamContext.Provider>
+            )}
+            {route.name === 'agents' && <AgentsView />}
+            {route.name === 'sharing' && <SharingCenter api={sharing} />}
+            {route.name === 'generator' && (
+              <div className="page">
+                <div className="page-inner">
+                  <div className="page-head">
+                    <div>
+                      <h1>Password generator</h1>
+                      <p>
+                        Every character is picked in the secure core from the system&apos;s random
+                        source.
+                      </p>
+                    </div>
                   </div>
+                  <Generator />
+                  <StrengthChecker />
                 </div>
-                <Generator />
-                <StrengthChecker />
               </div>
-            </div>
-          )}
-          {route.name === 'settings' && (
-            <SettingsView
-              session={session}
-              section={route.section}
-              onSection={(section) => setRoute({ name: 'settings', section })}
-              lockStatus={props.lockStatus}
-              onLockChanged={props.onLockChanged}
-              onSignOut={props.onSignOut}
-            />
-          )}
+            )}
+            {route.name === 'settings' && (
+              <SettingsView
+                session={session}
+                section={route.section}
+                onSection={(section) => setRoute({ name: 'settings', section })}
+                lockStatus={props.lockStatus}
+                onLockChanged={props.onLockChanged}
+                onSignOut={props.onSignOut}
+              />
+            )}
+          </ErrorBoundary>
         </main>
         {creatingProject && (
           <NewProjectSheet

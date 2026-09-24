@@ -67,3 +67,24 @@ export function shareReceivedEmail(to: string, senderEmail: string): MailMessage
     ),
   };
 }
+
+/** Tells a Zvault user they were invited to an organization. */
+export function orgInviteEmail(to: string, orgName: string, inviterEmail: string): MailMessage {
+  return {
+    to,
+    subject: `${inviterEmail} invited you to ${orgName} on Zvault`,
+    text: [
+      `${inviterEmail} invited you to join ${orgName} on Zvault.`,
+      '',
+      "Open the Zvault app, go to a project's Access page and choose Accept invite. Nothing is shared with you until a manager gives you access.",
+      '',
+      "If you don't know the sender, you can ignore this email.",
+    ].join('\n'),
+    html: layout(
+      `Join ${orgName} on Zvault`,
+      `<p><strong>${escape(inviterEmail)}</strong> invited you to join <strong>${escape(orgName)}</strong> on Zvault.</p>
+<p>Open the Zvault app, go to a project's <strong>Access</strong> page and choose <strong>Accept invite</strong>. Nothing is shared with you until a manager gives you access.</p>
+<p>If you don't know the sender, you can ignore this email.</p>`,
+    ),
+  };
+}

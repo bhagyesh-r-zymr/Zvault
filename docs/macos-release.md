@@ -12,8 +12,9 @@ universal `Zvault.dmg` (Apple silicon and Intel) on a GitHub macOS runner.
    on a double-click). On macOS 15 and later, go to **System Settings → Privacy &
    Security** and click **Open Anyway** instead.
 
-An unsigned build talks to `http://localhost:3000` unless `ZVAULT_API_URL` is set, and
-Touch ID unlock does not work in it.
+Release builds talk to the `ZVAULT_API_URL` repository variable, or to the demo server
+`https://52-66-189-120.sslip.io` while it is unset. Touch ID unlock does not work in an
+unsigned build.
 
 ## Signed and notarized releases
 
@@ -41,9 +42,13 @@ membership ($99/year).
    - `ZVAULT_API_URL`: the deployed API, e.g. `https://api.zvault.example`. It is baked
      into the app and added to its Content Security Policy.
    - `ZVAULT_SHARE_ORIGIN`: where share links open, e.g. `https://share.zvault.example`.
-6. **Tag a release:** `git tag v0.1.0 && git push origin v0.1.0`. The workflow signs,
-   notarizes and staples the app, then attaches the `.dmg` to a draft GitHub Release.
-   Publish the release to make the download link public.
+     Defaults to `ZVAULT_API_URL`.
+   - `ZVAULT_SIGN_IN_URL`: the address printed on Emergency Kits. Defaults to
+     `ZVAULT_API_URL`.
+6. **Release:** run **Release macOS app** from the Actions tab with a release tag such
+   as `v0.1.0`, or push the tag (`git tag v0.1.0 && git push origin v0.1.0`). The
+   workflow signs, notarizes and staples the app when the secrets are set, then
+   publishes a GitHub Release with the `.dmg` and the `zv` binary.
 
 ## Still to do before Touch ID works in a release
 

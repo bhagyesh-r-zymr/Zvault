@@ -1,11 +1,17 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
+  AddEnvironmentWrapsRequest,
+  AddProjectWrapsRequest,
+  ApproveAccessRequest,
   CreateProjectRequest,
   EncryptedBlob,
   EnvironmentMeta,
   FolderMeta,
   ProjectMeta,
+  PendingWrap,
+  RotateEnvironmentKeyRequest,
   SecretMeta,
+  StoredMemberWrap,
 } from '@zvault/shared';
 
 /**
@@ -45,9 +51,17 @@ export interface SealedEntry {
 export interface ProjectsCore {
   /** A new project with fresh keys, in the shape `POST /projects` takes. */
   createProject(meta: ProjectMeta, environments: EnvironmentMeta[]): Promise<CreateProjectRequest>;
-  /** Unwraps the project key into the keyring and returns its metadata. */
-  openProject(project: ProjectCipher): Promise<unknown>;
-  openEnvironment(projectId: string, environment: EnvironmentCipher): Promise<EnvironmentView>;
+  /**
+   * Unwraps the project key into the keyring and returns its metadata. For a
+   * project shared through an org, pass the caller's wrap from
+   * `GET /access/projects/:id/keys/me`.
+   */
+  openProject(project: ProjectCipher, memberWrap?: StoredMemberWrap | null): Promise<unknown>;
+  openEnvironment(
+    projectId: string,
+    environment: EnvironmentCipher,
+    memberWrap?: StoredMemberWrap | null,
+  ): Promise<EnvironmentView>;
   /** Without an id this creates an environment with a fresh key. */
   sealEnvironment(
     projectId: string,
@@ -83,9 +97,10 @@ export interface ProjectsCore {
 
 export const projectsCore: ProjectsCore = {
   createProject: (meta, environments) => invoke('project_create', { meta, environments }),
-  openProject: (project) => invoke('project_open', { project }),
-  openEnvironment: (projectId, environment) =>
-    invoke('environment_open', { projectId, environment }),
+  openProject: (project, memberWrap) =>
+    invoke('project_open', { project, memberWrap: memberWrap ?? null }),
+  openEnvironment: (projectId, environment, memberWrap) =>
+    invoke('environment_open', { projectId, environment, memberWrap: memberWrap ?? null }),
   sealEnvironment: (projectId, id, meta) => invoke('environment_seal', { projectId, id, meta }),
   sealEntry: (projectId, kind, id, meta) => invoke('entry_seal', { projectId, kind, id, meta }),
   openEntry: (projectId, kind, id, encryptedMeta) =>
@@ -94,4 +109,70 @@ export const projectsCore: ProjectsCore = {
     invoke('secret_value_seal', { projectId, secretId, environmentId, value }),
   openValue: (projectId, secretId, environmentId, encryptedValue) =>
     invoke('secret_value_open', { projectId, secretId, environmentId, encryptedValue }),
+};
+
+/** A value an approver releases, as its ciphertext from the project sync. */
+export interface ReleaseItem {
+  /** The reference the requester asked for, e.g. `zv://payments-api/production/stripe/key`. */
+  item: string;
+  secretId: string;
+  environmentId: string;
+  encryptedValue: EncryptedBlob;
+}
+
+export interface ReleasedValue {
+  item: string;
+  value: string;
+}
+
+/**
+ * Key handling for team access, done in Rust with this account's sharing
+ * key. Each call returns the body for the matching access route unchanged.
+ */
+export interface TeamKeysCore {
+  /** Body of `POST /access/projects/:id/keys`. The project must be open. */
+  wrapProjectKey(projectId: string, recipients: PendingWrap[]): Promise<AddProjectWrapsRequest>;
+  /** Body of `POST /access/environments/:id/keys`. The environment must be unlocked. */
+  wrapEnvironmentKey(
+    projectId: string,
+    environmentId: string,
+    keyVersion: number,
+    recipients: PendingWrap[],
+  ): Promise<AddEnvironmentWrapsRequest>;
+  /**
+   * Body of `POST /access/environments/:id/rotate`: every value re-sealed
+   * under a fresh key, wrapped to `recipients` (everyone who keeps access,
+   * this account included). Call {@link TeamKeysCore.commitRotation} once the
+   * API accepts it.
+   */
+  rotateEnvironment(
+    projectId: string,
+    environmentId: string,
+    fromVersion: number,
+    recipients: PendingWrap[],
+    values: { secretId: string; encryptedValue: EncryptedBlob }[],
+  ): Promise<RotateEnvironmentKeyRequest>;
+  commitRotation(projectId: string, environmentId: string): Promise<boolean>;
+  /** Body of `POST /access/requests/:id/approve`: the values sealed to the requester. */
+  sealRelease(
+    projectId: string,
+    requestId: string,
+    requesterPublicKey: string,
+    items: ReleaseItem[],
+  ): Promise<ApproveAccessRequest>;
+  /** Opens a release sent to this account. Never keep or log the result. */
+  openRelease(requestId: string, release: ApproveAccessRequest): Promise<ReleasedValue[]>;
+}
+
+export const teamKeysCore: TeamKeysCore = {
+  wrapProjectKey: (projectId, recipients) => invoke('project_key_wrap', { projectId, recipients }),
+  wrapEnvironmentKey: (projectId, environmentId, keyVersion, recipients) =>
+    invoke('environment_key_wrap', { projectId, environmentId, keyVersion, recipients }),
+  rotateEnvironment: (projectId, environmentId, fromVersion, recipients, values) =>
+    invoke('environment_rotate', { projectId, environmentId, fromVersion, recipients, values }),
+  commitRotation: (projectId, environmentId) =>
+    invoke('environment_rotate_commit', { projectId, environmentId }),
+  sealRelease: (projectId, requestId, requesterPublicKey, items) =>
+    invoke('access_release_seal', { projectId, requestId, requesterPublicKey, items }),
+  openRelease: (requestId, release) => invoke('access_release_open', { requestId, release }),
 };

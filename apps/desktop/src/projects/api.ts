@@ -1,15 +1,21 @@
 import {
   API_VERSION,
   EntryConflictResponse,
+  EnvironmentAccess,
   ListProjectsResponse,
+  MyProjectKeysResponse,
   ProjectEntry,
   ProjectRecord,
   SyncProjectResponse,
+  type AddEnvironmentWrapsRequest,
+  type AddProjectWrapsRequest,
+  type ApproveAccessRequest,
   type CreateProjectRequest,
   type EntryType,
   type PutEnvironmentRequest,
   type PutFolderRequest,
   type PutSecretRequest,
+  type RotateEnvironmentKeyRequest,
 } from '@zvault/shared';
 import { ApiError, type ApiSession } from '../vault/api.js';
 
@@ -72,6 +78,36 @@ export class ProjectsApi {
   ): Promise<ProjectEntry> {
     const path = `/projects/${projectId}/${PATHS[type]}/${id}?baseRevision=${baseRevision}`;
     return ProjectEntry.parse(await this.request('DELETE', path));
+  }
+
+  /** The caller's member wraps in a project someone shared with them. */
+  async myKeys(projectId: string): Promise<MyProjectKeysResponse> {
+    return MyProjectKeysResponse.parse(
+      await this.request('GET', `/access/projects/${projectId}/keys/me`),
+    );
+  }
+
+  /** Hands the project key to members who have access but no key yet. */
+  async addProjectWraps(projectId: string, body: AddProjectWrapsRequest): Promise<void> {
+    await this.request('POST', `/access/projects/${projectId}/keys`, body);
+  }
+
+  /** Hands an environment's current key to members who have access but no key yet. */
+  async addEnvironmentWraps(envId: string, body: AddEnvironmentWrapsRequest): Promise<void> {
+    await this.request('POST', `/access/environments/${envId}/keys`, body);
+  }
+
+  async rotateEnvironment(
+    envId: string,
+    body: RotateEnvironmentKeyRequest,
+  ): Promise<EnvironmentAccess> {
+    return EnvironmentAccess.parse(
+      await this.request('POST', `/access/environments/${envId}/rotate`, body),
+    );
+  }
+
+  async approveRequest(requestId: string, body: ApproveAccessRequest): Promise<void> {
+    await this.request('POST', `/access/requests/${requestId}/approve`, body);
   }
 
   private async putEntry(

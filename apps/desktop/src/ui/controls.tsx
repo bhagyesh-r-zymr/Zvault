@@ -42,6 +42,7 @@ export function SecretText({ value, masked = false }: { value: string; masked?: 
 /**
  * Copies through the Rust core, which clears the clipboard after the
  * configured delay. Falls back to the web clipboard for non-secret values.
+ * `value` can be a function, to decrypt the value only when it is copied.
  */
 export function CopyButton({
   value,
@@ -49,7 +50,7 @@ export function CopyButton({
   label = 'Copy',
   className = 'small',
 }: {
-  value: string;
+  value: string | (() => Promise<string>);
   secret?: boolean;
   label?: string;
   className?: string;
@@ -63,8 +64,9 @@ export function CopyButton({
 
   const copy = async () => {
     try {
-      if (secret) await lock.copySecret(value);
-      else await navigator.clipboard.writeText(value);
+      const text = typeof value === 'function' ? await value() : value;
+      if (secret) await lock.copySecret(text);
+      else await navigator.clipboard.writeText(text);
       setState('copied');
     } catch {
       setState('failed');

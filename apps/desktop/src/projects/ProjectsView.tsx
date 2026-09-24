@@ -1,38 +1,28 @@
 import { useMemo, useState } from 'react';
-import { CopyButton, SecretText } from '../ui/controls.js';
-import { Icon, type IconName } from '../ui/Icon.js';
+import { CopyButton, ErrorLine, SecretText } from '../ui/controls.js';
+import { Icon } from '../ui/Icon.js';
+import { useProjects, useProjectsSync } from './context.js';
 import {
-  ACCESS_LABELS,
-  accessFor,
-  ENV_COLORS,
   secretRef,
-  useProjects,
+  valueSource,
   type Environment,
+  type Folder,
   type Project,
   type ProjectSecret,
-  type SecretKind,
 } from './model.js';
 import { NewSecretSheet } from './NewSecretSheet.js';
+import { ACCESS_LABELS, accessFor } from './preview.js';
 import './projects.css';
 
-export const KIND_ICON: Record<SecretKind, IconName> = {
-  database: 'database',
-  apiKey: 'key',
-  login: 'globe',
-  email: 'mail',
-  sshKey: 'terminal',
-  note: 'note',
-};
-
-export function EnvDot({ env }: { env: Environment }) {
-  return <span className="dot" style={{ background: ENV_COLORS[env.color] }} />;
+export function EnvDot({ env }: { env: Pick<Environment, 'color'> }) {
+  return <span className="dot" style={{ background: env.color }} />;
 }
 
 export function ProjectTile({
   project,
   size = 'small',
 }: {
-  project: Project;
+  project: Pick<Project, 'name' | 'tile'>;
   size?: 'small' | 'large';
 }) {
   return (
@@ -60,11 +50,12 @@ export function ProjectsView(props: {
   projectId: string;
   envId: string;
   onEnvChange: (envId: string) => void;
+  onOpenProject: (projectId: string, envId: string) => void;
   onOpenAccess: () => void;
 }) {
-  const { projects, secrets } = useProjects();
-  const project = projects.find((p) => p.id === props.projectId) ?? projects[0]!;
-  const env = project.environments.find((e) => e.id === props.envId) ?? project.environments[0]!;
+  const { projects, secrets, status } = useProjects();
+  const project = projects.find((p) => p.id === props.projectId);
+  const env = project?.environments.find((e) => e.id === props.envId) ?? project?.environments[0];
 
   const [selected, setSelected] = useState<string | null>(null);
   const [tags, setTags] = useState<string[]>([]);
@@ -72,16 +63,32 @@ export function ProjectsView(props: {
   const [creating, setCreating] = useState(false);
 
   const inProject = useMemo(
-    () => secrets.filter((s) => s.projectId === project.id),
-    [secrets, project.id],
+    () => secrets.filter((s) => s.projectId === props.projectId),
+    [secrets, props.projectId],
   );
   const allTags = useMemo(() => [...new Set(inProject.flatMap((s) => s.tags))].sort(), [inProject]);
-  const visible = inProject
-    .filter((s) => s.values[env.id])
-    .filter((s) => tags.every((t) => s.tags.includes(t)))
-    .sort((a, b) => a.name.localeCompare(b.name));
 
-  const folders = [...new Set(visible.flatMap((s) => (s.folder ? [s.folder] : [])))].sort();
+  if (!project || !env) {
+    return (
+      <div className="empty">
+        <Icon name="folder" size={32} />
+        <span>
+          {status === 'loading'
+            ? 'Opening project…'
+            : !project
+              ? 'This project is no longer available.'
+              : 'This project has no environments yet.'}
+        </span>
+      </div>
+    );
+  }
+
+  // Values of a locked environment can't be seen, so list every secret there.
+  const visible = inProject
+    .filter((s) => env.locked || valueSource(project, s, env.id))
+    .filter((s) => tags.every((t) => s.tags.includes(t)));
+
+  const folders = project.folders.filter((f) => visible.some((s) => s.folder?.id === f.id));
   const loose = visible.filter((s) => !s.folder);
   const current = visible.find((s) => s.id === selected) ?? visible[0] ?? null;
 
@@ -97,16 +104,42 @@ export function ProjectsView(props: {
       onClick={() => setSelected(s.id)}
     >
       <span className="tile" style={{ width: 32, height: 32, borderRadius: 9 }}>
-        <Icon name={KIND_ICON[s.kind]} size={15} />
+        <Icon name="key" size={15} />
       </span>
       <span className="row-main">
         <span className="row-title truncate">{s.name}</span>
         <span className="row-sub mono truncate" style={{ fontSize: 11 }}>
-          {s.envVars.join(', ') || s.tags.map((t) => `#${t}`).join(' ')}
+          {s.key}
         </span>
       </span>
     </button>
   );
+
+  const folderGroup = (folder: Folder) => {
+    const open = !closed.includes(folder.id);
+    const items = visible.filter((s) => s.folder?.id === folder.id);
+    return (
+      <div key={folder.id} style={{ display: 'contents' }}>
+        <button
+          type="button"
+          className="list-folder"
+          aria-expanded={open}
+          onClick={() => setClosed(toggle(closed, folder.id))}
+        >
+          <Icon
+            name={open ? 'chevronDown' : 'chevronRight'}
+            size={11}
+            strokeWidth={3}
+            className="nav-caret"
+          />
+          <Icon name="folder" size={16} className="secondary" />
+          <span className="label">{folder.name}</span>
+          <span className="n muted">{items.length}</span>
+        </button>
+        {open && items.map((s) => row(s, true))}
+      </div>
+    );
+  };
 
   return (
     <div className="split">
@@ -137,6 +170,7 @@ export function ProjectsView(props: {
               >
                 {e.id === env.id && <EnvDot env={e} />}
                 {e.short}
+                {e.locked && <Icon name="lock" size={11} aria-label="No access" />}
               </button>
             ))}
           </div>
@@ -157,31 +191,7 @@ export function ProjectsView(props: {
           )}
         </div>
         <div className="list-body">
-          {folders.map((folder) => {
-            const open = !closed.includes(folder);
-            const items = visible.filter((s) => s.folder === folder);
-            return (
-              <div key={folder} style={{ display: 'contents' }}>
-                <button
-                  type="button"
-                  className="list-folder"
-                  aria-expanded={open}
-                  onClick={() => setClosed(toggle(closed, folder))}
-                >
-                  <Icon
-                    name={open ? 'chevronDown' : 'chevronRight'}
-                    size={11}
-                    strokeWidth={3}
-                    className="nav-caret"
-                  />
-                  <Icon name="folder" size={16} className="secondary" />
-                  <span className="label">{folder}</span>
-                  <span className="n muted">{items.length}</span>
-                </button>
-                {open && items.map((s) => row(s, true))}
-              </div>
-            );
-          })}
+          {folders.map(folderGroup)}
           {loose.map((s) => row(s, false))}
           {visible.length === 0 && (
             <div className="empty">
@@ -216,11 +226,13 @@ export function ProjectsView(props: {
       {creating && (
         <NewSecretSheet
           project={project}
-          defaultEnv={env.id}
           onClose={() => setCreating(false)}
-          onCreated={(s) => {
+          onCreated={({ projectId, secretId, envIds }) => {
             setCreating(false);
-            setSelected(s.id);
+            setSelected(secretId);
+            // Show the new secret where it has a value.
+            if (projectId !== project.id) props.onOpenProject(projectId, envIds[0]!);
+            else if (!env.locked && !envIds.includes(env.id)) props.onEnvChange(envIds[0]!);
           }}
         />
       )}
@@ -236,32 +248,67 @@ function SecretDetail(props: {
   onOpenAccess: () => void;
 }) {
   const { project, env, secret } = props;
-  const [revealed, setRevealed] = useState<string[]>([]);
-  const fields = secret.values[env.id] ?? [];
-  const access = accessFor(project.id).filter(
-    (a) => a.levels[env.id] && a.levels[env.id] !== 'none',
-  );
+  const sync = useProjectsSync();
+  const [revealed, setRevealed] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const source = env.locked ? null : valueSource(project, secret, env.id);
+  const sourceEnv = project.environments.find((e) => e.id === source);
+  const you = accessFor(project).find((a) => a.id === 'me')!;
+
+  const open = () => sync.openValue(project.id, secret.id, source!);
+
+  const reveal = async () => {
+    if (revealed !== null) return setRevealed(null);
+    setError(null);
+    try {
+      setRevealed(await open());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'This value could not be decrypted.');
+    }
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await sync.deleteSecret(project.id, secret.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'This secret could not be deleted.');
+      setBusy(false);
+      setConfirmDelete(false);
+    }
+  };
+
+  const statusOf = (e: Environment) => {
+    if (e.id === env.id) return 'viewing';
+    if (e.locked) return 'no access';
+    const from = valueSource(project, secret, e.id);
+    if (!from) return 'not set';
+    if (from !== e.id) {
+      return `same as ${project.environments.find((x) => x.id === from)?.name ?? 'another'}`;
+    }
+    return 'set';
+  };
 
   return (
     <>
       <div className="detail-bar">
         <span className="truncate">
           {project.name} / {env.name}
-          {secret.folder && ` / ${secret.folder}`}
+          {secret.folder && ` / ${secret.folder.name}`}
         </span>
       </div>
       <div className="detail-body">
-        <PreviewNote>
-          Sample data. Projects and environments sync to your team once the server side ships.
-        </PreviewNote>
         <div className="item-head">
           <span className="tile large">
-            <Icon name={KIND_ICON[secret.kind]} size={24} />
+            <Icon name="key" size={24} />
           </span>
           <div>
             <h1>{secret.name}</h1>
             <div className="tags">
-              <span className="pill" style={{ height: 22, color: ENV_COLORS[env.color] }}>
+              <span className="pill" style={{ height: 22, color: env.color }}>
                 <EnvDot env={env} />
                 {env.name}
               </span>
@@ -279,82 +326,69 @@ function SecretDetail(props: {
             <span>Value in each environment</span>
           </div>
           <div className="env-cards">
-            {project.environments.map((e) => {
-              const set = !!secret.values[e.id];
-              return (
-                <button
-                  key={e.id}
-                  type="button"
-                  className="choice"
-                  aria-pressed={e.id === env.id}
-                  onClick={() => props.onEnvChange(e.id)}
-                >
-                  <strong style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <EnvDot env={e} />
-                    {e.name}
-                  </strong>
-                  <span>
-                    {e.id === env.id
-                      ? 'viewing'
-                      : !set
-                        ? 'not set'
-                        : e.restricted
-                          ? 'managers only'
-                          : 'set'}
-                  </span>
-                </button>
-              );
-            })}
+            {project.environments.map((e) => (
+              <button
+                key={e.id}
+                type="button"
+                className="choice"
+                aria-pressed={e.id === env.id}
+                onClick={() => props.onEnvChange(e.id)}
+              >
+                <strong style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <EnvDot env={e} />
+                  {e.name}
+                </strong>
+                <span>{statusOf(e)}</span>
+              </button>
+            ))}
           </div>
         </div>
 
         <div className="panel rows">
-          {fields.map((field) => {
-            const shown = !field.secret || revealed.includes(field.label);
-            return (
-              <div key={field.label} className="row">
-                <div className="row-main">
-                  <span className="row-label">{field.label}</span>
-                  {field.secret ? (
-                    <SecretText value={field.value} masked={!shown} />
-                  ) : (
-                    <span className="mono" style={{ fontSize: 13, overflowWrap: 'anywhere' }}>
-                      {field.value}
-                    </span>
-                  )}
-                </div>
-                {field.secret && (
-                  <button
-                    type="button"
-                    className="small"
-                    onClick={() =>
-                      setRevealed(
-                        shown
-                          ? revealed.filter((l) => l !== field.label)
-                          : [...revealed, field.label],
-                      )
-                    }
-                  >
-                    {shown ? 'Hide' : 'Reveal'}
-                  </button>
-                )}
-                <CopyButton value={field.value} secret={!!field.secret} />
-              </div>
-            );
-          })}
+          <div className="row">
+            <div className="row-main">
+              <span className="row-label">
+                {secret.key}
+                {sourceEnv && sourceEnv.id !== env.id && ` · same as ${sourceEnv.name}`}
+              </span>
+              {env.locked ? (
+                <span className="muted" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Icon name="lock" size={13} />
+                  You don&apos;t have access to {env.name} values.
+                </span>
+              ) : source ? (
+                <SecretText value={revealed ?? ''} masked={revealed === null} />
+              ) : (
+                <span className="muted">Not set in {env.name}.</span>
+              )}
+            </div>
+            {source && (
+              <>
+                <button type="button" className="small" onClick={() => void reveal()}>
+                  {revealed !== null ? 'Hide' : 'Reveal'}
+                </button>
+                <CopyButton value={open} />
+              </>
+            )}
+          </div>
         </div>
+        {secret.note && (
+          <div className="panel panel-pad">
+            <div className="row-label" style={{ marginBottom: 6 }}>
+              note
+            </div>
+            <p className="notes">{secret.note}</p>
+          </div>
+        )}
 
-        {secret.envVars.length > 0 && fields[0] && (
+        {source && (
           <div>
             <div className="section-label">
               <span>Use it from the terminal</span>
             </div>
             <div className="panel panel-pad mono ref-box">
-              zv run --env {secret.envVars[secret.envVars.length - 1]}=
-              <span className="iris">
-                {secretRef(project, env, secret, fields[fields.length - 1]!.label)}
-              </span>{' '}
-              -- npm start
+              zv run --env {secret.key}=
+              <span className="iris">{secretRef(project, env, secret)}</span> -- npm start
             </div>
           </div>
         )}
@@ -377,17 +411,37 @@ function SecretDetail(props: {
             </button>
           </div>
           <div className="tags">
-            {access.map((a) => (
-              <span key={a.id} className={a.kind === 'agent' ? 'pill attn' : 'pill'}>
-                <span
-                  style={{ fontWeight: 600, color: a.kind === 'agent' ? undefined : 'var(--text)' }}
-                >
-                  {a.name}
-                </span>
-                {a.note ?? ACCESS_LABELS[a.levels[env.id]!].toLowerCase()}
-              </span>
-            ))}
+            <span className="pill">
+              <span style={{ fontWeight: 600, color: 'var(--text)' }}>{you.name}</span>
+              {ACCESS_LABELS[you.levels[env.id] ?? 'none'].toLowerCase()}
+            </span>
           </div>
+        </div>
+
+        <ErrorLine error={error} />
+        <div className="actions" style={{ marginTop: 'auto', justifyContent: 'flex-end' }}>
+          {confirmDelete ? (
+            <>
+              <span className="secondary" style={{ alignSelf: 'center' }}>
+                Delete “{secret.name}” from every environment?
+              </span>
+              <button type="button" disabled={busy} onClick={() => setConfirmDelete(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="danger"
+                disabled={busy}
+                onClick={() => void remove()}
+              >
+                {busy ? 'Deleting…' : 'Delete'}
+              </button>
+            </>
+          ) : (
+            <button type="button" className="ghost" onClick={() => setConfirmDelete(true)}>
+              <Icon name="trash" size={13} /> Delete
+            </button>
+          )}
         </div>
       </div>
     </>

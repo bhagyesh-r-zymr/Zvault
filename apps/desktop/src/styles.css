@@ -53,6 +53,84 @@ h1 {
   margin: 0;
 }
 
+.card {
+  max-width: 36rem;
+  margin-top: 1.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 10px;
+}
+
+.card h2 {
+  margin-top: 0;
+  font-size: 1.1rem;
+}
+
+.card fieldset {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.card label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.card label.check {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.row input {
+  flex: 1;
+}
+
+.segmented {
+  display: inline-flex;
+  margin-bottom: 0.75rem;
+}
+
+.segmented [aria-checked='true'] {
+  font-weight: 600;
+}
+
+.secret {
+  display: block;
+  padding: 0.6rem 0.75rem;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  user-select: all;
+}
+
+.strength {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.strength meter {
+  width: 8rem;
+}
+
+.muted,
+.warning {
+  opacity: 0.75;
+}
+
 .emergency-kit {
   max-width: 34rem;
 }

@@ -4,6 +4,7 @@
 
 mod auth;
 mod emergency_kit;
+mod generator;
 mod vault;
 
 use std::sync::Mutex;
@@ -54,6 +55,9 @@ pub fn run() {
             vault::item_seal,
             vault::item_open,
             vault::item_summary,
+            generator::generate_password,
+            generator::generate_passphrase,
+            generator::check_password_strength,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Zvault");

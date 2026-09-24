@@ -25,6 +25,7 @@ uuid = { version = "1", features = ["v4"] }
 zeroize = { version = "1.8", features = ["derive"] }
 zvault-crypto = { path = "../../../crates/zvault-crypto" }
 zvault-emergency-kit = { path = "../../../crates/zvault-emergency-kit" }
+zvault-passwords = { path = "../../../crates/zvault-passwords" }
 
 [lints]
 workspace = true

@@ -4,6 +4,8 @@ import { signOut, type Session } from './auth.js';
 import { core } from './core.js';
 import { Login } from './screens/Login.js';
 import { EmergencyKitStep } from './EmergencyKitStep.js';
+import { Generator } from './generator/Generator.js';
+import { StrengthChecker } from './generator/StrengthChecker.js';
 import { SignupCode, SignupEmail, SignupPassword } from './screens/Signup.js';
 
 type Screen =
@@ -101,6 +103,8 @@ export function App() {
                 >
                   Lock and sign out
                 </button>
+                <Generator />
+                <StrengthChecker />
               </div>
             );
         }

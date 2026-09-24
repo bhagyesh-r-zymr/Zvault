@@ -22,6 +22,9 @@ impl KdfParams {
     /// Floor enforced everywhere; matches `KDF_MINIMUMS` in `@zvault/shared`.
     pub const MIN_MEMORY_KIB: u32 = 64 * 1024;
     pub const MIN_ITERATIONS: u32 = 3;
+    /// Upper bounds, so a hostile server can't make the client exhaust memory or CPU.
+    pub const MAX_MEMORY_KIB: u32 = 4 * 1024 * 1024;
+    pub const MAX_ITERATIONS: u32 = 64;
 
     /// Defaults for new accounts; matches `KDF_DEFAULTS` in `@zvault/shared`.
     pub fn new_default(salt: [u8; SALT_LEN]) -> Self {
@@ -33,9 +36,14 @@ impl KdfParams {
         }
     }
 
+    /// Defaults with a fresh random salt, for a new account.
+    pub fn generate_default() -> Result<Self> {
+        Ok(Self::new_default(crate::random::array()?))
+    }
+
     fn validate(&self) -> Result<Params> {
-        if self.memory_kib < Self::MIN_MEMORY_KIB
-            || self.iterations < Self::MIN_ITERATIONS
+        if !(Self::MIN_MEMORY_KIB..=Self::MAX_MEMORY_KIB).contains(&self.memory_kib)
+            || !(Self::MIN_ITERATIONS..=Self::MAX_ITERATIONS).contains(&self.iterations)
             || !(1..=16).contains(&self.parallelism)
         {
             return Err(Error::InvalidKdfParams);
@@ -50,19 +58,30 @@ impl KdfParams {
     }
 }
 
-/// Derives the account unlock key from both secrets.
+/// The two keys derived from the master password and Secret Key.
+///
+/// They come from one Argon2id run and are separated with HKDF, so knowing
+/// one reveals nothing about the other.
+pub struct AccountKeys {
+    /// Unwraps the account keyset. Never leaves the device.
+    pub unlock_key: SymmetricKey,
+    /// The SRP private value `x`. Only `g^x` (the verifier) reaches the server.
+    pub srp_x: SymmetricKey,
+}
+
+/// Derives the account keys from both secrets.
 ///
 /// `account_id` is the user's stable identifier (e.g. the normalized email).
 /// It is mixed into both halves so identical passwords and Secret Keys on two
 /// accounts never produce the same key.
-pub fn derive_unlock_key(
+pub fn derive_account_keys(
     master_password: &str,
     secret_key: &SecretKey,
     account_id: &str,
     params: &KdfParams,
-) -> Result<SymmetricKey> {
+) -> Result<AccountKeys> {
     let argon_params = params.validate()?;
-    let account_id = account_id.trim().to_lowercase();
+    let account_id = normalize_account_id(account_id);
 
     // Normalize so the same password typed on different keyboards/OSes matches.
     let password: Zeroizing<String> = Zeroizing::new(master_password.nfkd().collect());
@@ -80,14 +99,31 @@ pub fn derive_unlock_key(
 
     let from_secret_key = secret_key.derive(account_id.as_bytes());
 
-    let mut unlock = [0u8; KEY_LEN];
-    for (out, (a, b)) in unlock
+    let mut master = Zeroizing::new([0u8; KEY_LEN]);
+    for (out, (a, b)) in master
         .iter_mut()
         .zip(from_password.iter().zip(from_secret_key.iter()))
     {
         *out = a ^ b;
     }
-    Ok(SymmetricKey::from_bytes(unlock))
+
+    let hk = Hkdf::<Sha256>::new(None, master.as_ref());
+    let expand = |info: &[u8]| {
+        let mut out = [0u8; KEY_LEN];
+        hk.expand(info, &mut out)
+            .expect("32 bytes is a valid HKDF-SHA256 output length");
+        SymmetricKey::from_bytes(out)
+    };
+    Ok(AccountKeys {
+        unlock_key: expand(b"zvault/v1/unlock-key"),
+        srp_x: expand(b"zvault/v1/srp-x"),
+    })
+}
+
+/// The canonical form of an account id (email): trimmed and lowercased.
+/// Mirrors `normalizeEmail` in `@zvault/shared`.
+pub fn normalize_account_id(account_id: &str) -> String {
+    account_id.trim().to_lowercase()
 }
 
 #[cfg(test)]
@@ -109,8 +145,9 @@ mod tests {
 
     fn derive(password: &str, sk: &str, account: &str) -> [u8; KEY_LEN] {
         let sk = SecretKey::parse(sk).unwrap();
-        *derive_unlock_key(password, &sk, account, &params())
+        *derive_account_keys(password, &sk, account, &params())
             .unwrap()
+            .unlock_key
             .as_bytes()
     }
 
@@ -135,8 +172,16 @@ mod tests {
             salt: [8; SALT_LEN],
             ..params()
         };
-        let k = derive_unlock_key("correct horse", &sk, "alice@example.com", &other_salt).unwrap();
-        assert_ne!(&base, k.as_bytes());
+        let k =
+            derive_account_keys("correct horse", &sk, "alice@example.com", &other_salt).unwrap();
+        assert_ne!(&base, k.unlock_key.as_bytes());
+    }
+
+    #[test]
+    fn unlock_key_and_srp_secret_differ() {
+        let sk = SecretKey::parse(SK).unwrap();
+        let keys = derive_account_keys("correct horse", &sk, "a", &params()).unwrap();
+        assert_ne!(keys.unlock_key.as_bytes(), keys.srp_x.as_bytes());
     }
 
     #[test]
@@ -147,7 +192,7 @@ mod tests {
             ..params()
         };
         assert!(matches!(
-            derive_unlock_key("pw", &sk, "a", &weak),
+            derive_account_keys("pw", &sk, "a", &weak),
             Err(Error::InvalidKdfParams)
         ));
         let weak = KdfParams {
@@ -155,7 +200,7 @@ mod tests {
             ..params()
         };
         assert!(matches!(
-            derive_unlock_key("pw", &sk, "a", &weak),
+            derive_account_keys("pw", &sk, "a", &weak),
             Err(Error::InvalidKdfParams)
         ));
     }

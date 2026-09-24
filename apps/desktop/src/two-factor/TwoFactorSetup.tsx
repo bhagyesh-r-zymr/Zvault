@@ -1,6 +1,8 @@
 import type { TotpSetupResponse } from '@zvault/shared';
-import QRCode from 'qrcode';
 import { useState, type FormEvent } from 'react';
+// Not the `qrcode` package: it assigns `exports.toString`, which throws under
+// Tauri's freezePrototype and blanks the whole app on start.
+import { renderSVG } from 'uqr';
 import { describeError, type TwoFactorApi } from './api.js';
 import { CodeInput } from './CodeInput.js';
 import { parseProof } from './proof.js';
@@ -39,11 +41,7 @@ export function TwoFactorSetup({ api, account, onEnabled, onCancel }: Props) {
     setError(null);
     try {
       const setup = await api.beginSetup();
-      const svg = await QRCode.toString(setup.otpauthUri, {
-        type: 'svg',
-        errorCorrectionLevel: 'M',
-        margin: 1,
-      });
+      const svg = renderSVG(setup.otpauthUri, { ecc: 'M', border: 1 });
       setStep({ kind: 'scan', setup, qr: `data:image/svg+xml;base64,${btoa(svg)}` });
       setCode('');
       setShowSecret(false);

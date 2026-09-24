@@ -51,7 +51,7 @@ Sizes, retention and the rest are in `src/config.ts`. `prod` always keeps data o
 The API container gets these environment variables: `NODE_ENV`, `PORT`, `CORS_ORIGINS`,
 `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_SSL=true`, `MAIL_TRANSPORT=ses`, `SES_FROM_ADDRESS`,
 `SES_CONFIGURATION_SET`, `APP_PUBLIC_URL`, `TRUST_PROXY_HOPS=1` and `DATABASE_CREDENTIALS_ARN`;
-and these from Secrets Manager: `DATABASE_USER`, `SERVER_SECRET`. The API reads the database
+and these from Secrets Manager: `DATABASE_USER`, `SERVER_SECRET`, `TWO_FACTOR_ENCRYPTION_KEY` (generated; never rotate it in place, stored 2FA secrets depend on it). The API reads the database
 password from `DATABASE_CREDENTIALS_ARN` whenever it opens a connection, so the monthly password
 rotation needs no restart. Send email with `@aws-sdk/client-sesv2`; the task role supplies
 credentials.

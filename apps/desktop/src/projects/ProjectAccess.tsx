@@ -5,7 +5,7 @@ import { Icon } from '../ui/Icon.js';
 import { useProjects, useProjectTeam, useTeam, useTeamStore } from './context.js';
 import type { Project } from './model.js';
 import { ProjectTile } from './ProjectsView.js';
-import type { ProjectTeam } from './team.js';
+import type { KeyHandOver, ProjectTeam } from './team.js';
 import { MANAGERS_ONLY, teamError } from './teamApi.js';
 import {
   LEVEL_LABELS,
@@ -20,7 +20,14 @@ import {
   rotationNeeded,
   type MatrixRow,
 } from './teamModel.js';
-import { AddAccessSheet, InviteSheet, OrgPanels, PrincipalAvatar } from './TeamPanels.js';
+import {
+  AccessRequests,
+  AddAccessSheet,
+  InviteSheet,
+  OrgPanels,
+  PrincipalAvatar,
+  useAction,
+} from './TeamPanels.js';
 
 /** Who can use each environment of a project: groups, people and agents. */
 export function ProjectAccess({ projectId }: { projectId: string }) {
@@ -28,6 +35,7 @@ export function ProjectAccess({ projectId }: { projectId: string }) {
   const project = projects.find((p) => p.id === projectId);
   const team = useProjectTeam(projectId);
   const { store } = useTeamStore();
+  const teamSnapshot = useTeam();
   const [inviting, setInviting] = useState(false);
 
   if (!project) {
@@ -84,7 +92,13 @@ export function ProjectAccess({ projectId }: { projectId: string }) {
           </div>
         )}
         {team?.status === 'unshared' && <ShareWithOrg project={project} />}
-        {ready && <AccessMatrix project={project} team={ready} />}
+        {ready && (
+          <AccessMatrix
+            project={project}
+            team={ready}
+            handOver={teamSnapshot.handOvers[projectId]}
+          />
+        )}
         {ready?.org && <OrgPanels projectId={project.id} org={ready.org} />}
 
         <p className="notice">
@@ -232,10 +246,19 @@ function ShareWithOrg({ project }: { project: Project }) {
 
 const NOT_SET = '';
 
-function AccessMatrix({ project, team }: { project: Project; team: ProjectTeam }) {
+function AccessMatrix({
+  project,
+  team,
+  handOver,
+}: {
+  project: Project;
+  team: ProjectTeam;
+  handOver: KeyHandOver | undefined;
+}) {
   const { store, email } = useTeamStore();
   const access = team.access!;
   const org = team.org;
+  const me = org?.members.find((m) => m.email.toLowerCase() === email.toLowerCase())?.accountId;
   const [busy, setBusy] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -293,35 +316,42 @@ function AccessMatrix({ project, team }: { project: Project; team: ProjectTeam }
   return (
     <>
       {rotation.length > 0 && (
-        <div className="panel panel-pad" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <span className="pill attn">Rotation needed</span>
-          <span style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span>
-              {rotation.map(envName).join(', ')}: someone who held the key lost access. Rotate
-              before adding new secrets there.
-            </span>
-            <span className="hint">
-              Rotating re-seals every value under a new key on a manager&apos;s device. This version
-              of Zvault can&apos;t do that yet, so the flag stays until an update adds it.
-            </span>
-          </span>
-          <button type="button" disabled title="Needs key rotation in the desktop core">
-            Rotate key
-          </button>
-        </div>
+        <RotationPanel
+          project={project}
+          team={team}
+          envIds={rotation}
+          me={me ?? null}
+          envName={envName}
+          envColor={envColor}
+        />
       )}
 
-      {handOffs.length > 0 && (
+      {(handOffs.length > 0 || handOver?.error) && (
         <div
           className="panel panel-pad"
           style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
         >
-          <strong style={{ fontSize: 13 }}>Waiting for their key</strong>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <strong style={{ fontSize: 13, flexGrow: 1 }}>Waiting for their key</strong>
+            <button
+              type="button"
+              className="primary small"
+              disabled={!!handOver?.step || handOffs.length === 0}
+              onClick={() => void store.handOverKeys(project.id)}
+            >
+              {handOver?.step ? 'Handing over…' : 'Hand over keys'}
+            </button>
+          </div>
           <span className="hint">
-            They have access on the server, but a manager&apos;s device has to wrap the key to them
-            before they can read anything. This version of Zvault can&apos;t wrap keys to teammates
-            yet, so until an update adds it they see these as locked.
+            They have access, but can&apos;t read anything until a manager&apos;s device wraps the
+            keys to them. Giving access does this right away; hand them over here for anyone still
+            waiting, like someone who accepted an invite later.
           </span>
+          {handOver?.step && (
+            <span className="secondary" role="status">
+              Wrapping the key for {handOver.step}…
+            </span>
+          )}
           <div className="tags">
             {handOffs.map((h) => (
               <span key={h.accountId} className="pill">
@@ -330,8 +360,17 @@ function AccessMatrix({ project, team }: { project: Project; team: ProjectTeam }
               </span>
             ))}
           </div>
+          {handOver && handOver.skipped.length > 0 && !handOver.step && (
+            <span className="hint">
+              This device doesn&apos;t hold the key for {handOver.skipped.join(', ')}, so a manager
+              who does has to hand it over.
+            </span>
+          )}
+          <ErrorLine error={handOver?.error ?? null} />
         </div>
       )}
+
+      <AccessRequests project={project} team={team} me={me ?? null} envName={envName} />
 
       <div className="legend">
         {LEVEL_TEXT.map((l) => (
@@ -488,5 +527,92 @@ function AccessMatrix({ project, team }: { project: Project; team: ProjectTeam }
         />
       )}
     </>
+  );
+}
+
+/**
+ * Environments flagged after someone who held the key lost access. Rotating
+ * re-seals every value under a new key that only current holders get.
+ */
+function RotationPanel(props: {
+  project: Project;
+  team: ProjectTeam;
+  envIds: string[];
+  me: string | null;
+  envName: (id: string) => string;
+  envColor: (id: string) => string;
+}) {
+  const { project, team, envName } = props;
+  const { store } = useTeamStore();
+  const { busy, error, run } = useAction();
+  const [confirming, setConfirming] = useState<string | null>(null);
+
+  return (
+    <div className="panel panel-pad" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <span className="pill attn">Rotation needed</span>
+        <span className="secondary">
+          Someone who held the key lost access. Rotate before adding new secrets there.
+        </span>
+      </div>
+      {props.envIds.map((id) => {
+        const env = project.environments.find((e) => e.id === id);
+        const manager = team.envs[id]?.myLevel === 'manage';
+        const why = !manager
+          ? 'Only managers of this environment can rotate its key'
+          : !env || env.locked
+            ? 'This device doesn’t hold this environment’s key'
+            : undefined;
+        return (
+          <div key={id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <span className="dot" style={{ background: props.envColor(id) }} />
+              <strong style={{ flexGrow: 1 }}>{envName(id)}</strong>
+              {confirming === id ? (
+                <>
+                  <button type="button" className="small" onClick={() => setConfirming(null)}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="small primary"
+                    disabled={busy !== null}
+                    onClick={() =>
+                      void run(
+                        id,
+                        async () => {
+                          await store.rotate(project.id, id, props.me);
+                          setConfirming(null);
+                        },
+                        'The key could not be rotated.',
+                      )
+                    }
+                  >
+                    {busy === id ? 'Rotating…' : 'Rotate now'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="small"
+                  disabled={why !== undefined || busy !== null}
+                  title={why}
+                  onClick={() => setConfirming(id)}
+                >
+                  Rotate key
+                </button>
+              )}
+            </div>
+            {confirming === id && (
+              <span className="hint">
+                Every value in {envName(id)} is re-sealed under a new key that only people with
+                access now get, so anyone removed can&apos;t read its values any more.
+              </span>
+            )}
+          </div>
+        );
+      })}
+      <ErrorLine error={error} />
+    </div>
   );
 }

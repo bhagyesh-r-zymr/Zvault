@@ -8,7 +8,7 @@ import { StrengthChecker } from '../generator/StrengthChecker.js';
 import { lock, type LockStatus } from '../lock.js';
 import { ProjectsApi } from '../projects/api.js';
 import { ProjectsContext, TeamContext } from '../projects/context.js';
-import { projectsCore } from '../projects/core.js';
+import { projectsCore, teamKeysCore } from '../projects/core.js';
 import { NewProjectSheet } from '../projects/NewProjectSheet.js';
 import { ProjectAccess } from '../projects/ProjectAccess.js';
 import { ProjectsView, ProjectTile } from '../projects/ProjectsView.js';
@@ -71,9 +71,11 @@ export function AppShell(props: {
       store: new TeamStore(
         new TeamApi({ baseUrl: API_URL, accessToken: () => session.token }),
         async () => (await sharingCore.identity()).publicKey,
+        teamKeysCore,
+        projectsSync,
       ),
     }),
-    [session.token, session.email],
+    [session.token, session.email, projectsSync],
   );
   const expanded = openProjects ?? (projects[0] ? [projects[0].id] : []);
 

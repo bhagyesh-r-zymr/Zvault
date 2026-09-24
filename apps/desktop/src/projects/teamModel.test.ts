@@ -1,12 +1,23 @@
-import type { EnvironmentAccess, OrgDetail, ProjectAccessResponse } from '@zvault/shared';
+import type {
+  EncryptedBlob,
+  EnvironmentAccess,
+  OrgDetail,
+  ProjectAccessResponse,
+} from '@zvault/shared';
 import { describe, expect, it } from 'vitest';
+import type { Environment, Project, ProjectSecret } from './model.js';
 import {
   buildMatrix,
   canManageEnv,
   candidates,
+  environmentValues,
+  keyHolders,
   levelAttr,
   levelChoices,
+  missingRecipients,
   pendingHandOffs,
+  recipientsFor,
+  releaseItems,
   rotationNeeded,
   whoCanUse,
 } from './teamModel.js';
@@ -192,5 +203,107 @@ describe('access helpers', () => {
     expect(canManageEnv({ ...org, role: 'member' }, env(DEV!, { myLevel: 'edit' }))).toBe(false);
     expect(canManageEnv({ ...org, role: 'member' }, env(DEV!, { myLevel: 'manage' }))).toBe(true);
     expect(canManageEnv({ ...org, role: 'admin' }, undefined)).toBe(true);
+  });
+});
+
+describe('key rotation', () => {
+  const lee = id(10);
+  const withLee: OrgDetail = {
+    ...org,
+    members: [
+      ...org.members,
+      {
+        accountId: lee,
+        email: 'lee@acme.dev',
+        role: 'member',
+        status: 'active',
+        publicKey: KEY,
+        groupIds: [BACKEND!],
+      },
+    ],
+    groups: [{ id: BACKEND!, name: 'Backend', memberIds: [RIYA!, lee] }],
+  };
+  const ids = (e: EnvironmentAccess, always: string[] = []) =>
+    keyHolders(e, withLee, always, Date.parse(NOW)).map((r) => r.accountId);
+
+  it('wraps to members whose own or group grant holds the key', () => {
+    expect(ids(envs[DEV!]!)).toEqual([ME, RIYA, lee]);
+  });
+
+  it('leaves out blocked, approval-only and invited members', () => {
+    // Riya's "No access" beats Backend; Backend only asks each time here.
+    expect(ids(envs[PROD!]!)).toEqual([ME]);
+    const samUses = env(DEV!, { grants: [grant('account', SAM!, 'use')] });
+    expect(ids(samUses)).toEqual([]);
+  });
+
+  it('drops lapsed grants and always keeps the given accounts', () => {
+    const lapsed = env(DEV!, {
+      grants: [{ ...grant('account', RIYA!, 'edit'), expiresAt: '2025-12-31T00:00:00.000Z' }],
+    });
+    expect(ids(lapsed, [ME!])).toEqual([ME]);
+  });
+
+  it('reads the accounts a rejected rotation still needs', () => {
+    const message = `Wrap the new key for everyone with access: ${RIYA}, ${SAM!.toUpperCase()}`;
+    expect(missingRecipients(message)).toEqual([RIYA, SAM]);
+    expect(missingRecipients('Someone else rotated this environment first')).toEqual([]);
+    expect(recipientsFor(org, [RIYA!])).toEqual([{ accountId: RIYA, publicKey: KEY }]);
+    // Sam hasn't published a key, so nothing can be wrapped to them.
+    expect(recipientsFor(org, [RIYA!, SAM!])).toBeNull();
+  });
+});
+
+describe('release items', () => {
+  const blob = (kid: string) => ({ v: 1, kid, ct: kid }) as unknown as EncryptedBlob;
+  const environment = (envId: string, slug: string, inheritsFrom: string | null = null) =>
+    ({ id: envId, slug, name: slug, locked: false, inheritsFrom }) as Environment;
+  const project = {
+    id: PROJECT!,
+    slug: 'payments',
+    name: 'Payments',
+    environments: [environment(DEV!, 'dev'), environment(PROD!, 'prod', DEV)],
+    folders: [],
+  } as unknown as Project;
+  const secret = (sid: string, key: string, values: ProjectSecret['values']) =>
+    ({
+      id: sid,
+      projectId: PROJECT!,
+      key,
+      folder: null,
+      tags: [],
+      values,
+    }) as unknown as ProjectSecret;
+  const secrets = [
+    secret(id(20), 'STRIPE_KEY', { [DEV!]: blob('dev'), [PROD!]: blob('prod') }),
+    secret(id(21), 'SENTRY_DSN', { [DEV!]: blob('dev') }),
+    secret(id(22), 'EMPTY', {}),
+  ];
+
+  it('collects every value an environment holds', () => {
+    expect(environmentValues(secrets, PROJECT!, DEV!).map((v) => v.secretId)).toEqual([
+      id(20),
+      id(21),
+    ]);
+    expect(environmentValues(secrets, id(99), DEV!)).toEqual([]);
+  });
+
+  it('matches references, following inherited values', () => {
+    const { items, missing } = releaseItems(project, secrets, PROD!, [
+      'zv://payments/prod/STRIPE_KEY',
+      'zv://payments/prod/SENTRY_DSN',
+      'zv://payments/prod/EMPTY',
+      'zv://payments/dev/STRIPE_KEY',
+      'not a path',
+    ]);
+    expect(items.map((i) => [i.secretId, i.environmentId])).toEqual([
+      [id(20), PROD],
+      [id(21), DEV],
+    ]);
+    expect(missing).toEqual([
+      'zv://payments/prod/EMPTY',
+      'zv://payments/dev/STRIPE_KEY',
+      'not a path',
+    ]);
   });
 });

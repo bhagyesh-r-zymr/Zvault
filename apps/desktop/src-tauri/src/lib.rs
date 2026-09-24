@@ -10,6 +10,7 @@ mod commands;
 mod emergency_kit;
 mod generator;
 mod platform;
+mod projects;
 mod session;
 mod sharing;
 mod vault;
@@ -67,6 +68,14 @@ pub fn run() {
             vault::item_seal,
             vault::item_open,
             vault::item_summary,
+            projects::project_create,
+            projects::project_open,
+            projects::environment_open,
+            projects::environment_seal,
+            projects::entry_seal,
+            projects::entry_open,
+            projects::secret_value_seal,
+            projects::secret_value_open,
             generator::generate_password,
             generator::generate_passphrase,
             generator::check_password_strength,

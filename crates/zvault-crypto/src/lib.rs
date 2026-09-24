@@ -20,13 +20,14 @@
 //! except on the printed Emergency Kit.
 //!
 //! Vault and item encryption (per-item keys, padding, record binding) lives in
-//! [`vault`].
+//! [`vault`]; projects, environments and secrets in [`project`].
 
 mod aead;
 mod error;
 mod kdf;
 mod key;
 mod keyset;
+pub mod project;
 mod random;
 mod secret_key;
 mod share;

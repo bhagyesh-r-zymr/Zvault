@@ -92,6 +92,10 @@ jobs:
           cargo build -p zvault-cli --release --locked --target aarch64-apple-darwin
           cargo build -p zvault-cli --release --locked --target x86_64-apple-darwin
           mkdir -p apps/desktop/src-tauri/binaries
+          # A universal build compiles the app once per architecture, and each
+          # pass looks for the sidecar under its own triple.
+          cp target/aarch64-apple-darwin/release/zv apps/desktop/src-tauri/binaries/zv-aarch64-apple-darwin
+          cp target/x86_64-apple-darwin/release/zv apps/desktop/src-tauri/binaries/zv-x86_64-apple-darwin
           lipo -create -output apps/desktop/src-tauri/binaries/zv-universal-apple-darwin \
             target/aarch64-apple-darwin/release/zv target/x86_64-apple-darwin/release/zv
           lipo -info apps/desktop/src-tauri/binaries/zv-universal-apple-darwin

@@ -34,6 +34,21 @@ const PATHS: Record<EntryType, string> = {
   secret: 'secrets',
 };
 
+/** Readable text for a 403 from the projects API, by the error code it sends. */
+export function forbiddenMessage(code: unknown): string {
+  return code === 'owner_only'
+    ? 'Only the project owner or an organization admin can change this.'
+    : 'You can view this environment but not change it.';
+}
+
+/** A 403 from the projects API, with a message people can act on. */
+export class ForbiddenError extends ApiError {
+  constructor(code: unknown) {
+    super(403);
+    this.message = forbiddenMessage(code);
+  }
+}
+
 /** HTTP client for the project routes. Every body it sends is ciphertext. */
 export class ProjectsApi {
   constructor(
@@ -135,6 +150,10 @@ export class ProjectsApi {
       const conflict = EntryConflictResponse.safeParse(json);
       if (conflict.success) throw new EntryConflictError(conflict.data.current);
     }
+    if (res.status === 403) {
+      const code = json && typeof json === 'object' && 'error' in json ? json.error : undefined;
+      throw new ForbiddenError(code);
+    }
     if (!res.ok) throw new ApiError(res.status);
     return json;
   }
@@ -143,7 +162,7 @@ export class ProjectsApi {
 /** A readable message for a failed project write. */
 export function writeError(e: unknown, fallback: string): string {
   if (e instanceof ApiError) {
-    if (e.status === 403) return 'Only the project owner can change this.';
+    if (e.status === 403) return e instanceof ForbiddenError ? e.message : forbiddenMessage(null);
     if (e.status === 404) return 'This project is no longer available.';
     if (e.status === 400) return 'The server turned this down. Check the limits and try again.';
   }

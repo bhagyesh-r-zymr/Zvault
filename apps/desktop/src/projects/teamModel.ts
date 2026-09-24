@@ -1,5 +1,6 @@
 import {
   holdsKey,
+  levelAtLeast,
   parseSecretPath,
   strongerLevel,
   type AccessLevel,
@@ -261,6 +262,30 @@ export function whoCanUse(rows: MatrixRow[], envId: string): EnvUser[] {
 export function canManageEnv(org: OrgDetail | null, env: EnvironmentAccess | undefined): boolean {
   if (org && (org.role === 'owner' || org.role === 'admin')) return true;
   return env?.myLevel === 'manage';
+}
+
+/**
+ * Whether the signed-in account can add, change or delete secrets in an
+ * environment, the way the API decides it: the project owner always can (and
+ * owns everything in a project that isn't shared with an organization);
+ * anyone else needs Edit or above there. When the team access isn't loaded,
+ * this says yes and leaves the final word to the server.
+ */
+export function canEditEnv(
+  project: { owner: boolean },
+  team:
+    | {
+        status: 'loading' | 'ready' | 'unshared' | 'failed';
+        envs: Record<string, EnvironmentAccess | undefined>;
+      }
+    | undefined,
+  envId: string,
+): boolean {
+  if (project.owner) return true;
+  if (!team || team.status !== 'ready') return true;
+  const env = team.envs[envId];
+  if (!env) return true;
+  return levelAtLeast(env.myLevel, 'edit');
 }
 
 /** Owners and admins manage members, groups and agents. */

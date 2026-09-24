@@ -9,6 +9,7 @@ import { DevicesModule } from './devices/devices.module.js';
 import { HealthController } from './health/health.controller.js';
 import { MailModule } from './mail/mail.module.js';
 import { MetaController } from './meta/meta.controller.js';
+import { ProjectsModule } from './projects/projects.module.js';
 import { SharingModule } from './sharing/sharing.module.js';
 import { DrizzleTwoFactorRepository } from './two-factor/drizzle-two-factor.repository.js';
 import { TwoFactorModule } from './two-factor/two-factor.module.js';
@@ -28,6 +29,7 @@ import { VaultModule } from './vault/vault.module.js';
       userResolver: SessionUserResolver,
     }),
     VaultModule,
+    ProjectsModule,
     SharingModule,
   ],
   controllers: [HealthController, MetaController],

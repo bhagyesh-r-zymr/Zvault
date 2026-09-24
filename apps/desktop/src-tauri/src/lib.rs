@@ -11,6 +11,7 @@ mod emergency_kit;
 mod generator;
 mod otp;
 mod platform;
+mod projects;
 mod session;
 mod sharing;
 mod vault;
@@ -73,6 +74,14 @@ pub fn run() {
             otp::otp_parse,
             otp::otp_scan_image,
             otp::otp_scan_screen,
+            projects::project_create,
+            projects::project_open,
+            projects::environment_open,
+            projects::environment_seal,
+            projects::entry_seal,
+            projects::entry_open,
+            projects::secret_value_seal,
+            projects::secret_value_open,
             generator::generate_password,
             generator::generate_passphrase,
             generator::check_password_strength,

@@ -19,8 +19,15 @@
     {
       "idx": 2,
       "version": "7",
-      "when": 1790279572015,
-      "tag": "0002_two_factor",
+      "when": 1790279348706,
+      "tag": "0002_projects",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790280365252,
+      "tag": "0003_two_factor",
       "breakpoints": true
     }
   ]

@@ -83,7 +83,7 @@ export function TwoFactorSetup({ api, account, onEnabled, onCancel }: Props) {
 
   if (step.kind === 'intro') {
     return (
-      <section aria-labelledby="tfa-title">
+      <section aria-labelledby="tfa-title" className="tfa-step">
         <h2 id="tfa-title">Turn on two-factor authentication</h2>
         <p>
           After you enter your master password, Zvault will also ask for a code from an
@@ -103,7 +103,7 @@ export function TwoFactorSetup({ api, account, onEnabled, onCancel }: Props) {
   }
 
   return (
-    <section aria-labelledby="tfa-scan-title">
+    <section aria-labelledby="tfa-scan-title" className="tfa-step">
       <h2 id="tfa-scan-title">Scan this QR code</h2>
       <p>Open your authenticator app, add an account, and scan the code.</p>
       <img className="qr" src={step.qr} alt="QR code for your authenticator app" />
@@ -116,7 +116,7 @@ export function TwoFactorSetup({ api, account, onEnabled, onCancel }: Props) {
           Can’t scan? Enter a key instead
         </button>
       )}
-      <form onSubmit={(e) => void confirm(e)}>
+      <form onSubmit={(e) => void confirm(e)} className="tfa">
         <p>Enter the 6-digit code your app shows to finish.</p>
         <CodeInput mode="code" value={code} onChange={setCode} disabled={busy} />
         {errorLine}

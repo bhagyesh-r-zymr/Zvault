@@ -49,7 +49,7 @@ export function TwoFactorPrompt({
   };
 
   return (
-    <form onSubmit={(e) => void submit(e)} aria-labelledby="tfa-prompt-title">
+    <form onSubmit={(e) => void submit(e)} aria-labelledby="tfa-prompt-title" className="tfa-step">
       <h2 id="tfa-prompt-title">{title}</h2>
       <p>
         {mode === 'code'

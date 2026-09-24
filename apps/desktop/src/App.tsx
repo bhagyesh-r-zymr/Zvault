@@ -3,13 +3,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { signOut, type Session } from './auth.js';
 import { core } from './core.js';
 import { EmergencyKitStep } from './EmergencyKitStep.js';
-import { Generator } from './generator/Generator.js';
-import { StrengthChecker } from './generator/StrengthChecker.js';
 import { lock, useActivityReporter, type LockReason, type LockStatus } from './lock.js';
 import { LockScreen } from './LockScreen.js';
-import { LockSettingsPanel } from './LockSettingsPanel.js';
 import { Login } from './screens/Login.js';
 import { SignupCode, SignupEmail, SignupPassword } from './screens/Signup.js';
+import { AppShell } from './shell/AppShell.js';
 
 type Screen =
   | { name: 'login'; email?: string; secretKey?: string }
@@ -66,9 +64,9 @@ export function App() {
   }, [unlocked, refreshLockStatus]);
 
   return (
-    <main>
+    <>
       {coreError && (
-        <p role="alert" className="error banner">
+        <p role="alert" className="alert core-banner">
           {coreError}
         </p>
       )}
@@ -122,6 +120,7 @@ export function App() {
           case 'locked':
             return (
               <LockScreen
+                email={screen.session.email}
                 status={screen.status}
                 reason={screen.reason}
                 onUnlocked={() => setScreen({ name: 'unlocked', session: screen.session })}
@@ -134,34 +133,19 @@ export function App() {
             );
           case 'unlocked':
             return (
-              <div className="card">
-                <h1>Unlocked</h1>
-                <p>
-                  Signed in as <strong>{screen.session.email}</strong>. Your keys are held in the
-                  app's secure core and never leave this device.
-                </p>
-                <button type="button" onClick={() => void lock.lockNow()}>
-                  Lock now
-                </button>{' '}
-                <button
-                  type="button"
-                  onClick={() => {
-                    void signOut(screen.session).then(() =>
-                      setScreen({ name: 'login', email: screen.session.email }),
-                    );
-                  }}
-                >
-                  Sign out
-                </button>
-                {lockStatus && (
-                  <LockSettingsPanel status={lockStatus} onChanged={refreshLockStatus} />
-                )}
-                <Generator />
-                <StrengthChecker />
-              </div>
+              <AppShell
+                session={screen.session}
+                lockStatus={lockStatus}
+                onLockChanged={refreshLockStatus}
+                onSignOut={() => {
+                  void signOut(screen.session).then(() =>
+                    setScreen({ name: 'login', email: screen.session.email }),
+                  );
+                }}
+              />
             );
         }
       })()}
-    </main>
+    </>
   );
 }

@@ -1,66 +1,71 @@
-.field {
+.tfa {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  margin: 0.75rem 0;
+  gap: 10px;
+}
+
+.tfa-status {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.tfa-on {
+  background: var(--secure-bg);
+  border-color: var(--secure-line);
+  color: var(--secure);
+}
+
+/* Setup, prompt and recovery-code steps render as a panel in settings. */
+.tfa-step {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+}
+
+.tfa-step p {
+  color: var(--text-2);
 }
 
 .code-input {
-  font:
-    600 1.5rem ui-monospace,
-    'SF Mono',
-    monospace;
-  letter-spacing: 0.15em;
-  max-width: 14ch;
-  padding: 0.4rem 0.6rem;
+  font: 500 24px var(--mono) !important;
+  letter-spacing: 0.2em !important;
+  max-width: 16ch;
+  height: 52px !important;
 }
 
 .qr {
   display: block;
-  width: 200px;
-  height: 200px;
-  margin: 1rem 0;
+  width: 196px;
+  height: 196px;
   background: #fff;
-  padding: 8px;
-  border-radius: 8px;
-}
-
-.secret {
-  font-family: ui-monospace, 'SF Mono', monospace;
-  user-select: all;
-  word-break: break-all;
+  padding: 10px;
+  border-radius: 14px;
 }
 
 .recovery-codes {
-  columns: 2;
-  font-family: ui-monospace, 'SF Mono', monospace;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 24px;
+  padding: 16px 20px;
+  border-radius: 12px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line-soft);
+  font-family: var(--mono);
+  font-size: 15px;
+  letter-spacing: 0.04em;
   user-select: all;
+  counter-reset: code;
 }
 
-.actions {
-  display: flex;
-  gap: 0.5rem;
-  margin: 1rem 0;
-}
-
-.checkbox {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-button.link {
-  background: none;
-  border: none;
-  padding: 0;
-  color: LinkText;
-  cursor: pointer;
-}
-
-.error {
-  color: #d70015;
-}
-
-.warning {
-  color: #b25000;
+.recovery-codes li::before {
+  counter-increment: code;
+  content: counter(code) '.';
+  display: inline-block;
+  width: 2.2em;
+  color: var(--muted);
 }

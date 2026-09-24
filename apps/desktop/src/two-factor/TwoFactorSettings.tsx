@@ -1,6 +1,7 @@
 import type { TwoFactorStatusResponse } from '@zvault/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { describeError, type TwoFactorApi } from './api.js';
+import { Icon } from '../ui/Icon.js';
 import { RecoveryCodes } from './RecoveryCodes.js';
 import { TwoFactorPrompt } from './TwoFactorPrompt.js';
 import { TwoFactorSetup } from './TwoFactorSetup.js';
@@ -66,46 +67,60 @@ export function TwoFactorSettings({ api, account }: Props) {
   }
 
   return (
-    <section aria-labelledby="tfa-settings-title">
-      <h2 id="tfa-settings-title">Two-factor authentication</h2>
+    <section aria-labelledby="tfa-settings-title" className="tfa">
+      <h2 id="tfa-settings-title">Two-step sign-in</h2>
       {error && (
-        <p role="alert" className="error">
+        <p role="alert" className="alert">
           {error}
         </p>
       )}
-      {status && !status.totpEnabled && (
-        <>
-          <p>Off. Add a code from an authenticator app to every sign-in.</p>
-          <div className="actions">
-            <button type="button" className="primary" onClick={() => setView({ kind: 'setup' })}>
-              Turn on
-            </button>
-          </div>
-        </>
-      )}
-      {status?.totpEnabled && (
-        <>
-          <p>
-            On{status.enabledAt && ` since ${new Date(status.enabledAt).toLocaleDateString()}`}.{' '}
-            {status.recoveryCodesRemaining} of 10 recovery codes left.
-          </p>
-          {status.recoveryCodesRemaining <= 3 && (
-            <p className="warning">You’re running low on recovery codes. Get a new set.</p>
+      <div className="panel panel-pad tfa-status">
+        <span className={status?.totpEnabled ? 'tile tfa-on' : 'tile'}>
+          <Icon name={status?.totpEnabled ? 'shieldCheck' : 'shield'} size={20} />
+        </span>
+        <div className="row-main">
+          {status === null && !error && <span className="row-title">Checking…</span>}
+          {status && !status.totpEnabled && (
+            <>
+              <span className="row-title">Two-step sign-in is off</span>
+              <span className="row-sub">
+                Add a code from an authenticator app to every sign-in.
+              </span>
+            </>
           )}
-          <div className="actions">
+          {status?.totpEnabled && (
+            <>
+              <span className="row-title">Two-step sign-in is on</span>
+              <span className={status.recoveryCodesRemaining <= 3 ? 'row-sub warning' : 'row-sub'}>
+                Authenticator app
+                {status.enabledAt &&
+                  ` since ${new Date(status.enabledAt).toLocaleDateString()}`} ·{' '}
+                {status.recoveryCodesRemaining} of 10 recovery codes left
+                {status.recoveryCodesRemaining <= 3 && '. Get a new set soon.'}
+              </span>
+            </>
+          )}
+        </div>
+        {status && !status.totpEnabled && (
+          <button type="button" className="primary" onClick={() => setView({ kind: 'setup' })}>
+            Turn on
+          </button>
+        )}
+        {status?.totpEnabled && (
+          <>
             <button type="button" onClick={() => setView({ kind: 'confirm-regenerate' })}>
-              New recovery codes
+              Recovery codes
             </button>
             <button
               type="button"
-              className="danger"
+              className="ghost"
               onClick={() => setView({ kind: 'confirm-disable' })}
             >
               Turn off
             </button>
-          </div>
-        </>
-      )}
+          </>
+        )}
+      </div>
     </section>
   );
 }

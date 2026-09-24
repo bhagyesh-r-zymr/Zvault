@@ -24,12 +24,14 @@ export interface TwoFactorModuleOptions {
 
 /**
  * TOTP second factor. Defaults to an in-memory store and no sessions; the
- * login feature passes its own repository and session resolver.
+ * app passes the database repository and session resolver. Global, so login
+ * can reach `TwoFactorService` without a second instance.
  */
 @Module({})
 export class TwoFactorModule {
   static forRoot(options: TwoFactorModuleOptions = {}): DynamicModule {
     return {
+      global: true,
       module: TwoFactorModule,
       imports: options.imports ?? [],
       controllers: [TwoFactorController],

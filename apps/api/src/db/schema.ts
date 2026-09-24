@@ -1,6 +1,7 @@
 import type { DeviceInfo, EncryptedBlob } from '@zvault/shared';
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
   customType,
   index,
   integer,
@@ -106,4 +107,46 @@ export const sessions = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('sessions_account_idx').on(t.accountId)],
+);
+
+/**
+ * Two-factor (TOTP) state, one row per account that has ever started setup.
+ * Secrets are sealed with `TWO_FACTOR_ENCRYPTION_KEY`; recovery codes are
+ * stored only as keyed hashes. `version` makes every write a compare-and-set.
+ */
+export const twoFactor = pgTable('two_factor', {
+  accountId: uuid('account_id')
+    .primaryKey()
+    .references(() => accounts.id, { onDelete: 'cascade' }),
+  totpSecret: text('totp_secret'),
+  enabledAt: ts('enabled_at'),
+  lastUsedStep: bigint('last_used_step', { mode: 'number' }),
+  pendingSecret: text('pending_secret'),
+  pendingExpiresAt: ts('pending_expires_at'),
+  recoveryCodeHashes: jsonb('recovery_code_hashes').$type<string[]>().notNull().default([]),
+  failedAttempts: integer('failed_attempts').notNull().default(0),
+  lockedUntil: ts('locked_until'),
+  version: integer('version').notNull(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
+/**
+ * Logins that passed the password step and wait for a 2FA code. Holds the
+ * device so the session can be issued once the code checks out. Only a hash
+ * of the token is stored; rows are deleted on success or expiry.
+ */
+export const loginTwoFactorChallenges = pgTable(
+  'login_two_factor_challenges',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    tokenHash: bytea('token_hash').notNull().unique(),
+    device: jsonb('device').$type<DeviceInfo>().notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    expiresAt: ts('expires_at').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('login_two_factor_challenges_expires_idx').on(t.expiresAt)],
 );

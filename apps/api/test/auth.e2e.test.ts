@@ -2,7 +2,7 @@ import {
   ApiError,
   KDF_DEFAULTS,
   ListDevicesResponse,
-  LoginFinishResponse,
+  LoginSessionResponse,
   LoginStartResponse,
   SessionResponse,
   SignupVerifyResponse,
@@ -215,7 +215,7 @@ describe('Auth (e2e)', () => {
       const { res, start, client } = await logIn(email, x);
       expect(res.status).toBe(200);
       expect(start.kdf.salt).toBe(b64(salt));
-      const body = LoginFinishResponse.parse(res.body);
+      const body = LoginSessionResponse.parse(res.body);
       expect(Buffer.from(body.srpM2, 'base64url').equals(client.expectedM2)).toBe(true);
       expect(body.encryptedKeyset).toEqual(keyset);
 

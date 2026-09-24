@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { DeviceInfo } from './devices.js';
 import { EncryptedBlob, KdfParams } from './crypto.js';
 import { Base64Url, base64UrlOfLength } from './encoding.js';
+import { TwoFactorProof } from './two-factor.js';
 
 /**
  * Sign-up, email verification and SRP-6a login contracts.
@@ -83,7 +84,8 @@ export const LoginFinishRequest = z.object({
 });
 export type LoginFinishRequest = z.input<typeof LoginFinishRequest>;
 
-export const LoginFinishResponse = z.object({
+/** A signed-in session, returned once every required factor has been checked. */
+export const LoginSessionResponse = z.object({
   /** Server proof; the client must check it before trusting anything else here. */
   srpM2: SrpProof,
   sessionToken: Base64Url,
@@ -91,7 +93,39 @@ export const LoginFinishResponse = z.object({
   accountId: z.uuid(),
   encryptedKeyset: EncryptedBlob,
 });
+export type LoginSessionResponse = z.infer<typeof LoginSessionResponse>;
+
+/**
+ * The password step passed but the account has two-factor authentication on.
+ * No session or keyset is released until `login/two-factor` accepts a code.
+ */
+export const LoginTwoFactorRequiredResponse = z.object({
+  /** Check this first, so a code is never sent to a server that can't prove itself. */
+  srpM2: SrpProof,
+  twoFactorRequired: z.literal(true),
+  /** Single-use handle for `login/two-factor`. */
+  twoFactorToken: Base64Url,
+  expiresAt: z.iso.datetime(),
+});
+export type LoginTwoFactorRequiredResponse = z.infer<typeof LoginTwoFactorRequiredResponse>;
+
+export const LoginFinishResponse = z.union([LoginSessionResponse, LoginTwoFactorRequiredResponse]);
 export type LoginFinishResponse = z.infer<typeof LoginFinishResponse>;
+
+export const isTwoFactorRequired = (
+  res: LoginFinishResponse,
+): res is LoginTwoFactorRequiredResponse => 'twoFactorRequired' in res;
+
+/** Second login step for accounts with 2FA: a TOTP code or one recovery code. */
+export const LoginTwoFactorRequest = z.object({
+  twoFactorToken: base64UrlOfLength(32),
+  proof: TwoFactorProof,
+});
+export type LoginTwoFactorRequest = z.input<typeof LoginTwoFactorRequest>;
+
+/** The session, without `srpM2`: the client already checked it after the first step. */
+export const LoginTwoFactorResponse = LoginSessionResponse.omit({ srpM2: true });
+export type LoginTwoFactorResponse = z.infer<typeof LoginTwoFactorResponse>;
 
 export const SessionResponse = z.object({
   accountId: z.uuid(),

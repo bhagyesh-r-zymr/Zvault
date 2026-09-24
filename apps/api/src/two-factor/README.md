@@ -15,22 +15,18 @@ RFC 6238 TOTP (SHA1, 6 digits, 30 s, ±1 step) plus ten single-use recovery code
 A wrong code returns 403 `invalid_two_factor_code`. Five wrong codes lock the factor for 15
 minutes and return 429 `two_factor_locked`.
 
-## Hooking into login
+## Login
 
-The login feature owns sessions and storage. It plugs in with:
+`AppModule` wires this module to Postgres (`DrizzleTwoFactorRepository`, table `two_factor`) and
+to sessions (`SessionUserResolver` in `auth/`), so the endpoints above take the normal
+`Authorization: Bearer <session token>`.
 
-```ts
-TwoFactorModule.forRoot({
-  imports: [DatabaseModule, SessionModule],
-  repository: DbTwoFactorRepository, // implements TwoFactorRepository
-  userResolver: SessionUserResolver, // implements AuthenticatedUserResolver
-});
-```
-
-After the first factor (SRP) succeeds, login calls `TwoFactorService.isEnabled(userId)`. If it is
-on, login issues a short-lived "2FA pending" state instead of a full session, and completes only
-once `TwoFactorService.verify(userId, proof)` resolves. `verify` consumes the proof (a TOTP code
-cannot be replayed, a recovery code is deleted) and throws on failure.
+When 2FA is on, `POST /v1/auth/login/finish` does not open a session. It returns
+`{ srpM2, twoFactorRequired: true, twoFactorToken, expiresAt }` and keeps the login pending for
+five minutes. The client checks `srpM2` first, then sends
+`POST /v1/auth/login/two-factor { twoFactorToken, proof }`, where `proof` is `{ code }` or
+`{ recoveryCode }`. Only that response carries the session token and the encrypted keyset. A
+pending login allows five codes; wrong codes also count toward the account lockout above.
 
 `TwoFactorRepository.update` must be a compare-and-set on `version` (for example
 `UPDATE ... WHERE user_id = $1 AND version = $2`) so concurrent requests cannot spend one code twice.

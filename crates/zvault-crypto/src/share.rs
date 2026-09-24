@@ -110,6 +110,17 @@ impl SharingKeyPair {
         Ok(Self::from_secret_bytes(random::array()?))
     }
 
+    /// The account's sharing key pair, derived from its keyset key. Every
+    /// device signed in to the account gets the same pair, so recipients can
+    /// pin the public key, and nothing new has to be stored or synced.
+    pub fn derive_from_keyset(keyset: &SymmetricKey) -> Self {
+        let mut okm = Zeroizing::new([0u8; KEY_LEN]);
+        Hkdf::<Sha256>::new(None, keyset.as_bytes())
+            .expand(b"zvault/sharing-x25519/v1", okm.as_mut())
+            .expect("32 bytes is a valid HKDF-SHA256 output length");
+        Self::from_secret_bytes(*okm)
+    }
+
     pub fn from_secret_bytes(bytes: [u8; KEY_LEN]) -> Self {
         let bytes = Zeroizing::new(bytes);
         Self {
@@ -221,6 +232,16 @@ pub fn fingerprint(public: &[u8; PUBLIC_KEY_LEN]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sharing_key_is_stable_per_keyset() {
+        let keyset = SymmetricKey::from_bytes([7; KEY_LEN]);
+        let a = SharingKeyPair::derive_from_keyset(&keyset);
+        let b = SharingKeyPair::derive_from_keyset(&SymmetricKey::from_bytes([7; KEY_LEN]));
+        let other = SharingKeyPair::derive_from_keyset(&SymmetricKey::from_bytes([8; KEY_LEN]));
+        assert_eq!(a.public_key(), b.public_key());
+        assert_ne!(a.public_key(), other.public_key());
+    }
 
     #[test]
     fn link_round_trips_and_rebuilds_from_url_parts() {

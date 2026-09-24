@@ -11,6 +11,8 @@ pub enum Error {
     Decrypt,
     #[error("encryption failed")]
     Encrypt,
+    #[error("authentication failed")]
+    Srp,
     #[error("secure random number generator unavailable")]
     Rng,
 }

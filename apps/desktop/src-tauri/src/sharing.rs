@@ -2,12 +2,10 @@
 //! used here; the UI receives ciphertext, public keys and, for links, the
 //! finished URL it has to show the user.
 
-use std::sync::Mutex;
-
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::AppHandle;
 use zvault_crypto::{
     BoxedShare, LinkShare, NONCE_LEN, PUBLIC_KEY_LEN, SHARE_ID_LEN, Sealed, SharingKeyPair,
     fingerprint, open_from, seal_to,
@@ -15,12 +13,12 @@ use zvault_crypto::{
 
 use crate::CRYPTO_VERSION;
 
-/// The signed-in user's sharing key pair, held only while the app is unlocked.
-///
-/// TODO(keyset): persist the secret half wrapped under the account keyset once
-/// sign-in lands, instead of generating a new pair per session.
-#[derive(Default)]
-pub struct SharingState(Mutex<Option<SharingKeyPair>>);
+/// The signed-in account's sharing key pair, derived from its keyset so it is
+/// the same on every device and across restarts. Fails while locked.
+fn my_key_pair(app: &AppHandle) -> Result<SharingKeyPair, String> {
+    crate::auth::with_keyset(app, SharingKeyPair::derive_from_keyset)
+        .ok_or_else(|| "Unlock Zvault to share.".into())
+}
 
 /// Wire form of `EncryptedBlob` in `@zvault/shared`.
 #[derive(Serialize, Deserialize)]
@@ -117,14 +115,10 @@ fn identity_of(pair: &SharingKeyPair) -> SharingIdentity {
     }
 }
 
-/// Returns this device's sharing identity, creating the key pair if needed.
+/// Returns the account's sharing identity.
 #[tauri::command]
-pub fn sharing_identity(state: State<'_, SharingState>) -> Result<SharingIdentity, String> {
-    let mut guard = state.0.lock().map_err(|_| "sharing state unavailable")?;
-    if guard.is_none() {
-        *guard = Some(SharingKeyPair::generate().map_err(err)?);
-    }
-    Ok(identity_of(guard.as_ref().expect("set above")))
+pub fn sharing_identity(app: AppHandle) -> Result<SharingIdentity, String> {
+    Ok(identity_of(&my_key_pair(&app)?))
 }
 
 /// Fingerprint of someone else's key, for comparing out of band.
@@ -145,12 +139,11 @@ pub struct NewUserShare {
 /// Encrypts an item to another user's sharing key.
 #[tauri::command]
 pub fn share_seal_to(
-    state: State<'_, SharingState>,
+    app: AppHandle,
     recipient_public_key: String,
     payload: String,
 ) -> Result<NewUserShare, String> {
-    let guard = state.0.lock().map_err(|_| "sharing state unavailable")?;
-    let me = guard.as_ref().ok_or("sharing key not set up")?;
+    let me = &my_key_pair(&app)?;
     let recipient = decode_array::<PUBLIC_KEY_LEN>(&recipient_public_key)?;
     let id: [u8; SHARE_ID_LEN] = LinkShare::generate().map_err(err)?.id;
     let boxed = seal_to(me, &recipient, &id, payload.as_bytes()).map_err(err)?;
@@ -174,9 +167,8 @@ pub struct IncomingShare {
 /// Decrypts a share sent to this user. Fails if it was not sealed by the
 /// holder of `senderPublicKey` for exactly this share id.
 #[tauri::command]
-pub fn share_open(state: State<'_, SharingState>, share: IncomingShare) -> Result<String, String> {
-    let guard = state.0.lock().map_err(|_| "sharing state unavailable")?;
-    let me = guard.as_ref().ok_or("sharing key not set up")?;
+pub fn share_open(app: AppHandle, share: IncomingShare) -> Result<String, String> {
+    let me = &my_key_pair(&app)?;
     let boxed = BoxedShare {
         ephemeral_public: decode_array(&share.ephemeral_public_key)?,
         sealed: share.blob.to_sealed("share-box")?,

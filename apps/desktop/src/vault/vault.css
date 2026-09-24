@@ -1,0 +1,74 @@
+.vault {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) 1fr;
+  gap: 1.5rem;
+  min-height: 100%;
+}
+
+.vault-list header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.vault-list input[type='search'] {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0.5rem 0;
+}
+
+.vault-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.vault-list li button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 0.5rem;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+
+.vault-list li button[aria-current='true'] {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.vault-list li span,
+.muted {
+  opacity: 0.65;
+}
+
+.vault-list footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 1rem;
+}
+
+.vault-pane form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.vault-pane .notes {
+  white-space: pre-wrap;
+}
+
+.vault-pane .actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.vault-pane .danger {
+  color: #c62828;
+}

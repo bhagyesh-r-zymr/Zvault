@@ -6,7 +6,9 @@ import {
 } from '@zvault/shared';
 import { useCallback, useEffect, useState } from 'react';
 import type { SharingApi } from './api.js';
+import { lock } from '../lock.js';
 import { sharingCore, type SharingIdentity } from './core.js';
+import { checkPin, pinKey, type PinCheck } from './pins.js';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : 'never');
@@ -87,10 +89,21 @@ export function SharingCenter({ api }: { api: SharingApi }) {
 function IncomingRow({ share, onRemove }: { share: IncomingUserShare; onRemove: () => void }) {
   const [item, setItem] = useState<SharedItemPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [code, setCode] = useState<string | null>(null);
+  const [pin, setPin] = useState<PinCheck>(() =>
+    checkPin(share.sender.email, share.sender.publicKey),
+  );
+
+  useEffect(() => {
+    sharingCore.fingerprint(share.sender.publicKey).then(setCode, () => setCode(null));
+  }, [share.sender.publicKey]);
 
   async function open() {
     try {
       setItem(SharedItemPayload.parse(JSON.parse(await sharingCore.open(share))));
+      // It decrypted under this key, so remember it for this sender.
+      pinKey(share.sender.email, share.sender.publicKey);
+      setPin('match');
     } catch {
       setError('Could not decrypt. It may have been sent to an older key of yours.');
     }
@@ -98,8 +111,22 @@ function IncomingRow({ share, onRemove }: { share: IncomingUserShare; onRemove: 
 
   return (
     <li>
-      From {share.sender.email} · {new Date(share.createdAt).toLocaleString()}{' '}
-      {!item && <button onClick={() => void open()}>Open</button>}
+      From {share.sender.email} · {new Date(share.createdAt).toLocaleString()}
+      {code && (
+        <>
+          {' '}
+          · security code <code>{code}</code>
+        </>
+      )}{' '}
+      {pin === 'changed' && !item && (
+        <p role="alert">
+          {share.sender.email}&apos;s security code has changed since you last received from them.
+          Someone may be pretending to be them. Check the code with them before opening.
+        </p>
+      )}
+      {!item && (
+        <button onClick={() => void open()}>{pin === 'changed' ? 'Open anyway' : 'Open'}</button>
+      )}
       <button onClick={onRemove}>Remove</button>
       {error && <p role="alert">{error}</p>}
       {item && (
@@ -116,7 +143,7 @@ function IncomingRow({ share, onRemove }: { share: IncomingUserShare; onRemove: 
             <>
               <dt>Password</dt>
               <dd>
-                <button onClick={() => void navigator.clipboard.writeText(item.password ?? '')}>
+                <button onClick={() => void lock.copySecret(item.password ?? '')}>
                   Copy password
                 </button>
               </dd>

@@ -15,11 +15,42 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+arboard = { version = "3", default-features = false }
 base64 = "0.22"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
+thiserror = "2"
 tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+uuid = { version = "1", features = ["v4"] }
+zeroize = { version = "1.8", features = ["derive"] }
 zvault-crypto = { path = "../../../crates/zvault-crypto" }
+zvault-emergency-kit = { path = "../../../crates/zvault-emergency-kit" }
+zvault-passwords = { path = "../../../crates/zvault-passwords" }
 
-[lints]
-workspace = true
+# Same as the workspace lints except `unsafe_code`, which is `deny` rather than
+# `forbid` so that `src/platform/macos` alone can call Apple APIs. Nothing else
+# in this crate may use `unsafe`.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWorkspace"] }
+objc2-foundation = { version = "0.3", default-features = false, features = [
+  "std",
+  "block2",
+  "NSDistributedNotificationCenter",
+  "NSError",
+  "NSNotification",
+  "NSObject",
+  "NSOperation",
+  "NSString",
+] }
+objc2-local-authentication = { version = "0.3", default-features = false, features = ["std", "LAContext"] }
+security-framework = { version = "3", features = ["OSX_10_15"] }

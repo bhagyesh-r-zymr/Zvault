@@ -1,0 +1,21 @@
+# Local services for the API: `docker compose up -d`, then
+# `pnpm --filter @zvault/api db:migrate`.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: zvault
+      POSTGRES_PASSWORD: zvault
+      POSTGRES_DB: zvault
+    ports: ['127.0.0.1:5432:5432']
+    volumes: [pgdata:/var/lib/postgresql/data]
+
+  # Catches outgoing mail so the SMTP transport can be tried without a real
+  # provider. Web UI on http://localhost:8025. To use it, set in apps/api/.env:
+  # MAIL_TRANSPORT=smtp SMTP_HOST=localhost SMTP_PORT=1025 SMTP_ALLOW_INSECURE=true
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ['127.0.0.1:1025:1025', '127.0.0.1:8025:8025']
+
+volumes:
+  pgdata:

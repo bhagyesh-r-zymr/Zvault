@@ -2,6 +2,7 @@ import { SHARE_LIMITS, type SharedItemPayload, type SharingKeyResponse } from '@
 import { useState } from 'react';
 import { SHARE_ORIGIN, type SharingApi } from './api.js';
 import { sharingCore } from './core.js';
+import { checkPin, pinKey, type PinCheck } from './pins.js';
 
 const DAY = 24 * 60 * 60;
 const EXPIRY_OPTIONS = [
@@ -112,9 +113,9 @@ function ShareByLink({ item, api }: { item: SharedItemPayload; api: SharingApi }
 
 function ShareWithPerson({ item, api }: { item: SharedItemPayload; api: SharingApi }) {
   const [email, setEmail] = useState('');
-  const [recipient, setRecipient] = useState<(SharingKeyResponse & { fingerprint: string }) | null>(
-    null,
-  );
+  const [recipient, setRecipient] = useState<
+    (SharingKeyResponse & { fingerprint: string; pin: PinCheck }) | null
+  >(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -134,7 +135,11 @@ function ShareWithPerson({ item, api }: { item: SharedItemPayload; api: SharingA
   const lookUp = () =>
     run(async () => {
       const key = await api.lookupKey(email.trim());
-      setRecipient({ ...key, fingerprint: await sharingCore.fingerprint(key.publicKey) });
+      setRecipient({
+        ...key,
+        fingerprint: await sharingCore.fingerprint(key.publicKey),
+        pin: checkPin(key.email, key.publicKey),
+      });
     });
 
   const send = () =>
@@ -151,6 +156,7 @@ function ShareWithPerson({ item, api }: { item: SharedItemPayload; api: SharingA
         ephemeralPublicKey: sealed.ephemeralPublicKey,
         blob: sealed.blob,
       });
+      pinKey(recipient.email, recipient.publicKey);
       setSentTo(recipient.email);
       setRecipient(null);
       setEmail('');
@@ -187,6 +193,12 @@ function ShareWithPerson({ item, api }: { item: SharedItemPayload; api: SharingA
           <p>
             Security code for {recipient.email}: <code>{recipient.fingerprint}</code>
           </p>
+          {recipient.pin === 'changed' && (
+            <p role="alert">
+              This security code is different from the one {recipient.email} had before. Someone
+              may be pretending to be them. Check the code with them before sending.
+            </p>
+          )}
           <p className="hint">
             For sensitive items, ask them to read out the code in their Zvault settings. If it
             differs, do not send.

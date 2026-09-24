@@ -1,0 +1,32 @@
+{
+  "name": "@zvault/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Wire contracts shared by the Zvault API and clients. Types and schemas only: no key material ever crosses these types in plaintext.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "vitest": "^5.0.1"
+  }
+}

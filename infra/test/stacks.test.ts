@@ -119,7 +119,9 @@ describe.each(['dev', 'prod'] as const)('%s stage', (stage) => {
     const envNames = (container.Environment as { Name: string }[]).map((e) => e.Name);
     expect(envNames.filter((n) => /PASSWORD|SECRET|KEY/.test(n))).toEqual([]);
     const secretNames = (container.Secrets as { Name: string }[]).map((s) => s.Name);
-    expect(secretNames).toEqual(expect.arrayContaining(['DATABASE_USER', 'SERVER_SECRET']));
+    expect(secretNames).toEqual(
+      expect.arrayContaining(['DATABASE_USER', 'SERVER_SECRET', 'TWO_FACTOR_ENCRYPTION_KEY']),
+    );
     // The password is read from Secrets Manager at connect time, not frozen at task start.
     expect(secretNames).not.toContain('DATABASE_PASSWORD');
     expect(envNames).toEqual(

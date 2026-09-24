@@ -97,6 +97,27 @@ export class ApiStack extends Stack {
         'Rotating the signing key signs every user out; rotate by hand with a key-overlap window.',
     });
 
+    // Root key sealing TOTP secrets at rest: 43 base64url characters (32 bytes), as the API
+    // expects. Never rotate it in place: existing 2FA enrollments would no longer decrypt.
+    const twoFactorKey = new secretsmanager.Secret(this, 'TwoFactorKey', {
+      secretName: `zvault/${config.stage}/api/two-factor`,
+      description: 'Zvault API key sealing TOTP secrets at rest',
+      encryptionKey: dataKey,
+      generateSecretString: {
+        secretStringTemplate: '{}',
+        generateStringKey: 'TWO_FACTOR_ENCRYPTION_KEY',
+        passwordLength: 43,
+        excludePunctuation: true,
+        includeSpace: false,
+      },
+      removalPolicy,
+    });
+    Validations.of(twoFactorKey).acknowledge({
+      id: 'AwsSolutions::AwsSolutions-SMG4',
+      reason:
+        'Rotating this key would make stored TOTP secrets unreadable; it needs a re-seal migration.',
+    });
+
     // --- Compute ------------------------------------------------------------------------------
     const cluster = new ecs.Cluster(this, 'Cluster', {
       vpc,
@@ -171,6 +192,10 @@ export class ApiStack extends Stack {
       secrets: {
         DATABASE_USER: ecs.Secret.fromSecretsManager(databaseSecret, 'username'),
         SERVER_SECRET: ecs.Secret.fromSecretsManager(appSecret, 'SERVER_SECRET'),
+        TWO_FACTOR_ENCRYPTION_KEY: ecs.Secret.fromSecretsManager(
+          twoFactorKey,
+          'TWO_FACTOR_ENCRYPTION_KEY',
+        ),
       },
     });
     databaseSecret.grantRead(taskDefinition.taskRole);

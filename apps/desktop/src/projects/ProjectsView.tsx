@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { CopyButton, ErrorLine, SecretText } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
-import { useProjects, useProjectsSync } from './context.js';
+import { useProjects, useProjectsSync, useProjectTeam, useTeamStore } from './context.js';
 import {
   secretRef,
   valueSource,
@@ -11,7 +11,8 @@ import {
   type ProjectSecret,
 } from './model.js';
 import { NewSecretSheet } from './NewSecretSheet.js';
-import { ACCESS_LABELS, accessFor } from './preview.js';
+import type { ProjectTeam } from './team.js';
+import { LEVEL_LABELS, buildMatrix, whoCanUse } from './teamModel.js';
 import './projects.css';
 
 export function EnvDot({ env }: { env: Pick<Environment, 'color'> }) {
@@ -54,6 +55,7 @@ export function ProjectsView(props: {
   onOpenAccess: () => void;
 }) {
   const { projects, secrets, status } = useProjects();
+  const team = useProjectTeam(props.projectId);
   const project = projects.find((p) => p.id === props.projectId);
   const env = project?.environments.find((e) => e.id === props.envId) ?? project?.environments[0];
 
@@ -212,6 +214,7 @@ export function ProjectsView(props: {
             project={project}
             env={env}
             secret={current}
+            team={team}
             onEnvChange={props.onEnvChange}
             onOpenAccess={props.onOpenAccess}
           />
@@ -244,6 +247,7 @@ function SecretDetail(props: {
   project: Project;
   env: Environment;
   secret: ProjectSecret;
+  team: ProjectTeam | undefined;
   onEnvChange: (envId: string) => void;
   onOpenAccess: () => void;
 }) {
@@ -255,7 +259,6 @@ function SecretDetail(props: {
   const [error, setError] = useState<string | null>(null);
   const source = env.locked ? null : valueSource(project, secret, env.id);
   const sourceEnv = project.environments.find((e) => e.id === source);
-  const you = accessFor(project).find((a) => a.id === 'me')!;
 
   const open = () => sync.openValue(project.id, secret.id, source!);
 
@@ -410,12 +413,7 @@ function SecretDetail(props: {
               Manage access
             </button>
           </div>
-          <div className="tags">
-            <span className="pill">
-              <span style={{ fontWeight: 600, color: 'var(--text)' }}>{you.name}</span>
-              {ACCESS_LABELS[you.levels[env.id] ?? 'none'].toLowerCase()}
-            </span>
-          </div>
+          <WhoCanUse team={props.team} project={project} env={env} />
         </div>
 
         <ErrorLine error={error} />
@@ -445,5 +443,50 @@ function SecretDetail(props: {
         </div>
       </div>
     </>
+  );
+}
+
+/** The real grants in one environment, from the project's team access. */
+function WhoCanUse({
+  team,
+  project,
+  env,
+}: {
+  team: ProjectTeam | undefined;
+  project: Project;
+  env: Environment;
+}) {
+  const { email } = useTeamStore();
+  if (!team || team.status === 'loading') return <span className="muted">Loading…</span>;
+  if (team.status === 'failed') return <span className="muted">{team.error}</span>;
+  if (team.status === 'unshared' || !team.access) {
+    return (
+      <div className="tags">
+        <span className="pill">
+          <span style={{ fontWeight: 600, color: 'var(--text)' }}>You</span>
+          {env.locked ? 'no access' : project.owner ? 'owner' : 'edit'}
+        </span>
+        <span className="hint">Not shared with a team.</span>
+      </div>
+    );
+  }
+  const users = whoCanUse(
+    buildMatrix({ access: team.access, envs: team.envs, org: team.org, meEmail: email }),
+    env.id,
+  );
+  if (users.length === 0) {
+    return <span className="muted">Nobody has a grant in {env.name} yet.</span>;
+  }
+  return (
+    <div className="tags">
+      {users.map((u) => (
+        <span key={u.key} className={u.level === 'needs_approval' ? 'pill attn' : 'pill'}>
+          <span style={{ fontWeight: 600, color: 'var(--text)' }}>{u.you ? 'You' : u.name}</span>
+          {u.type === 'group' && 'group · '}
+          {u.type === 'agent' && 'agent · '}
+          {LEVEL_LABELS[u.level].toLowerCase()}
+        </span>
+      ))}
+    </div>
   );
 }

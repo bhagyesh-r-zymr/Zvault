@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import type { Environment, Project, ProjectSecret } from './model.js';
 import {
   buildMatrix,
+  canEditEnv,
   canManageEnv,
   candidates,
   environmentValues,
@@ -203,6 +204,29 @@ describe('access helpers', () => {
     expect(canManageEnv({ ...org, role: 'member' }, env(DEV!, { myLevel: 'edit' }))).toBe(false);
     expect(canManageEnv({ ...org, role: 'member' }, env(DEV!, { myLevel: 'manage' }))).toBe(true);
     expect(canManageEnv({ ...org, role: 'admin' }, undefined)).toBe(true);
+  });
+
+  it('lets the owner, or Edit and above, change secrets', () => {
+    const ready = (myLevel: EnvironmentAccess['myLevel']) => ({
+      status: 'ready' as const,
+      envs: { [DEV!]: env(DEV!, { myLevel }) },
+    });
+    const member = { owner: false };
+    expect(canEditEnv(member, ready('use'), DEV!)).toBe(false);
+    expect(canEditEnv(member, ready('needs_approval'), DEV!)).toBe(false);
+    expect(canEditEnv(member, ready('none'), DEV!)).toBe(false);
+    expect(canEditEnv(member, ready('edit'), DEV!)).toBe(true);
+    expect(canEditEnv(member, ready('manage'), DEV!)).toBe(true);
+    expect(canEditEnv({ owner: true }, ready('use'), DEV!)).toBe(true);
+  });
+
+  it('shows edit actions when team access is missing or unshared', () => {
+    const member = { owner: false };
+    expect(canEditEnv(member, undefined, DEV!)).toBe(true);
+    expect(canEditEnv(member, { status: 'loading', envs: {} }, DEV!)).toBe(true);
+    expect(canEditEnv(member, { status: 'unshared', envs: {} }, DEV!)).toBe(true);
+    expect(canEditEnv(member, { status: 'failed', envs: {} }, DEV!)).toBe(true);
+    expect(canEditEnv(member, { status: 'ready', envs: {} }, DEV!)).toBe(true);
   });
 });
 

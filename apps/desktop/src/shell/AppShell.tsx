@@ -23,6 +23,7 @@ import { Icon, type IconName } from '../ui/Icon.js';
 import { VaultApi } from '../vault/api.js';
 import { FOCUS_SEARCH_EVENT, VaultScreen } from '../vault/VaultScreen.js';
 import { SettingsView, type SettingsSection } from './SettingsView.js';
+import { TeamInvites } from './TeamInvites.js';
 
 export type Route =
   | { name: 'vault' }
@@ -83,6 +84,10 @@ export function AppShell(props: {
   useEffect(() => {
     void projectsSync.load();
   }, [projectsSync]);
+  // Load organizations up front, so pending invites show in the sidebar.
+  useEffect(() => {
+    void team.store.loadOrgs();
+  }, [team]);
   // Answer `zv` lookups from these projects while the vault is unlocked.
   useEffect(() => serveZv(projectsSync), [projectsSync]);
   const sharing = useMemo(
@@ -194,6 +199,7 @@ export function AppShell(props: {
               <Icon name="plus" size={13} strokeWidth={2.4} />
             </button>
           </div>
+          <TeamInvites store={team.store} onAccepted={() => void projectsSync.load()} />
           {projectsStatus === 'ready' && projects.length === 0 && (
             <button type="button" className="nav-item" onClick={() => setCreatingProject(true)}>
               <Icon name="plus" size={15} />

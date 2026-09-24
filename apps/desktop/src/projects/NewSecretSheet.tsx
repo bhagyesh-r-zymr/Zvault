@@ -3,9 +3,10 @@ import { useId, useState, type FormEvent } from 'react';
 import { ErrorLine, Sheet } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import { writeError } from './api.js';
-import { useProjects, useProjectsSync } from './context.js';
+import { useProjects, useProjectsSync, useTeam } from './context.js';
 import type { Project } from './model.js';
 import { EnvDot } from './ProjectsView.js';
+import { canEditEnv } from './teamModel.js';
 
 const TAG_SUGGESTIONS = ['rotate-quarterly', 'third-party', 'database', 'aws', 'payments'];
 
@@ -25,6 +26,10 @@ export function NewSecretSheet(props: {
   const sync = useProjectsSync();
   const [projectId, setProjectId] = useState(props.project.id);
   const project = projects.find((p) => p.id === projectId) ?? props.project;
+  const teamProject = useTeam().projects[projectId];
+  /** Environments this account can't write to: no key, or less than Edit. */
+  const readOnly = (env: Project['environments'][number]) =>
+    env.locked || !canEditEnv(project, teamProject, env.id);
   const [name, setName] = useState('');
   const [envVar, setEnvVar] = useState('');
   const [envVarTouched, setEnvVarTouched] = useState(false);
@@ -60,7 +65,7 @@ export function NewSecretSheet(props: {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const filled = project.environments.filter((env) => !env.locked && values[env.id]?.trim());
+    const filled = project.environments.filter((env) => !readOnly(env) && values[env.id]?.trim());
     if (!name.trim()) return setError('Give the secret a name.');
     if (!SecretKeyName.safeParse(envVar).success) {
       return setError('Give it a variable name, such as STRIPE_SECRET_KEY.');
@@ -195,21 +200,30 @@ export function NewSecretSheet(props: {
                     type="password"
                     aria-label={`${env.name} value`}
                     autoComplete="off"
-                    disabled={env.locked}
+                    disabled={readOnly(env)}
                     value={values[env.id] ?? ''}
                     placeholder={
                       env.locked
                         ? 'No access'
-                        : parent
-                          ? `Same as ${parent.name}`
-                          : i === 0
-                            ? 'Paste the value'
-                            : 'Not set'
+                        : readOnly(env)
+                          ? 'View only'
+                          : parent
+                            ? `Same as ${parent.name}`
+                            : i === 0
+                              ? 'Paste the value'
+                              : 'Not set'
                     }
                     onChange={(e) => setValues({ ...values, [env.id]: e.target.value })}
                   />
-                  {env.locked && (
-                    <span title="You don't have access to this environment" className="muted">
+                  {readOnly(env) && (
+                    <span
+                      title={
+                        env.locked
+                          ? "You don't have access to this environment"
+                          : 'You can use this environment but not change it'
+                      }
+                      className="muted"
+                    >
                       <Icon name="lock" size={13} />
                     </span>
                   )}

@@ -12,7 +12,7 @@ import {
 } from './model.js';
 import { NewSecretSheet } from './NewSecretSheet.js';
 import type { ProjectTeam } from './team.js';
-import { LEVEL_LABELS, buildMatrix, whoCanUse } from './teamModel.js';
+import { LEVEL_LABELS, buildMatrix, canEditEnv, whoCanUse } from './teamModel.js';
 import './projects.css';
 
 export function EnvDot({ env }: { env: Pick<Environment, 'color'> }) {
@@ -94,6 +94,8 @@ export function ProjectsView(props: {
   const loose = visible.filter((s) => !s.folder);
   const current = visible.find((s) => s.id === selected) ?? visible[0] ?? null;
 
+  const canEdit = canEditEnv(project, team, env.id);
+
   const toggle = <T,>(list: T[], v: T) =>
     list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
 
@@ -153,10 +155,17 @@ export function ProjectsView(props: {
               <span className="sep">/</span>
               <strong>{env.name}</strong>
             </span>
-            <button type="button" className="primary" onClick={() => setCreating(true)}>
-              <Icon name="plus" size={13} strokeWidth={2.4} />
-              New
-            </button>
+            {canEdit ? (
+              <button type="button" className="primary" onClick={() => setCreating(true)}>
+                <Icon name="plus" size={13} strokeWidth={2.4} />
+                New
+              </button>
+            ) : (
+              <span className="pill" title={`You can use ${env.name} but not change it`}>
+                <Icon name="lock" size={11} />
+                View only
+              </span>
+            )}
           </div>
           <div className="seg" role="tablist" aria-label="Environment">
             {project.environments.map((e) => (
@@ -215,13 +224,14 @@ export function ProjectsView(props: {
             env={env}
             secret={current}
             team={team}
+            canEdit={canEdit}
             onEnvChange={props.onEnvChange}
             onOpenAccess={props.onOpenAccess}
           />
         ) : (
           <div className="empty">
             <Icon name="folder" size={32} />
-            <span>Select a secret, or add one with New.</span>
+            <span>{canEdit ? 'Select a secret, or add one with New.' : 'Select a secret.'}</span>
           </div>
         )}
       </section>
@@ -248,6 +258,8 @@ function SecretDetail(props: {
   env: Environment;
   secret: ProjectSecret;
   team: ProjectTeam | undefined;
+  /** Whether this account can change secrets in `env`; hides Delete when not. */
+  canEdit: boolean;
   onEnvChange: (envId: string) => void;
   onOpenAccess: () => void;
 }) {
@@ -436,9 +448,11 @@ function SecretDetail(props: {
               </button>
             </>
           ) : (
-            <button type="button" className="ghost" onClick={() => setConfirmDelete(true)}>
-              <Icon name="trash" size={13} /> Delete
-            </button>
+            props.canEdit && (
+              <button type="button" className="ghost" onClick={() => setConfirmDelete(true)}>
+                <Icon name="trash" size={13} /> Delete
+              </button>
+            )
           )}
         </div>
       </div>

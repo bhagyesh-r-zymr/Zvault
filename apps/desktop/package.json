@@ -16,7 +16,8 @@
     "@tauri-apps/api": "^2.11.1",
     "@zvault/shared": "workspace:*",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.5",

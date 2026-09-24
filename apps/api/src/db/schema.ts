@@ -1,11 +1,13 @@
 import type { DeviceInfo, EncryptedBlob } from '@zvault/shared';
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   customType,
   index,
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uuid,
@@ -106,4 +108,126 @@ export const sessions = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('sessions_account_idx').on(t.accountId)],
+);
+
+/**
+ * Vaults of login items. `seq` is the vault's change counter: every item
+ * write takes the next value, which becomes the item's sync cursor.
+ */
+export const vaults = pgTable(
+  'vaults',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    encryptedKey: jsonb('encrypted_key').$type<EncryptedBlob>().notNull(),
+    encryptedMeta: jsonb('encrypted_meta').$type<EncryptedBlob>().notNull(),
+    seq: integer('seq').notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index('vaults_owner_idx').on(t.ownerId)],
+);
+
+/** Vault items; a deleted item keeps its row (without blobs) as a tombstone. */
+export const vaultItems = pgTable(
+  'vault_items',
+  {
+    vaultId: uuid('vault_id')
+      .notNull()
+      .references(() => vaults.id, { onDelete: 'cascade' }),
+    id: uuid('id').notNull(),
+    revision: integer('revision').notNull(),
+    seq: integer('seq').notNull(),
+    deleted: boolean('deleted').notNull().default(false),
+    encryptedKey: jsonb('encrypted_key').$type<EncryptedBlob>(),
+    encryptedData: jsonb('encrypted_data').$type<EncryptedBlob>(),
+    updatedAt: ts('updated_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.vaultId, t.id] }),
+    index('vault_items_seq_idx').on(t.vaultId, t.seq),
+  ],
+);
+
+/**
+ * Projects of secrets. Everything readable about a project (its name, its
+ * environments' and folders' names, secret names and tags) is sealed with the
+ * project key, which the server never holds.
+ */
+export const projects = pgTable(
+  'projects',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    encryptedMeta: jsonb('encrypted_meta').$type<EncryptedBlob>().notNull(),
+    revision: integer('revision').notNull().default(1),
+    /** Change counter shared by all of the project's entries. */
+    seq: integer('seq').notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [index('projects_owner_idx').on(t.ownerId)],
+);
+
+/**
+ * Who holds which key. `resourceId` is the project id (the project key) or
+ * one of its environment ids (that environment's key); `wrappedKey` is the
+ * key wrapped for `accountId`. Holding a grant is what access means.
+ */
+export const keyGrants = pgTable(
+  'key_grants',
+  {
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    resourceId: uuid('resource_id').notNull(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    wrappedKey: jsonb('wrapped_key').$type<EncryptedBlob>().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.resourceId, t.accountId] }),
+    index('key_grants_account_idx').on(t.accountId),
+  ],
+);
+
+/** Environments, folders and secrets of a project. Deleted entries stay as tombstones. */
+export const projectEntries = pgTable(
+  'project_entries',
+  {
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    id: uuid('id').notNull(),
+    type: text('type').$type<'environment' | 'folder' | 'secret'>().notNull(),
+    revision: integer('revision').notNull(),
+    seq: integer('seq').notNull(),
+    deleted: boolean('deleted').notNull().default(false),
+    encryptedMeta: jsonb('encrypted_meta').$type<EncryptedBlob>(),
+    updatedAt: ts('updated_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.id] }),
+    index('project_entries_seq_idx').on(t.projectId, t.seq),
+  ],
+);
+
+/** A secret's value in one environment, sealed with that environment's key. */
+export const secretValues = pgTable(
+  'secret_values',
+  {
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    secretId: uuid('secret_id').notNull(),
+    environmentId: uuid('environment_id').notNull(),
+    encryptedValue: jsonb('encrypted_value').$type<EncryptedBlob>().notNull(),
+    updatedAt: ts('updated_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.secretId, t.environmentId] })],
 );

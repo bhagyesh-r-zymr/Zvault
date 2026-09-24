@@ -18,6 +18,9 @@
 //! Neither secret alone is enough: a stolen server database needs both the
 //! master password and the 128-bit Secret Key, which never leaves the device
 //! except on the printed Emergency Kit.
+//!
+//! Vault and item encryption (per-item keys, padding, record binding) lives in
+//! [`vault`].
 
 mod aead;
 mod error;
@@ -27,6 +30,7 @@ mod keyset;
 mod random;
 mod secret_key;
 pub mod srp;
+pub mod vault;
 
 pub use aead::{NONCE_LEN, Sealed, TAG_LEN, open, seal};
 pub use error::{Error, Result};

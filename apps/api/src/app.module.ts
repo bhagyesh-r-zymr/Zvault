@@ -9,6 +9,7 @@ import { HealthController } from './health/health.controller.js';
 import { MailModule } from './mail/mail.module.js';
 import { MetaController } from './meta/meta.controller.js';
 import { TwoFactorModule } from './two-factor/two-factor.module.js';
+import { VaultModule } from './vault/vault.module.js';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { TwoFactorModule } from './two-factor/two-factor.module.js';
     DevicesModule,
     AuthModule,
     TwoFactorModule.forRoot(),
+    VaultModule,
   ],
   controllers: [HealthController, MetaController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

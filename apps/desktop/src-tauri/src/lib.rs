@@ -4,12 +4,15 @@
 
 mod auth;
 mod emergency_kit;
+mod vault;
 
 use std::sync::Mutex;
 
 use serde::Serialize;
 
+pub(crate) use auth::CRYPTO_VERSION;
 pub use emergency_kit::stage_secret_key;
+pub use vault::Keyring;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,7 +25,7 @@ struct CoreInfo {
 #[tauri::command]
 fn core_info() -> CoreInfo {
     CoreInfo {
-        crypto_version: auth::CRYPTO_VERSION,
+        crypto_version: CRYPTO_VERSION,
         aead: "xchacha20poly1305",
         kdf: "argon2id + secret key (2SKD)",
     }
@@ -34,6 +37,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(auth::AuthState::default()))
         .manage(emergency_kit::PendingKit::default())
+        .manage(Keyring::default())
         .invoke_handler(tauri::generate_handler![
             core_info,
             auth::create_account,
@@ -44,6 +48,12 @@ pub fn run() {
             emergency_kit::emergency_kit_pending,
             emergency_kit::save_emergency_kit,
             emergency_kit::discard_emergency_kit,
+            vault::vault_create,
+            vault::vault_open,
+            vault::vault_lock,
+            vault::item_seal,
+            vault::item_open,
+            vault::item_summary,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Zvault");

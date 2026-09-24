@@ -1,20 +1,21 @@
-//! `zv://` secret references and the scope patterns that allow them.
+//! `zv://` secret paths and the scope patterns that allow them.
 //!
-//! A reference names one value in one environment of one project:
+//! A path names one secret's value in one environment of one project:
 //!
 //! ```text
-//! zv://<project>/<environment>/[<folder>/]<item>[#<field>]
+//! zv://<project>/<environment>/[<folder>/]<KEY>
 //! ```
 //!
-//! Folders are one level deep, so three path segments mean no folder and four
-//! mean a folder. The field defaults to the item's primary value
-//! ([`DEFAULT_FIELD`]). Segments are slugs (`A-Z a-z 0-9 . _ -`) and compare
-//! case-insensitively; the canonical form is lowercase.
+//! This is the format of `parseSecretPath` in `@zvault/shared` (projects.ts);
+//! keep the two in step. Project, environment and folder are slugs
+//! (lowercase letters, digits and single dashes, at most 64). `KEY` is the
+//! secret's variable name (`[A-Za-z_][A-Za-z0-9_]*`, at most 128), which is
+//! also what `zv run` and `zv env` export it as. Folders are one level deep,
+//! so three segments mean no folder and four mean a folder.
 //!
-//! A scope pattern is either a reference (an exact grant; without a `#field`
-//! it covers every field of that item) or a path prefix ending in `/*`, which
-//! covers everything below it: `zv://web/*`, `zv://web/dev/*`,
-//! `zv://web/dev/stripe/*`.
+//! A scope pattern is either a path (one secret) or a place ending in `/*`,
+//! which covers everything below it: `zv://web/*`, `zv://web/dev/*`,
+//! `zv://web/dev/payments/*`.
 
 use std::fmt;
 use std::str::FromStr;
@@ -22,56 +23,69 @@ use std::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub const SCHEME: &str = "zv://";
-/// The field a reference without `#field` resolves to.
-pub const DEFAULT_FIELD: &str = "password";
-const MAX_SEGMENT: usize = 64;
+const MAX_SLUG: usize = 64;
+const MAX_KEY: usize = 128;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum RefError {
-    #[error("a secret reference starts with zv://")]
+    #[error("a secret path starts with zv://")]
     Scheme,
-    #[error("a secret reference is zv://project/environment/[folder/]item[#field]")]
+    #[error("a secret path is zv://project/environment/[folder/]KEY")]
     Shape,
-    #[error("each part of a secret reference is 1 to 64 of A-Z a-z 0-9 . _ -")]
-    Segment,
+    #[error("project, environment and folder names are lowercase letters, digits and dashes")]
+    Slug,
+    #[error("the last part of a secret path is its variable name, like STRIPE_SECRET_KEY")]
+    Key,
 }
 
-fn segment(s: &str) -> Result<String, RefError> {
+/// Matches `Slug` in `@zvault/shared`.
+fn slug(s: &str) -> Result<String, RefError> {
     let ok = !s.is_empty()
-        && s.len() <= MAX_SEGMENT
-        && s != "."
-        && s != ".."
+        && s.len() <= MAX_SLUG
+        && !s.starts_with('-')
+        && !s.ends_with('-')
+        && !s.contains("--")
         && s.bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'));
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
     if ok {
-        Ok(s.to_ascii_lowercase())
+        Ok(s.to_owned())
     } else {
-        Err(RefError::Segment)
+        Err(RefError::Slug)
     }
 }
 
-/// A parsed, canonical `zv://` reference.
+/// Matches `SecretKeyName` in `@zvault/shared`.
+pub fn valid_key(s: &str) -> bool {
+    let mut bytes = s.bytes();
+    s.len() <= MAX_KEY
+        && bytes
+            .next()
+            .is_some_and(|b| b.is_ascii_alphabetic() || b == b'_')
+        && bytes.all(|b| b.is_ascii_alphanumeric() || b == b'_')
+}
+
+/// A parsed `zv://` path.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SecretRef {
     pub project: String,
     pub environment: String,
     pub folder: Option<String>,
-    pub item: String,
-    /// `None` means [`DEFAULT_FIELD`].
-    pub field: Option<String>,
+    /// The variable name, case preserved.
+    pub key: String,
 }
 
 impl SecretRef {
-    pub fn field_or_default(&self) -> &str {
-        self.field.as_deref().unwrap_or(DEFAULT_FIELD)
+    /// The environment variable `zv env` and `zv run --env-from` use.
+    pub fn env_name(&self) -> &str {
+        &self.key
     }
 
-    fn path(&self) -> Vec<&str> {
+    /// Project, environment and folder, in order.
+    pub fn places(&self) -> Vec<&str> {
         let mut p = vec![self.project.as_str(), self.environment.as_str()];
         if let Some(f) = &self.folder {
             p.push(f);
         }
-        p.push(&self.item);
         p
     }
 }
@@ -81,61 +95,68 @@ impl FromStr for SecretRef {
 
     fn from_str(s: &str) -> Result<Self, RefError> {
         let rest = s.strip_prefix(SCHEME).ok_or(RefError::Scheme)?;
-        let (path, field) = match rest.split_once('#') {
-            Some((p, f)) => (p, Some(segment(f)?)),
-            None => (rest, None),
-        };
-        let parts: Vec<&str> = path.split('/').collect();
-        let (project, environment, folder, item) = match parts.as_slice() {
-            [p, e, i] => (p, e, None, i),
-            [p, e, f, i] => (p, e, Some(f), i),
+        let parts: Vec<&str> = rest.split('/').collect();
+        let (project, environment, folder, key) = match parts.as_slice() {
+            [p, e, k] => (p, e, None, k),
+            [p, e, f, k] => (p, e, Some(f), k),
             _ => return Err(RefError::Shape),
         };
+        if !valid_key(key) {
+            return Err(RefError::Key);
+        }
         Ok(Self {
-            project: segment(project)?,
-            environment: segment(environment)?,
-            folder: folder.map(|f| segment(f)).transpose()?,
-            item: segment(item)?,
-            field,
+            project: slug(project)?,
+            environment: slug(environment)?,
+            folder: folder.map(|f| slug(f)).transpose()?,
+            key: (*key).to_owned(),
         })
     }
 }
 
 impl fmt::Display for SecretRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{SCHEME}{}", self.path().join("/"))?;
-        if let Some(field) = &self.field {
-            write!(f, "#{field}")?;
+        write!(f, "{SCHEME}")?;
+        for place in self.places() {
+            write!(f, "{place}/")?;
         }
-        Ok(())
+        f.write_str(&self.key)
     }
 }
 
-/// What an agent may read.
+/// What an agent may read, or a place to list.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ScopePattern {
-    /// One item, or one field of it when `field` is set.
+    /// One secret.
     Exact(SecretRef),
-    /// Everything under a path of 1 to 3 segments (project, environment,
-    /// folder).
+    /// Everything under 1 to 3 slugs (project, environment, folder).
     Prefix(Vec<String>),
 }
 
 impl ScopePattern {
     pub fn allows(&self, r: &SecretRef) -> bool {
         match self {
-            Self::Exact(p) => {
-                p.project == r.project
-                    && p.environment == r.environment
-                    && p.folder == r.folder
-                    && p.item == r.item
-                    && p.field.as_deref().is_none_or(|f| f == r.field_or_default())
-            }
+            Self::Exact(p) => p == r,
             Self::Prefix(prefix) => {
-                let path = r.path();
-                // A prefix always stops short of the item.
-                prefix.len() < path.len() && path.iter().zip(prefix).all(|(a, b)| *a == b)
+                let places = r.places();
+                prefix.len() <= places.len() && places.iter().zip(prefix).all(|(a, b)| *a == b)
             }
+        }
+    }
+
+    /// Parses what a person types to name a place: `zv://web`,
+    /// `zv://web/dev`, or a folder with a trailing `/` or `/*`
+    /// (`zv://web/dev/payments/`). A full path names that one secret.
+    pub fn parse_place(s: &str) -> Result<Self, RefError> {
+        let trimmed = s.trim_end_matches("/*").trim_end_matches('/');
+        let depth = trimmed
+            .strip_prefix(SCHEME)
+            .ok_or(RefError::Scheme)?
+            .split('/')
+            .count();
+        if depth <= 2 || s.ends_with('/') || s.ends_with("/*") {
+            format!("{trimmed}/*").parse()
+        } else {
+            trimmed.parse().map(Self::Exact)
         }
     }
 }
@@ -154,7 +175,7 @@ impl FromStr for ScopePattern {
         }
         parts
             .into_iter()
-            .map(segment)
+            .map(slug)
             .collect::<Result<_, _>>()
             .map(Self::Prefix)
     }
@@ -200,73 +221,86 @@ mod tests {
     }
 
     #[test]
-    fn parses_with_and_without_folder_and_field() {
-        let a = r("zv://web/prod/stripe-key");
+    fn parses_with_and_without_folder() {
+        let a = r("zv://web/production/STRIPE_KEY");
         assert_eq!(a.project, "web");
-        assert_eq!(a.environment, "prod");
+        assert_eq!(a.environment, "production");
         assert_eq!(a.folder, None);
-        assert_eq!(a.item, "stripe-key");
-        assert_eq!(a.field_or_default(), DEFAULT_FIELD);
+        assert_eq!(a.key, "STRIPE_KEY");
+        assert_eq!(a.env_name(), "STRIPE_KEY");
 
-        let b = r("zv://Web/QA-sandbox/payments/Stripe_Key#secret");
-        assert_eq!(b.folder.as_deref(), Some("payments"));
-        assert_eq!(b.field.as_deref(), Some("secret"));
+        let b = r("zv://payments-api/qa-sandbox/billing/stripe_Secret_1");
+        assert_eq!(b.folder.as_deref(), Some("billing"));
+        assert_eq!(b.key, "stripe_Secret_1", "keys keep their case");
         assert_eq!(
             b.to_string(),
-            "zv://web/qa-sandbox/payments/stripe_key#secret"
+            "zv://payments-api/qa-sandbox/billing/stripe_Secret_1"
         );
         assert_eq!(r(&b.to_string()), b);
     }
 
     #[test]
-    fn rejects_malformed_references() {
+    fn matches_the_shared_path_rules() {
         for bad in [
             "",
-            "https://web/prod/key",
+            "https://web/prod/KEY",
             "zv://web/prod",
-            "zv://web/prod/a/b/c",
-            "zv://web//key",
-            "zv://web/prod/../key",
-            "zv://web/prod/ke y",
-            "zv://web/prod/key#",
-            "zv://web/prod/key#a#b",
-            "zv://web/prod/key/",
+            "zv://web/prod/a/b/KEY",
+            "zv://web//KEY",
+            "zv://Web/prod/KEY",
+            "zv://web/prod-/KEY",
+            "zv://web/pr--od/KEY",
+            "zv://web/prod/1KEY",
+            "zv://web/prod/KEY-X",
+            "zv://web/prod/KEY/",
+            "zv://web/prod/billing_x/KEY",
         ] {
             assert!(bad.parse::<SecretRef>().is_err(), "{bad}");
         }
-        let long = format!("zv://web/prod/{}", "k".repeat(65));
-        assert!(long.parse::<SecretRef>().is_err());
+        let long_key = format!("zv://web/prod/{}", "K".repeat(128));
+        assert!(long_key.parse::<SecretRef>().is_ok());
+        let too_long = format!("zv://web/prod/{}", "K".repeat(129));
+        assert!(too_long.parse::<SecretRef>().is_err());
+        let long_slug = format!("zv://{}/prod/K", "w".repeat(65));
+        assert!(long_slug.parse::<SecretRef>().is_err());
     }
 
     #[test]
-    fn exact_scope_covers_all_fields_unless_one_is_named() {
-        let item = p("zv://web/prod/stripe");
-        assert!(item.allows(&r("zv://web/prod/stripe")));
-        assert!(item.allows(&r("zv://web/prod/stripe#username")));
-        assert!(!item.allows(&r("zv://web/prod/pay/stripe")));
-        assert!(!item.allows(&r("zv://web/dev/stripe")));
-
-        let field = p("zv://web/prod/stripe#password");
-        assert!(field.allows(&r("zv://web/prod/stripe")));
-        assert!(!field.allows(&r("zv://web/prod/stripe#username")));
+    fn exact_scope_is_one_secret() {
+        let one = p("zv://web/prod/STRIPE");
+        assert!(one.allows(&r("zv://web/prod/STRIPE")));
+        assert!(!one.allows(&r("zv://web/prod/pay/STRIPE")));
+        assert!(!one.allows(&r("zv://web/dev/STRIPE")));
+        assert!(!one.allows(&r("zv://web/prod/stripe")));
     }
 
     #[test]
     fn prefix_scope_covers_what_is_below_it() {
         let env = p("zv://web/dev/*");
-        assert!(env.allows(&r("zv://web/dev/db-url")));
-        assert!(env.allows(&r("zv://web/dev/payments/stripe#secret")));
-        assert!(!env.allows(&r("zv://web/prod/db-url")));
-        assert!(!env.allows(&r("zv://webapp/dev/db-url")));
+        assert!(env.allows(&r("zv://web/dev/DB_URL")));
+        assert!(env.allows(&r("zv://web/dev/payments/STRIPE")));
+        assert!(!env.allows(&r("zv://web/prod/DB_URL")));
+        assert!(!env.allows(&r("zv://webapp/dev/DB_URL")));
 
         let folder = p("zv://web/dev/payments/*");
-        assert!(folder.allows(&r("zv://web/dev/payments/stripe")));
-        // An item named like the folder is not inside it.
-        assert!(!folder.allows(&r("zv://web/dev/payments")));
+        assert!(folder.allows(&r("zv://web/dev/payments/STRIPE")));
+        assert!(!folder.allows(&r("zv://web/dev/STRIPE")));
 
-        assert!(p("zv://web/*").allows(&r("zv://web/prod/x")));
+        assert!(p("zv://web/*").allows(&r("zv://web/prod/X")));
         assert!("zv://a/b/c/d/*".parse::<ScopePattern>().is_err());
         assert!("zv://*".parse::<ScopePattern>().is_err());
+    }
+
+    #[test]
+    fn parses_places() {
+        let place = |s: &str| ScopePattern::parse_place(s).unwrap().to_string();
+        assert_eq!(place("zv://web"), "zv://web/*");
+        assert_eq!(place("zv://web/dev"), "zv://web/dev/*");
+        assert_eq!(place("zv://web/dev/"), "zv://web/dev/*");
+        assert_eq!(place("zv://web/dev/payments/*"), "zv://web/dev/payments/*");
+        assert_eq!(place("zv://web/dev/payments/"), "zv://web/dev/payments/*");
+        assert_eq!(place("zv://web/dev/STRIPE"), "zv://web/dev/STRIPE");
+        assert!(ScopePattern::parse_place("web/dev").is_err());
     }
 
     #[test]

@@ -45,8 +45,10 @@ pnpm test           # TypeScript tests
 cargo test --workspace
 
 # Backend on http://localhost:3000 (try GET /v1/health)
+docker compose up -d                    # PostgreSQL (+ Mailpit for trying SMTP)
 cp apps/api/.env.example apps/api/.env
-pnpm --filter @zvault/api dev
+pnpm --filter @zvault/api db:migrate
+pnpm --filter @zvault/api dev           # sign-up codes are printed to this log
 
 # Desktop app (opens a native window)
 pnpm --filter @zvault/desktop tauri dev
@@ -55,9 +57,26 @@ pnpm --filter @zvault/desktop tauri dev
 ## Crypto at a glance
 
 ```text
-master password ──Argon2id──┐
-                            XOR ──► account unlock key ──unwraps──► keyset ──► vault keys ──► items
-Secret Key ──────HKDF───────┘
+master password ──Argon2id──┐                ┌─► unlock key ──unwraps──► keyset ──► vault keys ──► items
+                            XOR ──► HKDF ──┤
+Secret Key ──────HKDF───────┘                └─► SRP x ──► verifier g^x (the only thing the server stores)
 ```
 
 All of this runs in Rust on the device (`crates/zvault-crypto`). The server receives ciphertext, nonces, KDF parameters and the Secret Key's public id prefix only. Minimum KDF strength and the ciphertext envelope are defined once in `packages/shared` and mirrored in the Rust crate.
+
+## Sign-up and login
+
+| Step | Endpoint                                       | What happens                                                                                                                                                                 |
+| ---- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `POST /v1/auth/signup/start`                   | Emails a 6-digit code (15 min, 5 tries, 1 per minute). Always 202; a registered address gets a "you already have an account" email instead.                                  |
+| 2    | `POST /v1/auth/signup/verify`                  | Exchanges the code for a single-use sign-up token (30 min).                                                                                                                  |
+| 3    | `POST /v1/auth/signup/complete`                | The app generates the Secret Key, KDF salt, SRP verifier and sealed keyset in Rust and uploads everything but the Secret Key. The Emergency Kit screen shows the Secret Key. |
+| 4    | `POST /v1/auth/login/start`                    | Returns KDF params and SRP `B`. Unknown emails get a stable decoy, so this can't be used to find accounts.                                                                   |
+| 5    | `POST /v1/auth/login/finish`                   | Checks SRP proof `M1`, returns `M2`, a session token and the sealed keyset. The app verifies `M2` before opening the keyset.                                                 |
+| –    | `GET /v1/auth/session`, `POST /v1/auth/logout` | Bearer-token session (stored hashed, `SESSION_TTL_MINUTES`).                                                                                                                 |
+
+SRP is SRP-6a over the RFC 5054 3072-bit group with SHA-256; the exact spec is in `crates/zvault-crypto/src/srp.rs`. The Rust client and the TypeScript server are both checked against `crates/zvault-crypto/tests/srp-v1.json`, a vector produced by an independent implementation.
+
+**Database:** PostgreSQL (Amazon RDS/Aurora in production) via Drizzle ORM; migrations live in `apps/api/drizzle`. API tests run against an in-process Postgres (PGlite), so no database is needed for `pnpm test`.
+
+**Email:** `MAIL_TRANSPORT=log` prints messages to the API log for development. Set `MAIL_TRANSPORT=smtp` and the `SMTP_*` variables in `apps/api/.env` (see `.env.example`) to send real mail, e.g. through Amazon SES. Production refuses the log transport and plaintext SMTP.

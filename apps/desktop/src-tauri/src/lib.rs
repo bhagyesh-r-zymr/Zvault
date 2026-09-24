@@ -2,14 +2,14 @@
 //! into `zvault-crypto`; secrets never cross into JavaScript unless the UI
 //! must display them (for example the Secret Key on the Emergency Kit).
 
+mod auth;
 mod emergency_kit;
+
+use std::sync::Mutex;
 
 use serde::Serialize;
 
 pub use emergency_kit::stage_secret_key;
-
-/// Must match `CRYPTO_VERSION` in `@zvault/shared`.
-const CRYPTO_VERSION: u32 = 1;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,7 +22,7 @@ struct CoreInfo {
 #[tauri::command]
 fn core_info() -> CoreInfo {
     CoreInfo {
-        crypto_version: CRYPTO_VERSION,
+        crypto_version: auth::CRYPTO_VERSION,
         aead: "xchacha20poly1305",
         kdf: "argon2id + secret key (2SKD)",
     }
@@ -32,9 +32,15 @@ fn core_info() -> CoreInfo {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(Mutex::new(auth::AuthState::default()))
         .manage(emergency_kit::PendingKit::default())
         .invoke_handler(tauri::generate_handler![
             core_info,
+            auth::create_account,
+            auth::login_prove,
+            auth::login_finish,
+            auth::lock,
+            auth::unlocked,
             emergency_kit::emergency_kit_pending,
             emergency_kit::save_emergency_kit,
             emergency_kit::discard_emergency_kit,

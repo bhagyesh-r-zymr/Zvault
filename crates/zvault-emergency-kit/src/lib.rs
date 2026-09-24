@@ -101,8 +101,14 @@ const ADVICE: &[&str] = &[
     "Anyone with this kit and your master password can open your vault, so keep it private.",
 ];
 
+/// Room for the whole content stream, so it never reallocates and leaves an
+/// unzeroized copy of the Secret Key in freed memory.
+const PAGE_CAPACITY: usize = 64 * 1024;
+
 fn page(kit: &Kit<'_>, key: &str) -> Zeroizing<String> {
-    let mut p = Page::default();
+    let mut p = Page {
+        ops: Zeroizing::new(String::with_capacity(PAGE_CAPACITY)),
+    };
 
     // Header band.
     p.fill_rect(BRAND, 0.0, PAGE_H - 84.0, PAGE_W, 84.0);
@@ -183,6 +189,10 @@ fn page(kit: &Kit<'_>, key: &str) -> Zeroizing<String> {
     kit.created_on.write_long(&mut footer);
     p.text(Font::Regular, 8.0, MUTED, MARGIN, 36.0, &footer);
 
+    assert!(
+        p.ops.capacity() == PAGE_CAPACITY,
+        "Emergency Kit content stream outgrew its buffer"
+    );
     p.ops
 }
 

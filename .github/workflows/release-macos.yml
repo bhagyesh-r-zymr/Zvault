@@ -67,8 +67,21 @@ jobs:
             csp="${csp/connect-src /connect-src $origin }"
           fi
           jq -n --arg v "$version" --arg csp "$csp" \
-            '{version: $v, app: {security: {csp: $csp}}}' > src-tauri/tauri.release.conf.json
+            '{version: $v, app: {security: {csp: $csp}}, bundle: {externalBin: ["binaries/zv"]}}' \
+            > src-tauri/tauri.release.conf.json
           cat src-tauri/tauri.release.conf.json
+
+      # The zv command-line tool ships inside Zvault.app (Contents/MacOS/zv)
+      # as a Tauri sidecar; the app's "Install command-line tool" links it
+      # onto the PATH. Tauri wants it named for the target triple.
+      - name: Build zv
+        run: |
+          cargo build -p zvault-cli --release --locked --target aarch64-apple-darwin
+          cargo build -p zvault-cli --release --locked --target x86_64-apple-darwin
+          mkdir -p apps/desktop/src-tauri/binaries
+          lipo -create -output apps/desktop/src-tauri/binaries/zv-universal-apple-darwin \
+            target/aarch64-apple-darwin/release/zv target/x86_64-apple-darwin/release/zv
+          lipo -info apps/desktop/src-tauri/binaries/zv-universal-apple-darwin
 
       # Only export the signing secrets that exist: Tauri treats an empty
       # APPLE_CERTIFICATE as "sign with this" and fails.
@@ -106,4 +119,12 @@ jobs:
         with:
           name: Zvault-macOS
           path: target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+      # zv on its own, for machines that only need the CLI next to an
+      # installed Zvault. Signed copies are the ones inside the .dmg.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zv-macOS
+          path: apps/desktop/src-tauri/binaries/zv-universal-apple-darwin
           if-no-files-found: error

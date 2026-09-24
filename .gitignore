@@ -18,3 +18,6 @@ cdk.out/
 
 # Written by the macOS release workflow
 apps/desktop/src-tauri/tauri.release.conf.json
+
+# zv sidecar, built by the release workflow
+apps/desktop/src-tauri/binaries/

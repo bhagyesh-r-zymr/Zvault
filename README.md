@@ -79,4 +79,4 @@ SRP is SRP-6a over the RFC 5054 3072-bit group with SHA-256; the exact spec is i
 
 **Database:** PostgreSQL (Amazon RDS/Aurora in production) via Drizzle ORM; migrations live in `apps/api/drizzle`. API tests run against an in-process Postgres (PGlite), so no database is needed for `pnpm test`.
 
-**Email:** `MAIL_TRANSPORT=log` prints messages to the API log for development. Set `MAIL_TRANSPORT=smtp` and the `SMTP_*` variables in `apps/api/.env` (see `.env.example`) to send real mail, e.g. through Amazon SES. Production refuses the log transport and plaintext SMTP.
+**Email:** `MAIL_TRANSPORT=log` prints messages to the API log for development. Set `MAIL_TRANSPORT=smtp` and the `SMTP_*` variables in `apps/api/.env` (see `.env.example`) to send real mail through any provider, or `MAIL_TRANSPORT=ses` to use the Amazon SES API with the IAM role on AWS. Production refuses the log transport and plaintext SMTP.

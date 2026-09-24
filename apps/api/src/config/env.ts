@@ -21,6 +21,12 @@ const EnvSchema = z
       ),
 
     DATABASE_URL: z.url().optional(),
+    /** Alternative to DATABASE_URL, as set by the CDK stack (password from Secrets Manager). */
+    DATABASE_HOST: z.string().min(1).optional(),
+    DATABASE_PORT: z.coerce.number().int().min(1).max(65535).default(5432),
+    DATABASE_NAME: z.string().min(1).optional(),
+    DATABASE_USER: z.string().min(1).optional(),
+    DATABASE_PASSWORD: z.string().min(1).optional(),
     DATABASE_SSL: z.stringbool().default(false),
 
     /** Keys the HMACs over verification codes and decoy logins. 32+ random chars. */
@@ -32,8 +38,15 @@ const EnvSchema = z
       .max(60 * 24 * 30)
       .default(12 * 60),
 
-    /** `log` prints emails to the server log (development only); `smtp` sends them. */
-    MAIL_TRANSPORT: z.enum(['log', 'smtp']).default('log'),
+    /**
+     * `log` prints emails to the server log (development only); `smtp` sends
+     * through any SMTP provider; `ses` uses the Amazon SES API with the task's
+     * IAM role (no SMTP credentials).
+     */
+    MAIL_TRANSPORT: z.enum(['log', 'smtp', 'ses']).default('log'),
+    /** Sender for `ses`; defaults to MAIL_FROM. */
+    SES_FROM_ADDRESS: z.string().min(3).optional(),
+    SES_CONFIGURATION_SET: z.string().min(1).optional(),
     MAIL_FROM: z.string().min(3).default('Zvault <no-reply@localhost>'),
     SMTP_HOST: z.string().min(1).optional(),
     SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
@@ -50,7 +63,13 @@ const EnvSchema = z
       if (env[key] === undefined) ctx.addIssue({ code: 'custom', path: [key], message: why });
     };
     if (prod) {
-      need('DATABASE_URL', 'is required in production');
+      if (env.DATABASE_URL === undefined && env.DATABASE_HOST === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['DATABASE_URL'],
+          message: 'DATABASE_URL or DATABASE_HOST is required in production',
+        });
+      }
       need('SERVER_SECRET', 'is required in production');
       if (env.SMTP_ALLOW_INSECURE) {
         ctx.addIssue({
@@ -59,11 +78,11 @@ const EnvSchema = z
           message: 'must be false in production',
         });
       }
-      if (env.MAIL_TRANSPORT !== 'smtp') {
+      if (env.MAIL_TRANSPORT === 'log') {
         ctx.addIssue({
           code: 'custom',
           path: ['MAIL_TRANSPORT'],
-          message: 'must be smtp in production',
+          message: 'must be smtp or ses in production',
         });
       }
     }
@@ -71,9 +90,26 @@ const EnvSchema = z
   })
   .transform((env) => ({
     ...env,
-    DATABASE_URL: env.DATABASE_URL ?? DEV_DEFAULTS.DATABASE_URL,
+    DATABASE_URL: env.DATABASE_URL ?? databaseUrlFromParts(env) ?? DEV_DEFAULTS.DATABASE_URL,
     SERVER_SECRET: env.SERVER_SECRET ?? DEV_DEFAULTS.SERVER_SECRET,
   }));
+
+function databaseUrlFromParts(env: {
+  DATABASE_HOST?: string | undefined;
+  DATABASE_PORT: number;
+  DATABASE_NAME?: string | undefined;
+  DATABASE_USER?: string | undefined;
+  DATABASE_PASSWORD?: string | undefined;
+}): string | undefined {
+  if (!env.DATABASE_HOST) return undefined;
+  const url = new URL('postgres://placeholder');
+  url.hostname = env.DATABASE_HOST;
+  url.port = String(env.DATABASE_PORT);
+  url.pathname = `/${env.DATABASE_NAME ?? 'zvault'}`;
+  url.username = env.DATABASE_USER ?? '';
+  url.password = env.DATABASE_PASSWORD ?? '';
+  return url.toString();
+}
 
 /** Blank lines in `.env` (e.g. `SMTP_USER=`) mean "not set". */
 const withoutBlanks = (source: NodeJS.ProcessEnv) =>

@@ -39,6 +39,24 @@ describe('loadEnv', () => {
     expect(env.SMTP_USER).toBeUndefined();
   });
 
+  it('builds the database URL from the parts the CDK stack injects', () => {
+    const env = loadEnv({
+      NODE_ENV: 'production',
+      DATABASE_HOST: 'db.cluster.internal',
+      DATABASE_NAME: 'zvault',
+      DATABASE_USER: 'app',
+      DATABASE_PASSWORD: 'p@ss/word',
+      DATABASE_SSL: 'true',
+      SERVER_SECRET: 'x'.repeat(48),
+      MAIL_TRANSPORT: 'ses',
+      SES_FROM_ADDRESS: 'no-reply@zvault.example',
+    });
+    const url = new URL(env.DATABASE_URL);
+    expect(url.hostname).toBe('db.cluster.internal');
+    expect(url.port).toBe('5432');
+    expect(decodeURIComponent(url.password)).toBe('p@ss/word');
+  });
+
   it('refuses plaintext SMTP in production', () => {
     expect(() =>
       loadEnv({

@@ -13,7 +13,7 @@ import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { DATABASE, type Database } from '../db/database.js';
 import { accounts, srpChallenges, type StoredKdf } from '../db/schema.js';
-import { SessionService } from './session.service.js';
+import { SessionStore } from '../devices/session.store.js';
 import { createChallenge, pad, toInt, verifyClient } from './srp.js';
 import { hmac, minutesFromNow } from './tokens.js';
 
@@ -27,7 +27,7 @@ export class LoginService {
   constructor(
     @Inject(DATABASE) private readonly db: Database,
     @Inject(ENV) private readonly env: Env,
-    private readonly sessions: SessionService,
+    private readonly sessions: SessionStore,
   ) {}
 
   /**
@@ -96,10 +96,10 @@ export class LoginService {
     });
     if (!verified || !account) throw new UnauthorizedException(LOGIN_FAILED);
 
-    const session = await this.sessions.create(account.id);
+    const { session, token } = await this.sessions.issue(account.id, req.device);
     return {
       srpM2: verified.serverProof.toString('base64url') as LoginFinishResponse['srpM2'],
-      sessionToken: session.token as LoginFinishResponse['sessionToken'],
+      sessionToken: token as LoginFinishResponse['sessionToken'],
       expiresAt: session.expiresAt.toISOString(),
       accountId: account.id,
       encryptedKeyset: account.encryptedKeyset,

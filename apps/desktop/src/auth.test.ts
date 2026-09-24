@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('./api.js', () => ({
   api: { loginStart: vi.fn(), loginFinish: vi.fn(), logout: vi.fn(), signupComplete: vi.fn() },
 }));
+vi.mock('./device.js', () => ({
+  thisDevice: () => Promise.resolve({ name: 'Mac', platform: 'macos', appVersion: '0.1.0' }),
+}));
 vi.mock('./core.js', () => ({
   core: { loginProve: vi.fn(), loginFinish: vi.fn(), createAccount: vi.fn(), lock: vi.fn() },
 }));
@@ -50,7 +53,12 @@ describe('signIn', () => {
       kdf,
       srpB: 'B',
     });
-    expect(api.loginFinish).toHaveBeenCalledWith({ loginId: 'id', srpA: 'A', srpM1: 'M1' });
+    expect(api.loginFinish).toHaveBeenCalledWith({
+      loginId: 'id',
+      srpA: 'A',
+      srpM1: 'M1',
+      device: { name: 'Mac', platform: 'macos', appVersion: '0.1.0' },
+    });
     expect(core.loginFinish).toHaveBeenCalledWith('M2', keyset);
     expect(session).toEqual({
       email: 'a@b.co',

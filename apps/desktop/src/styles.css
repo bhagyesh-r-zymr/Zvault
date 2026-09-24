@@ -62,6 +62,44 @@ h1 {
   margin: 1rem 0;
 }
 
+.devices ul {
+  list-style: none;
+  margin: 1rem 0;
+  padding: 0;
+}
+
+.devices li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+}
+
+.devices .meta {
+  font-size: 0.85em;
+  opacity: 0.7;
+  margin-top: 0.25rem;
+}
+
+.devices .badge {
+  font-size: 0.75em;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.devices .danger {
+  color: #c62828;
+}
+
+.devices .confirm {
+  display: inline-flex;
+  gap: 0.5rem;
+}
+
 p {
   margin: 0;
   line-height: 1.45;

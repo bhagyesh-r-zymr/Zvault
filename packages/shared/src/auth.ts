@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DeviceInfo } from './devices.js';
 import { EncryptedBlob, KdfParams } from './crypto.js';
 import { Base64Url, base64UrlOfLength } from './encoding.js';
 
@@ -78,6 +79,7 @@ export const LoginFinishRequest = z.object({
   loginId: z.uuid(),
   srpA: SrpElement,
   srpM1: SrpProof,
+  device: DeviceInfo,
 });
 export type LoginFinishRequest = z.input<typeof LoginFinishRequest>;
 

@@ -1,12 +1,18 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { OneTimePasswordCode, OneTimePasswordEditor } from '../otp/index.js';
+import type { SharingApi } from '../sharing/api.js';
+import { ShareItem } from '../sharing/ShareItem.js';
+import { CopyButton, ErrorLine, LetterTile, SecretText, Sheet } from '../ui/controls.js';
+import { Icon } from '../ui/Icon.js';
 import { ConflictError, type VaultApi } from './api.js';
 import { vaultCore, type ItemFields, type VaultCore } from './core.js';
 import { openDefaultVault, VaultSync } from './sync.js';
 import './vault.css';
 
 const SYNC_INTERVAL_MS = 30_000;
-const CLIPBOARD_CLEAR_MS = 30_000;
+
+/** Fired by the app shell on ⌘K so the list's search box takes focus. */
+export const FOCUS_SEARCH_EVENT = 'zvault:focus-search';
 
 const EMPTY: ItemFields = {
   title: '',
@@ -20,15 +26,25 @@ const EMPTY: ItemFields = {
 type Pane = { mode: 'view'; id: string } | { mode: 'edit'; id: string | null } | { mode: 'none' };
 
 /**
- * The main vault screen, shown once the account is unlocked. The login flow
+ * The personal vault, shown once the account is unlocked. The login flow
  * mounts it with an API client that carries the session token.
  */
-export function VaultScreen({ api, core = vaultCore }: { api: VaultApi; core?: VaultCore }) {
+export function VaultScreen({
+  api,
+  sharing,
+  core = vaultCore,
+}: {
+  api: VaultApi;
+  sharing?: SharingApi;
+  core?: VaultCore;
+}) {
   const [sync, setSync] = useState<VaultSync | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    setError(null);
     openDefaultVault(api, core)
       .then(async (vault) => {
         const s = new VaultSync(api, core, vault);
@@ -39,32 +55,59 @@ export function VaultScreen({ api, core = vaultCore }: { api: VaultApi; core?: V
     return () => {
       cancelled = true;
     };
-  }, [api, core]);
+  }, [api, core, attempt]);
 
-  if (error) return <p role="alert">Could not open your vault: {error}</p>;
-  if (!sync) return <p aria-busy="true">Opening your vault…</p>;
-  return <VaultView sync={sync} />;
+  if (error) {
+    return (
+      <div className="empty">
+        <Icon name="lock" size={32} />
+        <h2 style={{ color: 'var(--text)' }}>Couldn&apos;t open your vault</h2>
+        <p>{error}</p>
+        <button type="button" onClick={() => setAttempt((n) => n + 1)}>
+          <Icon name="refresh" size={14} /> Try again
+        </button>
+      </div>
+    );
+  }
+  if (!sync) {
+    return (
+      <div className="empty" aria-busy="true">
+        <span className="spinner" />
+        Opening your vault…
+      </div>
+    );
+  }
+  return <VaultView sync={sync} {...(sharing && { sharing })} />;
 }
 
-function VaultView({ sync }: { sync: VaultSync }) {
+function VaultView({ sync, sharing }: { sync: VaultSync; sharing?: SharingApi }) {
   const items = useSyncExternalStore(sync.subscribe, sync.items);
   const [query, setQuery] = useState('');
   const [pane, setPane] = useState<Pane>({ mode: 'none' });
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const search = useRef<HTMLInputElement>(null);
 
   const pull = useCallback(() => {
-    sync.pull().then(
-      () => setSyncError(null),
-      (e: unknown) => setSyncError(message(e)),
-    );
+    setSyncing(true);
+    sync
+      .pull()
+      .then(
+        () => setSyncError(null),
+        (e: unknown) => setSyncError(message(e)),
+      )
+      .finally(() => setSyncing(false));
   }, [sync]);
 
   useEffect(() => {
     const timer = setInterval(pull, SYNC_INTERVAL_MS);
+    const focusSearch = () => search.current?.focus();
     window.addEventListener('focus', pull);
+    window.addEventListener(FOCUS_SEARCH_EVENT, focusSearch);
     return () => {
       clearInterval(timer);
       window.removeEventListener('focus', pull);
+      window.removeEventListener(FOCUS_SEARCH_EVENT, focusSearch);
     };
   }, [pull]);
 
@@ -84,52 +127,82 @@ function VaultView({ sync }: { sync: VaultSync }) {
   }, [selectedGone]);
 
   return (
-    <div className="vault">
-      <aside className="vault-list">
-        <header>
-          <h2>{sync.vault.name}</h2>
-          <button type="button" onClick={() => setPane({ mode: 'edit', id: null })}>
-            New item
-          </button>
-        </header>
-        <input
-          type="search"
-          placeholder="Search"
-          aria-label="Search items"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        <ul>
+    <div className="split">
+      <section className="list-pane" aria-label="Items">
+        <div className="list-head">
+          <div className="title-row">
+            <span className="crumb">
+              <strong>{sync.vault.name}</strong>
+            </span>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => setPane({ mode: 'edit', id: null })}
+            >
+              <Icon name="plus" size={13} strokeWidth={2.4} />
+              New
+            </button>
+          </div>
+          <input
+            ref={search}
+            type="search"
+            placeholder="Search this vault"
+            aria-label="Search items"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <div className="list-body">
           {visible.map(({ id, summary }) => (
-            <li key={id}>
-              <button
-                type="button"
-                aria-current={pane.mode !== 'none' && pane.id === id}
-                onClick={() => setPane({ mode: 'view', id })}
-              >
-                <strong>{summary.title || 'Untitled'}</strong>
-                <span>{summary.username}</span>
-              </button>
-            </li>
+            <button
+              key={id}
+              type="button"
+              className="list-item"
+              aria-current={pane.mode !== 'none' && pane.id === id}
+              onClick={() => setPane({ mode: 'view', id })}
+            >
+              <LetterTile name={summary.title || '?'} />
+              <span className="row-main">
+                <span className="row-title truncate">{summary.title || 'Untitled'}</span>
+                <span className="row-sub truncate">{summary.username || summary.url || ' '}</span>
+              </span>
+            </button>
           ))}
-        </ul>
-        {items.length === 0 && <p className="muted">No items yet.</p>}
-        <footer>
-          <button type="button" onClick={pull}>
-            Sync now
-          </button>
-          {syncError && <span role="alert">Sync failed: {syncError}</span>}
-          {sync.unreadable > 0 && (
-            <span role="alert">{sync.unreadable} item(s) could not be decrypted.</span>
+          {items.length === 0 && (
+            <div className="empty">
+              <Icon name="key" size={28} />
+              <span>No items yet. Add your first login with New.</span>
+            </div>
           )}
-        </footer>
-      </aside>
-      <section className="vault-pane">
+          {items.length > 0 && visible.length === 0 && (
+            <div className="empty">Nothing matches “{query}”.</div>
+          )}
+        </div>
+        <div className="list-foot">
+          <span style={{ flexGrow: 1 }}>
+            {items.length} item{items.length === 1 ? '' : 's'}
+          </span>
+          <button type="button" className="small ghost" onClick={pull} disabled={syncing}>
+            <Icon name="refresh" size={12} />
+            {syncing ? 'Syncing…' : 'Sync now'}
+          </button>
+        </div>
+        {(syncError || sync.unreadable > 0) && (
+          <div style={{ padding: '0 12px 12px' }}>
+            {syncError && <ErrorLine error={`Sync failed: ${syncError}`} />}
+            {sync.unreadable > 0 && (
+              <ErrorLine error={`${sync.unreadable} item(s) could not be decrypted.`} />
+            )}
+          </div>
+        )}
+      </section>
+      <section className="detail-pane" aria-label="Item details">
         {pane.mode === 'view' && (
           <ItemDetail
             key={`${pane.id}:${items.find((i) => i.id === pane.id)?.revision}`}
             sync={sync}
             id={pane.id}
+            {...(sharing && { sharing })}
             onEdit={() => setPane({ mode: 'edit', id: pane.id })}
             onDeleted={() => setPane({ mode: 'none' })}
           />
@@ -142,7 +215,12 @@ function VaultView({ sync }: { sync: VaultSync }) {
             onDone={(id) => setPane(id ? { mode: 'view', id } : { mode: 'none' })}
           />
         )}
-        {pane.mode === 'none' && <p className="muted">Select an item or create a new one.</p>}
+        {pane.mode === 'none' && (
+          <div className="empty">
+            <Icon name="items" size={32} />
+            <span>Select an item, or press New to add one.</span>
+          </div>
+        )}
       </section>
     </div>
   );
@@ -151,12 +229,15 @@ function VaultView({ sync }: { sync: VaultSync }) {
 function ItemDetail(props: {
   sync: VaultSync;
   id: string;
+  sharing?: SharingApi;
   onEdit: () => void;
   onDeleted: () => void;
 }) {
-  const { sync, id, onEdit, onDeleted } = props;
+  const { sync, id, sharing, onEdit, onDeleted } = props;
   const [fields, setFields] = useState<ItemFields | null>(null);
   const [revealed, setRevealed] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [sharingOpen, setSharingOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -165,61 +246,138 @@ function ItemDetail(props: {
 
   const totpCode = useCallback(() => sync.totpCode(id), [sync, id]);
 
+  // Inline confirmation: WKWebView does not reliably show window.confirm.
   const remove = () => {
-    if (!window.confirm(`Delete “${fields?.title || 'this item'}”?`)) return;
     sync.remove(id).then(onDeleted, (e: unknown) => setError(message(e)));
   };
 
-  if (error) return <p role="alert">{error}</p>;
+  if (error && !fields)
+    return (
+      <div className="detail-body">
+        <ErrorLine error={error} />
+      </div>
+    );
   if (!fields) return null;
+  const title = fields.title || 'Untitled';
   return (
-    <article>
-      <h2>{fields.title || 'Untitled'}</h2>
-      <dl>
-        <dt>Username</dt>
-        <dd>
-          {fields.username} <CopyButton value={fields.username} />
-        </dd>
-        <dt>Password</dt>
-        <dd>
-          <code>{revealed ? fields.password : '••••••••••••'}</code>{' '}
-          <button type="button" onClick={() => setRevealed((r) => !r)}>
-            {revealed ? 'Hide' : 'Reveal'}
-          </button>{' '}
-          <CopyButton value={fields.password} />
-        </dd>
-        {fields.totp && (
-          <>
-            <dt>One-time password</dt>
-            <dd>
-              <OneTimePasswordCode getCode={totpCode} />
-            </dd>
-          </>
+    <>
+      <div className="detail-bar">
+        <span>Personal</span>
+        {sharing && (
+          <button type="button" onClick={() => setSharingOpen(true)}>
+            <Icon name="share" size={13} /> Share
+          </button>
         )}
-        {fields.urls.length > 0 && (
-          <>
-            <dt>Websites</dt>
-            {fields.urls.map((url) => (
-              <dd key={url}>{url}</dd>
-            ))}
-          </>
-        )}
-        {fields.notes && (
-          <>
-            <dt>Notes</dt>
-            <dd className="notes">{fields.notes}</dd>
-          </>
-        )}
-      </dl>
-      <div className="actions">
         <button type="button" onClick={onEdit}>
-          Edit
-        </button>
-        <button type="button" className="danger" onClick={remove}>
-          Delete
+          <Icon name="edit" size={13} /> Edit
         </button>
       </div>
-    </article>
+      <article className="detail-body">
+        <div className="item-head">
+          <LetterTile name={title} size="large" />
+          <div>
+            <h1>{title}</h1>
+            {fields.urls[0] && <span className="row-sub">{fields.urls[0]}</span>}
+          </div>
+        </div>
+        <div className="panel rows">
+          <div className="row">
+            <div className="row-main">
+              <span className="row-label">username</span>
+              <span style={{ fontSize: 15 }}>{fields.username || '—'}</span>
+            </div>
+            <CopyButton value={fields.username} secret={false} />
+          </div>
+          <div className="row">
+            <div className="row-main">
+              <span className="row-label">password</span>
+              {fields.password ? (
+                <SecretText value={fields.password} masked={!revealed} />
+              ) : (
+                <span className="muted">—</span>
+              )}
+            </div>
+            <button
+              type="button"
+              className="small"
+              onClick={() => setRevealed((r) => !r)}
+              disabled={!fields.password}
+            >
+              <Icon name={revealed ? 'eyeOff' : 'eye'} size={13} />
+              {revealed ? 'Hide' : 'Reveal'}
+            </button>
+            <CopyButton value={fields.password} />
+          </div>
+          {fields.totp && (
+            <div className="row">
+              <div className="row-main">
+                <span className="row-label">one-time password</span>
+                <OneTimePasswordCode getCode={totpCode} />
+              </div>
+            </div>
+          )}
+          {fields.urls.map((url) => (
+            <div key={url} className="row">
+              <div className="row-main">
+                <span className="row-label">website</span>
+                <span className="truncate" style={{ color: 'var(--iris-text)' }}>
+                  {url}
+                </span>
+              </div>
+              <CopyButton value={url} secret={false} />
+            </div>
+          ))}
+        </div>
+        {fields.notes && (
+          <div className="panel panel-pad">
+            <div className="row-label" style={{ marginBottom: 6 }}>
+              notes
+            </div>
+            <p className="notes">{fields.notes}</p>
+          </div>
+        )}
+        <ErrorLine error={error} />
+        <div className="actions" style={{ marginTop: 'auto', justifyContent: 'flex-end' }}>
+          {confirmDelete ? (
+            <>
+              <span className="secondary" style={{ alignSelf: 'center' }}>
+                Delete “{title}” on all your devices?
+              </span>
+              <button type="button" onClick={() => setConfirmDelete(false)}>
+                Cancel
+              </button>
+              <button type="button" className="danger" onClick={remove}>
+                Delete
+              </button>
+            </>
+          ) : (
+            <button type="button" className="ghost" onClick={() => setConfirmDelete(true)}>
+              <Icon name="trash" size={13} /> Delete
+            </button>
+          )}
+        </div>
+      </article>
+      {sharingOpen && sharing && (
+        <Sheet
+          title={`Share ${title}`}
+          subtitle="Encrypted on this Mac before it leaves"
+          icon={<LetterTile name={title} />}
+          onClose={() => setSharingOpen(false)}
+        >
+          <ShareItem
+            api={sharing}
+            item={{
+              v: 1,
+              title,
+              ...(fields.username && { username: fields.username }),
+              ...(fields.password && { password: fields.password }),
+              ...(fields.urls[0] && { url: fields.urls[0] }),
+              ...(fields.notes && { notes: fields.notes }),
+            }}
+          />
+        </Sheet>
+      )}
+    </>
   );
 }
 
@@ -245,7 +403,12 @@ function ItemEditor(props: {
     );
   }, [sync, id]);
 
-  if (!fields) return error ? <p role="alert">{error}</p> : null;
+  if (!fields)
+    return error ? (
+      <div className="detail-body">
+        <ErrorLine error={error} />
+      </div>
+    ) : null;
 
   const set =
     (key: 'title' | 'username' | 'password' | 'notes') => (e: { target: { value: string } }) =>
@@ -267,71 +430,63 @@ function ItemEditor(props: {
   };
 
   return (
-    <form onSubmit={submit}>
-      <h2>{id === null ? 'New item' : 'Edit item'}</h2>
-      <label>
-        Title
-        <input required value={fields.title} onChange={set('title')} autoFocus />
-      </label>
-      <label>
-        Username
-        <input value={fields.username} onChange={set('username')} autoComplete="off" />
-      </label>
-      <label>
-        Password
-        <input
-          type="password"
-          value={fields.password}
-          onChange={set('password')}
-          autoComplete="new-password"
-        />
-      </label>
-      <fieldset className="otp-field">
-        <legend>One-time password</legend>
-        <OneTimePasswordEditor
-          value={fields.totp}
-          onChange={(totp) => setFields({ ...fields, totp })}
-        />
-      </fieldset>
-      <label>
-        Websites (one per line)
-        <textarea value={urls} onChange={(e) => setUrls(e.target.value)} rows={2} />
-      </label>
-      <label>
-        Notes
-        <textarea value={fields.notes} onChange={set('notes')} rows={4} />
-      </label>
-      {error && <p role="alert">{error}</p>}
-      <div className="actions">
-        <button type="submit" disabled={busy}>
-          Save
-        </button>
-        <button type="button" onClick={() => onDone(id)} disabled={busy}>
-          Cancel
-        </button>
+    <>
+      <div className="detail-bar">
+        <span>{id === null ? 'New item' : 'Editing'}</span>
       </div>
-    </form>
-  );
-}
-
-function CopyButton({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    await navigator.clipboard.writeText(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-    // Best effort: clear the clipboard later if it still holds this value.
-    setTimeout(() => {
-      navigator.clipboard
-        .readText()
-        .then((current) => (current === value ? navigator.clipboard.writeText('') : undefined))
-        .catch(() => undefined);
-    }, CLIPBOARD_CLEAR_MS);
-  };
-  return (
-    <button type="button" onClick={() => void copy()} disabled={!value}>
-      {copied ? 'Copied' : 'Copy'}
-    </button>
+      <form className="detail-body item-form" onSubmit={submit}>
+        <h1>{id === null ? 'New login' : 'Edit item'}</h1>
+        <label className="field">
+          <span>Title</span>
+          <input
+            required
+            value={fields.title}
+            onChange={set('title')}
+            autoFocus
+            placeholder="GitHub"
+          />
+        </label>
+        <div className="grid-2">
+          <label className="field">
+            <span>Username</span>
+            <input value={fields.username} onChange={set('username')} autoComplete="off" />
+          </label>
+          <label className="field">
+            <span>Password</span>
+            <input
+              type="password"
+              value={fields.password}
+              onChange={set('password')}
+              autoComplete="new-password"
+            />
+          </label>
+        </div>
+        <div className="field">
+          <span>One-time password</span>
+          <OneTimePasswordEditor
+            value={fields.totp}
+            onChange={(totp) => setFields({ ...fields, totp })}
+          />
+        </div>
+        <label className="field">
+          <span>Websites (one per line)</span>
+          <textarea value={urls} onChange={(e) => setUrls(e.target.value)} rows={2} />
+        </label>
+        <label className="field">
+          <span>Notes</span>
+          <textarea value={fields.notes} onChange={set('notes')} rows={4} />
+        </label>
+        <ErrorLine error={error} />
+        <div className="actions" style={{ justifyContent: 'flex-end' }}>
+          <button type="button" onClick={() => onDone(id)} disabled={busy}>
+            Cancel
+          </button>
+          <button type="submit" className="primary" disabled={busy}>
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </form>
+    </>
   );
 }
 

@@ -30,7 +30,7 @@ export function RecoveryCodes({ codes, account, onDone }: Props) {
   };
 
   return (
-    <section aria-labelledby="recovery-title">
+    <section aria-labelledby="recovery-title" className="tfa-step">
       <h2 id="recovery-title">Save your recovery codes</h2>
       <p>
         If you lose your authenticator, each of these codes lets you sign in once. This is the only

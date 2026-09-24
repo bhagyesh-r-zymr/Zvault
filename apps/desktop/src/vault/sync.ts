@@ -119,8 +119,23 @@ export class VaultSync {
   }
 }
 
-/** Opens the account's first vault, creating a "Personal" vault on first use. */
-export async function openDefaultVault(api: VaultApi, core: VaultCore): Promise<VaultSummary> {
+const opening = new WeakMap<VaultApi, Promise<VaultSummary>>();
+
+/**
+ * Opens the account's first vault, creating a "Personal" vault on first use.
+ * Calls that overlap share one request, so two quick mounts (StrictMode, or
+ * switching views during sign-in) can't each create a "Personal" vault.
+ */
+export function openDefaultVault(api: VaultApi, core: VaultCore): Promise<VaultSummary> {
+  let pending = opening.get(api);
+  if (!pending) {
+    pending = openOrCreate(api, core).finally(() => opening.delete(api));
+    opening.set(api, pending);
+  }
+  return pending;
+}
+
+async function openOrCreate(api: VaultApi, core: VaultCore): Promise<VaultSummary> {
   const [first] = await api.listVaults();
   if (first) return core.openVault(first);
   const { record, summary } = await core.createVault('Personal');

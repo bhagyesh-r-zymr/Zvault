@@ -14,10 +14,11 @@ use zvault_crypto::vault::{aad, open_padded, seal_padded, unwrap_key, wrap_key};
 use zvault_crypto::{NONCE_LEN, Sealed, SymmetricKey};
 
 use crate::CRYPTO_VERSION;
+use crate::projects::ProjectKeys;
 
 const ALG: &str = "xchacha20poly1305";
 /// `kid` of a vault key wrapped by the account key. Matches the API.
-const ACCOUNT_KID: &str = "account";
+pub(crate) const ACCOUNT_KID: &str = "account";
 const ITEM_KIND_LOGIN: &str = "login";
 
 /// Errors shown to the UI. Coarse on purpose: they never say which check failed.
@@ -54,7 +55,7 @@ pub struct Blob {
 }
 
 impl Blob {
-    fn new(kid: &str, sealed: &Sealed) -> Self {
+    pub(crate) fn new(kid: &str, sealed: &Sealed) -> Self {
         Self {
             v: CRYPTO_VERSION,
             alg: ALG.into(),
@@ -65,7 +66,7 @@ impl Blob {
     }
 
     /// Decodes the blob, checking it was sealed by the key the caller expects.
-    fn sealed(&self, expected_kid: &str) -> Result<Sealed> {
+    pub(crate) fn sealed(&self, expected_kid: &str) -> Result<Sealed> {
         if self.v != CRYPTO_VERSION || self.alg != ALG || self.kid != expected_kid {
             return Err(VaultError::InvalidRecord);
         }
@@ -170,6 +171,7 @@ pub struct Keyring(Mutex<Keys>);
 struct Keys {
     account: Option<SymmetricKey>,
     vaults: HashMap<String, SymmetricKey>,
+    projects: ProjectKeys,
 }
 
 impl Keyring {
@@ -177,13 +179,27 @@ impl Keyring {
     pub fn unlock(&self, account_key: SymmetricKey) {
         let mut keys = self.keys();
         keys.vaults.clear();
+        keys.projects = ProjectKeys::default();
         keys.account = Some(account_key);
     }
 
     pub fn lock(&self) {
         let mut keys = self.keys();
         keys.vaults.clear();
+        keys.projects = ProjectKeys::default();
         keys.account = None;
+    }
+
+    /// Runs `f` with the account key and the unlocked project keys.
+    pub(crate) fn with_project_keys<R>(
+        &self,
+        f: impl FnOnce(&SymmetricKey, &mut ProjectKeys) -> Result<R>,
+    ) -> Result<R> {
+        let mut keys = self.keys();
+        let Keys {
+            account, projects, ..
+        } = &mut *keys;
+        f(account.as_ref().ok_or(VaultError::Locked)?, projects)
     }
 
     fn keys(&self) -> std::sync::MutexGuard<'_, Keys> {
@@ -326,7 +342,7 @@ fn unwrap_item_key(
 }
 
 /// Ids are bound into every ciphertext, so they must be one canonical string.
-fn canonical_id(id: &str) -> Result<String> {
+pub(crate) fn canonical_id(id: &str) -> Result<String> {
     let parsed = Uuid::try_parse(id).map_err(|_| VaultError::InvalidRecord)?;
     let canonical = parsed.hyphenated().to_string();
     if canonical != id {

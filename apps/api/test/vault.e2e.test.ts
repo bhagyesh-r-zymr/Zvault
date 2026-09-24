@@ -1,7 +1,5 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
-import type { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
 import {
   ItemConflictResponse,
   ItemRecord,
@@ -9,12 +7,9 @@ import {
   SyncItemsResponse,
   type PutItemRequest,
 } from '@zvault/shared';
-import type { NextFunction, Request, Response } from 'express';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { AppModule } from '../src/app.module.js';
-import { configureApp } from '../src/bootstrap.js';
-import { loadEnv } from '../src/config/env.js';
+import { createHarness, signedInAccount, type Harness } from './harness.js';
 
 const b64 = (n: number, fill = 7) => Buffer.alloc(n, fill).toString('base64url');
 const blob = (kid: string, bytes: number, fill = 7) => ({
@@ -37,28 +32,26 @@ const itemBody = (
   }) as PutItemRequest;
 
 describe('Vault API (e2e)', () => {
-  let app: INestApplication;
-  let server: Parameters<typeof request>[0];
-  const alice = 'user-alice';
-  const bob = 'user-bob';
-  const as = (user: string) => ({ 'x-test-user': user });
+  let h: Harness;
+  let server: Harness['server'];
+  let alice: string;
+  let bob: string;
+  const headers = new Map<string, { Authorization: string }>();
+  const as = (user: string) => headers.get(user)!;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-    app = moduleRef.createNestApplication();
-    // Stands in for the auth layer, which attaches the verified account.
-    app.use((req: Request & { user?: { id: string } }, _res: Response, next: NextFunction) => {
-      const id = req.header('x-test-user');
-      if (id) req.user = { id };
-      next();
-    });
-    configureApp(app, loadEnv({ NODE_ENV: 'test' }));
-    await app.init();
-    server = app.getHttpServer() as typeof server;
+    h = await createHarness();
+    server = h.server;
+    for (const who of ['alice', 'bob']) {
+      const account = await signedInAccount(h);
+      headers.set(account.id, account.headers);
+      if (who === 'alice') alice = account.id;
+      else bob = account.id;
+    }
   });
 
   afterAll(async () => {
-    await app.close();
+    await h.close();
   });
 
   async function createVault(user: string): Promise<string> {

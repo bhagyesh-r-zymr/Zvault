@@ -149,6 +149,7 @@ pub struct BoxedShare {
 /// can't be replayed as coming from a different sender or to a different
 /// recipient.
 fn box_key(
+    info: &[u8],
     dh_ephemeral: &[u8; 32],
     dh_static: &[u8; 32],
     ephemeral: &[u8; 32],
@@ -159,7 +160,7 @@ fn box_key(
     let salt = [ephemeral.as_slice(), sender, recipient].concat();
     let mut out = Zeroizing::new([0u8; KEY_LEN]);
     Hkdf::<Sha256>::new(Some(&salt), &ikm)
-        .expand(BOX_INFO, out.as_mut())
+        .expand(info, out.as_mut())
         .expect("32 bytes is a valid HKDF-SHA256 output length");
     SymmetricKey::from_bytes(*out)
 }
@@ -180,20 +181,13 @@ pub fn seal_to(
     share_id: &[u8; SHARE_ID_LEN],
     plaintext: &[u8],
 ) -> Result<BoxedShare> {
-    let ephemeral = SharingKeyPair::generate()?;
-    let ephemeral_public = ephemeral.public_key();
-    let key = box_key(
-        &*diffie_hellman(&ephemeral.secret, recipient_public)?,
-        &*diffie_hellman(&sender.secret, recipient_public)?,
-        &ephemeral_public,
-        &sender.public_key(),
+    seal_box(
+        BOX_INFO,
+        &aad(BOX_AAD_PREFIX, share_id),
+        sender,
         recipient_public,
-    );
-    let sealed = seal(&key, plaintext, &aad(BOX_AAD_PREFIX, share_id))?;
-    Ok(BoxedShare {
-        ephemeral_public,
-        sealed,
-    })
+        plaintext,
+    )
 }
 
 /// Decrypts a share addressed to `recipient`. Fails unless it was sealed by the
@@ -204,14 +198,58 @@ pub fn open_from(
     share_id: &[u8; SHARE_ID_LEN],
     boxed: &BoxedShare,
 ) -> Result<Vec<u8>> {
+    open_box(
+        BOX_INFO,
+        &aad(BOX_AAD_PREFIX, share_id),
+        recipient,
+        sender_public,
+        boxed,
+    )
+}
+
+/// The sender-authenticated box behind [`seal_to`], with its own HKDF `info`
+/// and associated data so other kinds of box (environment keys, approved
+/// secrets) can never be opened as one another.
+pub(crate) fn seal_box(
+    info: &[u8],
+    aad: &[u8],
+    sender: &SharingKeyPair,
+    recipient_public: &[u8; PUBLIC_KEY_LEN],
+    plaintext: &[u8],
+) -> Result<BoxedShare> {
+    let ephemeral = SharingKeyPair::generate()?;
+    let ephemeral_public = ephemeral.public_key();
     let key = box_key(
+        info,
+        &*diffie_hellman(&ephemeral.secret, recipient_public)?,
+        &*diffie_hellman(&sender.secret, recipient_public)?,
+        &ephemeral_public,
+        &sender.public_key(),
+        recipient_public,
+    );
+    let sealed = seal(&key, plaintext, aad)?;
+    Ok(BoxedShare {
+        ephemeral_public,
+        sealed,
+    })
+}
+
+pub(crate) fn open_box(
+    info: &[u8],
+    aad: &[u8],
+    recipient: &SharingKeyPair,
+    sender_public: &[u8; PUBLIC_KEY_LEN],
+    boxed: &BoxedShare,
+) -> Result<Vec<u8>> {
+    let key = box_key(
+        info,
         &*diffie_hellman(&recipient.secret, &boxed.ephemeral_public)?,
         &*diffie_hellman(&recipient.secret, sender_public)?,
         &boxed.ephemeral_public,
         sender_public,
         &recipient.public_key(),
     );
-    open(&key, &boxed.sealed, &aad(BOX_AAD_PREFIX, share_id))
+    open(&key, &boxed.sealed, aad)
 }
 
 /// A short, human-comparable digest of a sharing public key, e.g.

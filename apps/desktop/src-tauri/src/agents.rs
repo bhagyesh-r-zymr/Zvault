@@ -881,13 +881,15 @@ mod tests {
         let dir_mode = std::fs::metadata(&dir).unwrap().permissions().mode();
         assert_eq!(dir_mode & 0o777, 0o700);
 
-        // A second bind while the first is live must not steal the socket.
-        assert!(bind(&path).is_err());
-
         let _client = UnixStream::connect(&path).unwrap();
         let (server, _) = listener.accept().unwrap();
         let pid = check_peer(&server).unwrap();
         assert_eq!(pid, Some(i32::try_from(std::process::id()).unwrap()));
+
+        // A second bind while the first is live must not steal the socket.
+        // (Its probe connection is left in the backlog, so this comes after
+        // the accept above.)
+        assert!(bind(&path).is_err());
 
         drop(listener);
         // A stale socket file is replaced.

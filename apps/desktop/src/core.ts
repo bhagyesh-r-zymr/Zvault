@@ -44,4 +44,15 @@ export const core = {
     invoke<Unlocked>('login_finish', { srpM2, encryptedKeyset }),
   lock: () => invoke<void>('lock'),
   unlocked: () => invoke<Unlocked | null>('unlocked'),
+
+  /** Whether sign-up left a new Secret Key waiting to be saved to a kit. */
+  emergencyKitPending: () => invoke<boolean>('emergency_kit_pending'),
+  /**
+   * Renders the Emergency Kit PDF in Rust and saves it through a native save
+   * dialog. The Secret Key never reaches the UI. Resolves to `false` if the
+   * person cancelled the dialog.
+   */
+  saveEmergencyKit: (email: string) => invoke<boolean>('save_emergency_kit', { email }),
+  /** Drops the staged Secret Key once the person confirms the kit is saved. */
+  discardEmergencyKit: () => invoke<void>('discard_emergency_kit'),
 };

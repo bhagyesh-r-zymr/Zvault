@@ -93,15 +93,19 @@ const LOGIN_FAILED: &str = "Incorrect email, master password or Secret Key.";
 /// Creates a new account's keys: a Secret Key, KDF salt, SRP verifier and a
 /// sealed keyset. Runs Argon2id, so it takes about a second.
 #[tauri::command]
-pub async fn create_account(email: String, password: String) -> Result<NewAccount, String> {
+pub async fn create_account(
+    app: tauri::AppHandle,
+    email: String,
+    password: String,
+) -> Result<NewAccount, String> {
     let password = Zeroizing::new(password);
-    blocking(move || {
+    let (account, secret_key) = blocking(move || {
         let secret_key = SecretKey::generate().map_err(err)?;
         let kdf = KdfParams::generate_default().map_err(err)?;
         let keys = derive_account_keys(&password, &secret_key, &email, &kdf).map_err(err)?;
         let keyset = SymmetricKey::generate().map_err(err)?;
         let sealed = seal_keyset(&keys.unlock_key, &keyset, &email).map_err(err)?;
-        Ok(NewAccount {
+        let account = NewAccount {
             secret_key: secret_key.to_display_string().to_string(),
             secret_key_id: secret_key.id().to_owned(),
             kdf: KdfDto {
@@ -113,9 +117,13 @@ pub async fn create_account(email: String, password: String) -> Result<NewAccoun
             },
             srp_verifier: B64.encode(srp::verifier(&keys.srp_x)),
             encrypted_keyset: blob(&sealed),
-        })
+        };
+        Ok((account, secret_key))
     })
-    .await
+    .await?;
+    // Held in Rust for the Emergency Kit PDF until the person confirms it's saved.
+    crate::stage_secret_key(&app, secret_key);
+    Ok(account)
 }
 
 /// Login step 1: derives the keys and answers the server's SRP challenge.

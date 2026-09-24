@@ -135,38 +135,3 @@ export function SignupPassword(props: {
     </Form>
   );
 }
-
-export function EmergencyKit(props: { email: string; secretKey: string; onDone: () => void }) {
-  const [saved, setSaved] = useState(false);
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="card">
-      <h1>Save your Secret Key</h1>
-      <p className="muted">
-        You need it, with your master password, to sign in on a new device. Zvault can't recover it
-        for you. Write it down or store it somewhere safe, away from your master password.
-      </p>
-      <dl className="kit">
-        <dt>Email</dt>
-        <dd>{props.email}</dd>
-        <dt>Secret Key</dt>
-        <dd className="secret">{props.secretKey}</dd>
-      </dl>
-      <button
-        type="button"
-        onClick={() => {
-          void navigator.clipboard.writeText(props.secretKey).then(() => setCopied(true));
-        }}
-      >
-        {copied ? 'Copied' : 'Copy Secret Key'}
-      </button>
-      <label className="check">
-        <input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} />I have
-        saved my Secret Key somewhere safe.
-      </label>
-      <button type="button" className="primary" disabled={!saved} onClick={props.onDone}>
-        Continue to sign in
-      </button>
-    </div>
-  );
-}

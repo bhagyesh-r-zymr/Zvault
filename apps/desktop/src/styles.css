@@ -53,6 +53,15 @@ h1 {
   margin: 0;
 }
 
+.emergency-kit {
+  max-width: 34rem;
+}
+
+.emergency-kit button {
+  display: block;
+  margin: 1rem 0;
+}
+
 .devices ul {
   list-style: none;
   margin: 1rem 0;

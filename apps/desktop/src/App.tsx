@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import { signOut, type Session } from './auth.js';
 import { core } from './core.js';
 import { Login } from './screens/Login.js';
-import { EmergencyKit, SignupCode, SignupEmail, SignupPassword } from './screens/Signup.js';
+import { EmergencyKitStep } from './EmergencyKitStep.js';
+import { SignupCode, SignupEmail, SignupPassword } from './screens/Signup.js';
 
 type Screen =
   | { name: 'login'; email?: string; secretKey?: string }
@@ -75,9 +76,8 @@ export function App() {
             );
           case 'emergency-kit':
             return (
-              <EmergencyKit
+              <EmergencyKitStep
                 email={screen.email}
-                secretKey={screen.secretKey}
                 onDone={() =>
                   setScreen({ name: 'login', email: screen.email, secretKey: screen.secretKey })
                 }

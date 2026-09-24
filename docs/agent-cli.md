@@ -40,6 +40,7 @@ ending in `/*`: `zv://web/*`, `zv://web/dev/*`, `zv://web/dev/payments/*`.
 
    Locking Zvault or changing an agent's settings ends every session approval
    and withdraws open prompts.
+
 4. The UI returns the encrypted item for each reference; Rust decrypts it. No
    secret value passes through the web view.
 5. The use or denial is written to the agent's activity log (references and

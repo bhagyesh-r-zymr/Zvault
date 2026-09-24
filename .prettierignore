@@ -3,3 +3,4 @@ target
 pnpm-lock.yaml
 apps/desktop/src-tauri/gen
 apps/desktop/src-tauri/icons
+infra/cdk.out

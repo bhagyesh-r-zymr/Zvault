@@ -31,6 +31,7 @@ Build a native **macOS app** with a backend on **AWS** that lets people store an
 | `apps/desktop`         | macOS app: [Tauri 2](https://tauri.app) shell, React UI in `src/`, Rust in `src-tauri/`.                          |
 | `crates/zvault-crypto` | Rust crypto core used by the app: Argon2id + Secret Key derivation (2SKD), XChaCha20-Poly1305, Secret Key format. |
 | `packages/shared`      | Wire contracts (zod schemas + types) shared by the API and the app's UI.                                          |
+| `infra`                | AWS CDK app for the API: VPC, Aurora PostgreSQL, SES, ECS Fargate + ALB, WAF, KMS, CloudTrail. See its README.    |
 
 pnpm workspaces and Turborepo drive the TypeScript side; a Cargo workspace at the root drives the Rust side.
 

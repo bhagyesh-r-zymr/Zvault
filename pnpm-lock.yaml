@@ -122,6 +122,34 @@ importers:
         specifier: ^5.0.1
         version: 5.0.1(@types/node@22.20.4)(vite@8.3.1(@types/node@22.20.4))
 
+  infra:
+    dependencies:
+      aws-cdk-lib:
+        specifier: ^2.270.0
+        version: 2.270.0(constructs@10.8.1)
+      cdk-nag:
+        specifier: ^3.0.2
+        version: 3.0.2(aws-cdk-lib@2.270.0(constructs@10.8.1))(constructs@10.8.1)
+      constructs:
+        specifier: ^10.8.1
+        version: 10.8.1
+    devDependencies:
+      '@swc-node/register':
+        specifier: ^1.12.1
+        version: 1.12.1(@swc/core@1.16.2)(@swc/types@0.1.28)(typescript@5.9.3)
+      '@swc/core':
+        specifier: ^1.16.2
+        version: 1.16.2
+      '@types/node':
+        specifier: ^22.20.4
+        version: 22.20.4
+      aws-cdk:
+        specifier: ^2.1143.0
+        version: 2.1143.0
+      vitest:
+        specifier: ^5.0.1
+        version: 5.0.1(@types/node@22.20.4)(vite@8.3.1(@types/node@22.20.4))
+
   packages/shared:
     dependencies:
       zod:
@@ -136,6 +164,19 @@ importers:
         version: 5.0.1(@types/node@22.20.4)(vite@8.3.1(@types/node@22.20.4))
 
 packages:
+
+  '@aws-cdk/asset-awscli-v1@2.2.292':
+    resolution: {integrity: sha512-d4aMFsAFj19FtxVyw8IzlUKv5Zu4sIvgnEjI2IU6IWBJgVbJ4aFnadANqYa+6MwB1CQbGOg0jh8WE77M+Nb/9A==}
+
+  '@aws-cdk/asset-node-proxy-agent-v6@2.1.3':
+    resolution: {integrity: sha512-98We1QWfin9vtuuQtNFhIIAEWb8CreyYTAP0Vn8HqSBoNiFJM9nZgifJeQawT9Wq0NX1HCNFlxCyTccIrK1PSA==}
+
+  '@aws-cdk/cloud-assembly-schema@54.25.0':
+    resolution: {integrity: sha512-aZkzPqWLg1Oozm53NeyrBZPguTq3e6v7NpQ3QOGULj0IIrodLzGPM7fmAvjcJcHzjtuZU9IP1gIY92nKIM+Bvw==}
+    engines: {node: '>= 18.0.0'}
+    bundledDependencies:
+      - jsonschema
+      - semver
 
   '@borewit/text-codec@0.2.2':
     resolution: {integrity: sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ==}
@@ -1030,6 +1071,30 @@ packages:
   asynckit@0.4.0:
     resolution: {integrity: sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==}
 
+  aws-cdk-lib@2.270.0:
+    resolution: {integrity: sha512-xoO9FEqcVTTK39N6n+LxvAAsS5WZSGX/p+uv3l2W+LXDEIWctq6VECdluuFwdXnbyf4v4eIxo2btrkUepnEy0Q==}
+    engines: {node: '>= 20.0.0'}
+    peerDependencies:
+      constructs: ^10.5.0
+    bundledDependencies:
+      - '@aws/cloudformation-validate'
+      - '@balena/dockerignore'
+      - '@aws-cdk/cloud-assembly-api'
+      - case
+      - fs-extra
+      - ignore
+      - jsonschema
+      - minimatch
+      - punycode
+      - semver
+      - yaml
+      - mime-types
+
+  aws-cdk@2.1143.0:
+    resolution: {integrity: sha512-bTbgEmNuN6UMDAyhGFWOAnriafSu7j0cAjaFKRw1/WEs6RE5g062D2v2+YE8Dw6qw7RgNGQPH5Nv47TsK5kZSQ==}
+    engines: {node: '>= 18.0.0'}
+    hasBin: true
+
   balanced-match@4.0.4:
     resolution: {integrity: sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==}
     engines: {node: 18 || 20 || >=22}
@@ -1064,6 +1129,13 @@ packages:
     resolution: {integrity: sha512-+ys997U96po4Kx/ABpBCqhA9EuxJaQWDQg7295H4hBphv3IZg0boBKuwYpt4YXp6MZ5AmZQnU/tyMTlRpaSejg==}
     engines: {node: '>= 0.4'}
 
+  cdk-nag@3.0.2:
+    resolution: {integrity: sha512-mmrspXnYRK5RmBTfEu5EQZmTwGxaVCESJ5GXbQq62eOkVFd4vc4MuIfSbav74K4J7irXQVJaY3d5js0kVQMWdA==}
+    engines: {node: '>= 18.12.0'}
+    peerDependencies:
+      aws-cdk-lib: ^2.257.0
+      constructs: ^10.5.1
+
   chai@6.2.2:
     resolution: {integrity: sha512-NUPRluOfOiTKBKvWPtSD4PhFvWCqOi0BGStNWs57X9js7XGTprSmFoz5F0tWhR4WPjNeR9jXqdC7/UpSJTnlRg==}
     engines: {node: '>=18'}
@@ -1077,6 +1149,9 @@ packages:
 
   component-emitter@1.3.1:
     resolution: {integrity: sha512-T0+barUSQRTUQASh8bx02dl+DhF54GtIDY13Y3m9oWTklKbb3Wv974meRpeZ3lp1JpLVECWWNHC4vaG2XHXouQ==}
+
+  constructs@10.8.1:
+    resolution: {integrity: sha512-98yGXYyhePqPYh3cYu8nzBERmAhC0DONe3UD03okK0nehZ7hYP4wgZuf02a04+uOWxnTJ5Rpp5m0GRNpwyLGGA==}
 
   content-disposition@1.1.0:
     resolution: {integrity: sha512-5jRCH9Z/+DRP7rkvY83B+yGIGX96OYdJmzngqnw2SBSxqCFPd0w2km3s5iawpGX8krnwSGmF0FW5Nhr0Hfai3g==}
@@ -2003,6 +2078,12 @@ packages:
 
 snapshots:
 
+  '@aws-cdk/asset-awscli-v1@2.2.292': {}
+
+  '@aws-cdk/asset-node-proxy-agent-v6@2.1.3': {}
+
+  '@aws-cdk/cloud-assembly-schema@54.25.0': {}
+
   '@borewit/text-codec@0.2.2': {}
 
   '@cacheable/memory@2.2.0':
@@ -2729,6 +2810,15 @@ snapshots:
 
   asynckit@0.4.0: {}
 
+  aws-cdk-lib@2.270.0(constructs@10.8.1):
+    dependencies:
+      '@aws-cdk/asset-awscli-v1': 2.2.292
+      '@aws-cdk/asset-node-proxy-agent-v6': 2.1.3
+      '@aws-cdk/cloud-assembly-schema': 54.25.0
+      constructs: 10.8.1
+
+  aws-cdk@2.1143.0: {}
+
   balanced-match@4.0.4: {}
 
   body-parser@2.3.0:
@@ -2775,6 +2865,11 @@ snapshots:
       call-bind-apply-helpers: 1.0.2
       get-intrinsic: 1.3.0
 
+  cdk-nag@3.0.2(aws-cdk-lib@2.270.0(constructs@10.8.1))(constructs@10.8.1):
+    dependencies:
+      aws-cdk-lib: 2.270.0(constructs@10.8.1)
+      constructs: 10.8.1
+
   chai@6.2.2: {}
 
   colorette@2.0.20: {}
@@ -2784,6 +2879,8 @@ snapshots:
       delayed-stream: 1.0.0
 
   component-emitter@1.3.1: {}
+
+  constructs@10.8.1: {}
 
   content-disposition@1.1.0: {}
 

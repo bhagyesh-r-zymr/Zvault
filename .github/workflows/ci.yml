@@ -29,6 +29,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - name: Synthesize AWS infrastructure (no deploy)
+        run: pnpm --filter @zvault/infra synth
 
   rust:
     name: Rust (fmt, clippy, test)

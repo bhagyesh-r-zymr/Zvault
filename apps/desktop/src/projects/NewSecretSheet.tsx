@@ -1,16 +1,13 @@
+import { SecretKeyName, slugify } from '@zvault/shared';
 import { useId, useState, type FormEvent } from 'react';
 import { ErrorLine, Sheet } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
-import { previewProjects, useProjects, type Project, type ProjectSecret } from './model.js';
+import { writeError } from './api.js';
+import { useProjects, useProjectsSync } from './context.js';
+import type { Project } from './model.js';
 import { EnvDot } from './ProjectsView.js';
 
 const TAG_SUGGESTIONS = ['rotate-quarterly', 'third-party', 'database', 'aws', 'payments'];
-
-const slugify = (s: string) =>
-  s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
 
 const envVarOf = (s: string) =>
   s
@@ -21,11 +18,11 @@ const envVarOf = (s: string) =>
 /** Adds a secret with one value per environment, an optional folder and tags. */
 export function NewSecretSheet(props: {
   project: Project;
-  defaultEnv: string;
   onClose: () => void;
-  onCreated: (secret: ProjectSecret) => void;
+  onCreated: (created: { projectId: string; secretId: string; envIds: string[] }) => void;
 }) {
-  const { projects, secrets } = useProjects();
+  const { projects } = useProjects();
+  const sync = useProjectsSync();
   const [projectId, setProjectId] = useState(props.project.id);
   const project = projects.find((p) => p.id === projectId) ?? props.project;
   const [name, setName] = useState('');
@@ -36,45 +33,64 @@ export function NewSecretSheet(props: {
   const [tags, setTags] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState('');
   const [newEnv, setNewEnv] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ids = { name: useId(), env: useId(), project: useId(), folder: useId(), tags: useId() };
 
-  const folders = [
-    ...new Set(
-      secrets.filter((s) => s.projectId === projectId).flatMap((s) => (s.folder ? [s.folder] : [])),
-    ),
-  ].sort();
-
   const addTag = (raw: string) => {
-    const t = slugify(raw.replace(/^#/, ''));
+    const t = slugify(raw.replace(/^#/, '')).slice(0, 48);
     if (t && !tags.includes(t)) setTags([...tags, t]);
     setTagDraft('');
   };
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    const filled = project.environments.filter((env) => values[env.id]?.trim());
-    if (!name.trim()) return setError('Give the secret a name.');
-    if (filled.length === 0) return setError('Add a value for at least one environment.');
-    // An empty environment inherits the one before it, as the placeholder says.
-    const byEnv: ProjectSecret['values'] = {};
-    let last: string | undefined;
-    for (const env of project.environments) {
-      const v = values[env.id]?.trim() || (env.restricted ? undefined : last);
-      if (v) byEnv[env.id] = [{ label: 'value', value: v, secret: true }];
-      if (values[env.id]?.trim()) last = values[env.id]!.trim();
+  const addEnvironment = async () => {
+    const envName = newEnv?.trim();
+    if (!envName) return setNewEnv(null);
+    setBusy(true);
+    setError(null);
+    try {
+      await sync.createEnvironment(projectId, envName);
+      setNewEnv(null);
+    } catch (e) {
+      setError(writeError(e, 'The environment could not be added.'));
+    } finally {
+      setBusy(false);
     }
-    const created = previewProjects.addSecret({
-      projectId,
-      name: name.trim(),
-      slug: slugify(name) || 'secret',
-      envVars: envVar ? [envVar] : [],
-      kind: 'apiKey',
-      ...(folder.trim() && { folder: slugify(folder) }),
-      tags,
-      values: byEnv,
-    });
-    props.onCreated(created);
+  };
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    const filled = project.environments.filter((env) => !env.locked && values[env.id]?.trim());
+    if (!name.trim()) return setError('Give the secret a name.');
+    if (!SecretKeyName.safeParse(envVar).success) {
+      return setError('Give it a variable name, such as STRIPE_SECRET_KEY.');
+    }
+    if (filled.length === 0) return setError('Add a value for at least one environment.');
+    const folderName = folder.trim();
+    const existing = project.folders.find(
+      (f) => f.name.toLowerCase() === folderName.toLowerCase() || f.slug === slugify(folderName),
+    );
+    if (folderName && !existing && !project.owner) {
+      return setError('Only the project owner can add folders. Pick an existing one.');
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const folderId = !folderName
+        ? null
+        : (existing?.id ?? (await sync.createFolder(projectId, folderName)));
+      const secretId = await sync.createSecret(projectId, {
+        name,
+        key: envVar,
+        folderId,
+        tags,
+        values: Object.fromEntries(filled.map((env) => [env.id, values[env.id]!.trim()])),
+      });
+      props.onCreated({ projectId, secretId, envIds: filled.map((env) => env.id) });
+    } catch (err) {
+      setError(writeError(err, 'The secret could not be saved.'));
+      setBusy(false);
+    }
   };
 
   return (
@@ -84,7 +100,10 @@ export function NewSecretSheet(props: {
       onClose={props.onClose}
       width={580}
     >
-      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <form
+        onSubmit={(e) => void submit(e)}
+        style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
+      >
         <div className="grid-2">
           <div className="field">
             <label htmlFor={ids.name}>Name</label>
@@ -119,7 +138,11 @@ export function NewSecretSheet(props: {
             <select
               id={ids.project}
               value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
+              onChange={(e) => {
+                setProjectId(e.target.value);
+                setValues({});
+                setNewEnv(null);
+              }}
             >
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -138,8 +161,8 @@ export function NewSecretSheet(props: {
               onChange={(e) => setFolder(e.target.value)}
             />
             <datalist id={`${ids.folder}-list`}>
-              {folders.map((f) => (
-                <option key={f} value={f} />
+              {project.folders.map((f) => (
+                <option key={f.id} value={f.name} />
               ))}
             </datalist>
           </div>
@@ -148,7 +171,7 @@ export function NewSecretSheet(props: {
         <div>
           <div className="section-label">
             <span>Value per environment</span>
-            {newEnv === null && (
+            {newEnv === null && project.owner && (
               <button
                 type="button"
                 className="link"
@@ -160,33 +183,39 @@ export function NewSecretSheet(props: {
             )}
           </div>
           <div className="env-values">
-            {project.environments.map((env, i) => (
-              <div key={env.id}>
-                <span className="env-name">
-                  <EnvDot env={env} />
-                  {env.name}
-                </span>
-                <input
-                  type="password"
-                  aria-label={`${env.name} value`}
-                  autoComplete="off"
-                  value={values[env.id] ?? ''}
-                  placeholder={
-                    env.restricted
-                      ? 'Not set'
-                      : i === 0
-                        ? 'Paste the value'
-                        : `Same as ${project.environments[i - 1]!.name}`
-                  }
-                  onChange={(e) => setValues({ ...values, [env.id]: e.target.value })}
-                />
-                {env.restricted && (
-                  <span title="Managers only" className="muted">
-                    <Icon name="lock" size={13} />
+            {project.environments.map((env, i) => {
+              const parent = project.environments.find((x) => x.id === env.inheritsFrom);
+              return (
+                <div key={env.id}>
+                  <span className="env-name">
+                    <EnvDot env={env} />
+                    {env.name}
                   </span>
-                )}
-              </div>
-            ))}
+                  <input
+                    type="password"
+                    aria-label={`${env.name} value`}
+                    autoComplete="off"
+                    disabled={env.locked}
+                    value={values[env.id] ?? ''}
+                    placeholder={
+                      env.locked
+                        ? 'No access'
+                        : parent
+                          ? `Same as ${parent.name}`
+                          : i === 0
+                            ? 'Paste the value'
+                            : 'Not set'
+                    }
+                    onChange={(e) => setValues({ ...values, [env.id]: e.target.value })}
+                  />
+                  {env.locked && (
+                    <span title="You don't have access to this environment" className="muted">
+                      <Icon name="lock" size={13} />
+                    </span>
+                  )}
+                </div>
+              );
+            })}
             {newEnv !== null && (
               <div>
                 <input
@@ -199,19 +228,15 @@ export function NewSecretSheet(props: {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
-                      if (newEnv.trim()) previewProjects.addEnvironment(projectId, newEnv.trim());
-                      setNewEnv(null);
+                      void addEnvironment();
                     }
                   }}
                 />
                 <button
                   type="button"
                   className="small"
-                  disabled={!newEnv.trim()}
-                  onClick={() => {
-                    previewProjects.addEnvironment(projectId, newEnv.trim());
-                    setNewEnv(null);
-                  }}
+                  disabled={!newEnv.trim() || busy}
+                  onClick={() => void addEnvironment()}
                 >
                   Add
                 </button>
@@ -265,8 +290,8 @@ export function NewSecretSheet(props: {
           <button type="button" onClick={props.onClose}>
             Cancel
           </button>
-          <button type="submit" className="primary">
-            Save secret
+          <button type="submit" className="primary" disabled={busy}>
+            {busy ? 'Saving…' : 'Save secret'}
           </button>
         </div>
       </form>

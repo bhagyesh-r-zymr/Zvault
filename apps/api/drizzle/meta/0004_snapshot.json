@@ -1,6 +1,6 @@
 {
-  "id": "623eb49d-8913-4385-9683-40ed9f42adc7",
-  "prevId": "940a2b29-22de-4968-ab1e-41550591fd1f",
+  "id": "6106124d-15e2-43a0-a0b7-3b390e124abe",
+  "prevId": "623eb49d-8913-4385-9683-40ed9f42adc7",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -774,6 +774,96 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.login_two_factor_challenges": {
+      "name": "login_two_factor_challenges",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "device": {
+          "name": "device",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "login_two_factor_challenges_expires_idx": {
+          "name": "login_two_factor_challenges_expires_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "login_two_factor_challenges_account_id_accounts_id_fk": {
+          "name": "login_two_factor_challenges_account_id_accounts_id_fk",
+          "tableFrom": "login_two_factor_challenges",
+          "tableTo": "accounts",
+          "columnsFrom": ["account_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "login_two_factor_challenges_token_hash_unique": {
+          "name": "login_two_factor_challenges_token_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": ["token_hash"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.org_groups": {
       "name": "org_groups",
       "schema": "",
@@ -1458,6 +1548,98 @@
         "srp_challenges_account_id_accounts_id_fk": {
           "name": "srp_challenges_account_id_accounts_id_fk",
           "tableFrom": "srp_challenges",
+          "tableTo": "accounts",
+          "columnsFrom": ["account_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.two_factor": {
+      "name": "two_factor",
+      "schema": "",
+      "columns": {
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "totp_secret": {
+          "name": "totp_secret",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "enabled_at": {
+          "name": "enabled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_used_step": {
+          "name": "last_used_step",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pending_secret": {
+          "name": "pending_secret",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pending_expires_at": {
+          "name": "pending_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recovery_code_hashes": {
+          "name": "recovery_code_hashes",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "failed_attempts": {
+          "name": "failed_attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "locked_until": {
+          "name": "locked_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "two_factor_account_id_accounts_id_fk": {
+          "name": "two_factor_account_id_accounts_id_fk",
+          "tableFrom": "two_factor",
           "tableTo": "accounts",
           "columnsFrom": ["account_id"],
           "columnsTo": ["id"],

@@ -1,13 +1,8 @@
 import { useState } from 'react';
 import { Icon } from '../ui/Icon.js';
-import {
-  ACCESS_LABELS,
-  accessFor,
-  ENV_COLORS,
-  useProjects,
-  type AccessEntry,
-  type AccessLevel,
-} from './model.js';
+import { useProjects } from './context.js';
+import type { Project } from './model.js';
+import { ACCESS_LABELS, accessFor, type AccessEntry, type AccessLevel } from './preview.js';
 import { PreviewNote, ProjectTile } from './ProjectsView.js';
 
 const LEVELS: AccessLevel[] = ['manage', 'edit', 'use', 'approval', 'none'];
@@ -22,13 +17,22 @@ const LEGEND: { level: AccessLevel; text: string }[] = [
 /** Who can use each environment of a project: groups, people and agents. */
 export function ProjectAccess({ projectId }: { projectId: string }) {
   const { projects } = useProjects();
-  const project = projects.find((p) => p.id === projectId) ?? projects[0]!;
-  const [entries, setEntries] = useState<AccessEntry[]>(() => accessFor(project.id));
-  const [shownFor, setShownFor] = useState(project.id);
-  if (shownFor !== project.id) {
-    setShownFor(project.id);
-    setEntries(accessFor(project.id));
+  const project = projects.find((p) => p.id === projectId);
+  if (!project) {
+    return (
+      <div className="empty">
+        <Icon name="people" size={32} />
+        <span>This project is no longer available.</span>
+      </div>
+    );
   }
+  // Start over when environments change, so every column has a level.
+  const envKey = project.environments.map((e) => `${e.id}:${e.locked}`).join();
+  return <AccessMatrix key={`${project.id}|${envKey}`} project={project} />;
+}
+
+function AccessMatrix({ project }: { project: Project }) {
+  const [entries, setEntries] = useState<AccessEntry[]>(() => accessFor(project));
 
   const setLevel = (id: string, envId: string, level: AccessLevel) =>
     setEntries(
@@ -52,7 +56,8 @@ export function ProjectAccess({ projectId }: { projectId: string }) {
           </button>
         </div>
         <PreviewNote>
-          Sample team. Changes here stay on this Mac until team accounts and roles ship.
+          Sample team. Your own row is real; the rest, and any changes here, stay on this Mac until
+          team accounts and roles ship.
         </PreviewNote>
 
         <div className="legend">
@@ -78,7 +83,7 @@ export function ProjectAccess({ projectId }: { projectId: string }) {
                 {project.environments.map((env) => (
                   <th key={env.id} scope="col">
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <span className="dot" style={{ background: ENV_COLORS[env.color] }} />
+                      <span className="dot" style={{ background: env.color }} />
                       {env.name}
                     </span>
                   </th>

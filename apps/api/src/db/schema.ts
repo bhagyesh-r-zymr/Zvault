@@ -4,13 +4,16 @@ import {
   bigint,
   boolean,
   customType,
+  foreignKey,
   index,
   integer,
   jsonb,
+  pgEnum,
   pgTable,
   primaryKey,
   text,
   timestamp,
+  unique,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -231,6 +234,12 @@ export const keyGrants = pgTable(
       .notNull()
       .references(() => accounts.id, { onDelete: 'cascade' }),
     wrappedKey: jsonb('wrapped_key').$type<EncryptedBlob>().notNull(),
+    /**
+     * Set when a manager wrapped the key to this member's sharing key (team
+     * access); `wrappedKey` is then the box's ciphertext. Null for the
+     * owner's own grants, wrapped with their account key.
+     */
+    box: jsonb('box').$type<MemberWrapBox>(),
     createdAt: createdAt(),
   },
   (t) => [
@@ -273,4 +282,207 @@ export const secretValues = pgTable(
     updatedAt: ts('updated_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.projectId, t.secretId, t.environmentId] })],
+);
+
+// ---------------------------------------------------------------- team access
+
+export const orgRole = pgEnum('org_role', ['owner', 'admin', 'member']);
+export const accessLevel = pgEnum('access_level', [
+  'manage',
+  'edit',
+  'use',
+  'needs_approval',
+  'none',
+]);
+export const principalType = pgEnum('principal_type', ['account', 'group', 'agent']);
+export const accessRequestStatus = pgEnum('access_request_status', [
+  'pending',
+  'approved',
+  'denied',
+]);
+
+export const organizations = pgTable('organizations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  createdBy: uuid('created_by')
+    .notNull()
+    .references(() => accounts.id),
+  createdAt: createdAt(),
+});
+
+/**
+ * Org membership. A member is `invited` until they accept and publish the
+ * X25519 sharing key that environment keys are wrapped to (`publicKey` set).
+ */
+export const orgMembers = pgTable(
+  'org_members',
+  {
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    role: orgRole('role').notNull(),
+    publicKey: text('public_key'),
+    invitedBy: uuid('invited_by').references(() => accounts.id, { onDelete: 'set null' }),
+    joinedAt: ts('joined_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.accountId] }),
+    index('org_members_account_idx').on(t.accountId),
+  ],
+);
+
+export const orgGroups = pgTable(
+  'org_groups',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [unique('org_groups_name_unique').on(t.orgId, t.name)],
+);
+
+export const groupMembers = pgTable(
+  'group_members',
+  {
+    groupId: uuid('group_id')
+      .notNull()
+      .references(() => orgGroups.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.groupId, t.accountId] }),
+    index('group_members_account_idx').on(t.accountId),
+  ],
+);
+
+/** Agents (e.g. Claude Code on a member's Mac) are principals with their own key. */
+export const agents = pgTable(
+  'agents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    publicKey: text('public_key').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('agents_org_idx').on(t.orgId)],
+);
+
+/** A project shared with an organization, so its members can be granted access. */
+export const projectOrgs = pgTable('project_orgs', {
+  projectId: uuid('project_id')
+    .primaryKey()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  orgId: uuid('org_id')
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  linkedBy: uuid('linked_by')
+    .notNull()
+    .references(() => accounts.id),
+  createdAt: createdAt(),
+});
+
+/**
+ * Access state of one environment of an org project. The key version counts
+ * rotations; names stay inside the project's ciphertext.
+ */
+export const environmentAccess = pgTable(
+  'environment_access',
+  {
+    environmentId: uuid('environment_id').primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    keyVersion: integer('key_version').notNull().default(1),
+    /** Set when a key holder loses access; cleared by the next rotation. */
+    rotationRequiredAt: ts('rotation_required_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('environment_access_project_idx').on(t.projectId),
+    foreignKey({
+      columns: [t.projectId, t.environmentId],
+      foreignColumns: [projectEntries.projectId, projectEntries.id],
+    }).onDelete('cascade'),
+  ],
+);
+
+export const environmentGrants = pgTable(
+  'environment_grants',
+  {
+    environmentId: uuid('environment_id')
+      .notNull()
+      .references(() => environmentAccess.environmentId, { onDelete: 'cascade' }),
+    principalType: principalType('principal_type').notNull(),
+    principalId: uuid('principal_id').notNull(),
+    level: accessLevel('level').notNull(),
+    expiresAt: ts('expires_at'),
+    grantedBy: uuid('granted_by')
+      .notNull()
+      .references(() => accounts.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.environmentId, t.principalType, t.principalId] }),
+    index('environment_grants_principal_idx').on(t.principalType, t.principalId),
+  ],
+);
+
+/** The public half of a member wrap (see `keyGrants.box`). */
+export interface MemberWrapBox {
+  recipientPublicKey: string;
+  wrapperPublicKey: string;
+  ephemeralPublicKey: string;
+  /** Environment keys only: the key version the wrap is bound to. */
+  keyVersion: number | null;
+  wrappedBy: string;
+}
+
+/** Values a manager sealed to the requester when approving. */
+export interface StoredRelease {
+  approverPublicKey: string;
+  ephemeralPublicKey: string;
+  blob: EncryptedBlob;
+}
+
+/** "Needs approval" requests: each use waits for a manager. */
+export const accessRequests = pgTable(
+  'access_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    environmentId: uuid('environment_id')
+      .notNull()
+      .references(() => environmentAccess.environmentId, { onDelete: 'cascade' }),
+    requesterType: principalType('requester_type').notNull(),
+    requesterId: uuid('requester_id').notNull(),
+    requesterPublicKey: text('requester_public_key').notNull(),
+    items: jsonb('items').$type<string[]>().notNull(),
+    reason: text('reason').notNull(),
+    status: accessRequestStatus('status').notNull().default('pending'),
+    expiresAt: ts('expires_at').notNull(),
+    decidedBy: uuid('decided_by').references(() => accounts.id, { onDelete: 'set null' }),
+    decidedAt: ts('decided_at'),
+    release: jsonb('release').$type<StoredRelease>(),
+    releaseExpiresAt: ts('release_expires_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('access_requests_env_idx').on(t.environmentId, t.status)],
 );

@@ -195,8 +195,8 @@ function ShareWithPerson({ item, api }: { item: SharedItemPayload; api: SharingA
           </p>
           {recipient.pin === 'changed' && (
             <p role="alert">
-              This security code is different from the one {recipient.email} had before. Someone
-              may be pretending to be them. Check the code with them before sending.
+              This security code is different from the one {recipient.email} had before. Someone may
+              be pretending to be them. Check the code with them before sending.
             </p>
           )}
           <p className="hint">

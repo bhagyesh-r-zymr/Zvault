@@ -25,7 +25,11 @@ function read(store: PinStore): Record<string, string> {
 
 const normalize = (email: string) => email.trim().toLowerCase();
 
-export function checkPin(email: string, publicKey: string, store: PinStore = localStorage): PinCheck {
+export function checkPin(
+  email: string,
+  publicKey: string,
+  store: PinStore = localStorage,
+): PinCheck {
   const pinned = read(store)[normalize(email)];
   if (pinned === undefined) return 'new';
   return pinned === publicKey ? 'match' : 'changed';

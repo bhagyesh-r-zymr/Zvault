@@ -40,11 +40,15 @@ export function App() {
   // by the time this fires; drop to the lock screen.
   useEffect(() => {
     const unlisten = lock.onLocked((reason) => {
-      void lock.status().then((status) =>
-        setScreen((prev) =>
-          prev.name === 'unlocked' ? { name: 'locked', session: prev.session, reason, status } : prev,
-        ),
-      );
+      void lock
+        .status()
+        .then((status) =>
+          setScreen((prev) =>
+            prev.name === 'unlocked'
+              ? { name: 'locked', session: prev.session, reason, status }
+              : prev,
+          ),
+        );
     });
     return () => {
       unlisten.then((stop) => stop()).catch(() => undefined);
@@ -149,7 +153,9 @@ export function App() {
                 >
                   Sign out
                 </button>
-                {lockStatus && <LockSettingsPanel status={lockStatus} onChanged={refreshLockStatus} />}
+                {lockStatus && (
+                  <LockSettingsPanel status={lockStatus} onChanged={refreshLockStatus} />
+                )}
                 <Generator />
                 <StrengthChecker />
               </div>

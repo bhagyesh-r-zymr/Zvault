@@ -16,3 +16,21 @@ dt {
 dd {
   margin: 0;
 }
+
+.muted {
+  opacity: 0.7;
+}
+
+.lock button {
+  display: block;
+  margin: 0.5rem 0;
+}
+
+fieldset label {
+  display: block;
+  margin: 0.5rem 0;
+}
+
+fieldset input[type='number'] {
+  width: 5rem;
+}

@@ -61,3 +61,13 @@ Secret Key ──────HKDF───────┘
 ```
 
 All of this runs in Rust on the device (`crates/zvault-crypto`). The server receives ciphertext, nonces, KDF parameters and the Secret Key's public id prefix only. Minimum KDF strength and the ciphertext envelope are defined once in `packages/shared` and mirrored in the Rust crate.
+
+## Locking, Touch ID and the clipboard (desktop)
+
+The unlock key lives only in Rust (`apps/desktop/src-tauri/src/session.rs`) and is wiped when the vault locks. The UI never receives it.
+
+- **Auto-lock.** The vault locks after a configurable idle period (1–480 minutes, default 10) without interaction with Zvault, when the Mac sleeps, and when the screen locks or the user switches away. Sleep and screen lock come from `NSWorkspace` and the `com.apple.screenIsLocked` notification; a wall-clock versus monotonic-clock check catches any sleep those miss, and sleep time counts towards the idle timer.
+- **Touch ID.** After a master-password unlock, the account unlock key can be stored in the data-protection Keychain with `BiometryCurrentSet` access control and `WhenPasscodeSetThisDeviceOnly`. It never syncs to iCloud, and macOS deletes it if fingerprints change or the passcode is removed. Touch ID stops working 14 days after the master password was last entered.
+- **Clipboard.** Copied secrets are marked concealed so clipboard managers and Universal Clipboard skip them, and are cleared after 10–300 seconds (default 90) or when the vault locks, but only if the clipboard still holds what Zvault put there.
+
+Touch ID needs a signed build: the data-protection Keychain requires the app to be signed with a Team ID and a `keychain-access-groups` entitlement (plus a provisioning profile for Developer ID distribution). Unsigned `tauri dev` builds report a missing-entitlement error when Touch ID is turned on; everything else works unsigned. Settings are held in memory until local persistence lands.

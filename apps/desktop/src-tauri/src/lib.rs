@@ -2,6 +2,13 @@
 //! into `zvault-crypto`; secrets never cross into JavaScript unless the UI
 //! must display them (for example the Secret Key on the Emergency Kit).
 
+mod autolock;
+mod biometric;
+mod clipboard;
+mod commands;
+mod platform;
+mod session;
+
 use serde::Serialize;
 
 /// Must match `CRYPTO_VERSION` in `@zvault/shared`.
@@ -27,7 +34,23 @@ fn core_info() -> CoreInfo {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![core_info])
+        .manage(autolock::AppState::new())
+        .setup(|app| {
+            autolock::start(app.handle());
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            core_info,
+            commands::lock_status,
+            commands::lock_vault,
+            commands::report_activity,
+            commands::set_lock_settings,
+            commands::copy_secret,
+            commands::enable_touch_id,
+            commands::disable_touch_id,
+            commands::unlock_with_touch_id,
+            commands::dev_unlock,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Zvault");
 }

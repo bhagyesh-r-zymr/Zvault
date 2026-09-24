@@ -10,13 +10,15 @@ export const CRYPTO_VERSION = 1 as const;
 
 /** Floor the server enforces on sign-up; clients may choose stronger. */
 export const KDF_MINIMUMS = { memoryKib: 64 * 1024, iterations: 3 } as const;
+/** Ceiling the client and server both enforce, so hostile params can't exhaust memory. */
+export const KDF_MAXIMUMS = { memoryKib: 4 * 1024 * 1024, iterations: 64 } as const;
 
 /** Argon2id parameters used to stretch the master password on the client. */
 export const KdfParams = z.object({
   alg: z.literal('argon2id'),
   /** Memory cost in KiB. */
-  memoryKib: z.number().int().min(KDF_MINIMUMS.memoryKib),
-  iterations: z.number().int().min(KDF_MINIMUMS.iterations),
+  memoryKib: z.number().int().min(KDF_MINIMUMS.memoryKib).max(KDF_MAXIMUMS.memoryKib),
+  iterations: z.number().int().min(KDF_MINIMUMS.iterations).max(KDF_MAXIMUMS.iterations),
   parallelism: z.number().int().min(1).max(16),
   salt: base64UrlOfLength(16),
 });

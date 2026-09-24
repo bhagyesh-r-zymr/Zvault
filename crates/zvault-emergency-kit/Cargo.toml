@@ -1,0 +1,16 @@
+[package]
+name = "zvault-emergency-kit"
+version = "0.0.0"
+description = "Renders the Zvault Emergency Kit PDF on the user's device. The Secret Key it prints never leaves the device."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+thiserror = "2"
+zeroize = { version = "1.8", features = ["derive"] }
+zvault-crypto = { path = "../zvault-crypto" }
+
+[lints]
+workspace = true

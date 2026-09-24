@@ -73,7 +73,7 @@ All of this runs in Rust on the device (`crates/zvault-crypto`). The server rece
 | 3    | `POST /v1/auth/signup/complete`                | The app generates the Secret Key, KDF salt, SRP verifier and sealed keyset in Rust and uploads everything but the Secret Key. The Emergency Kit screen shows the Secret Key. |
 | 4    | `POST /v1/auth/login/start`                    | Returns KDF params and SRP `B`. Unknown emails get a stable decoy, so this can't be used to find accounts.                                                                   |
 | 5    | `POST /v1/auth/login/finish`                   | Checks SRP proof `M1`, returns `M2`, a session token and the sealed keyset. The app verifies `M2` before opening the keyset.                                                 |
-| –    | `GET /v1/auth/session`, `POST /v1/auth/logout` | Bearer-token session (stored hashed; 14 days idle, 30 days max).                                                                                                                 |
+| –    | `GET /v1/auth/session`, `POST /v1/auth/logout` | Bearer-token session (stored hashed; 14 days idle, 30 days max).                                                                                                             |
 
 SRP is SRP-6a over the RFC 5054 3072-bit group with SHA-256; the exact spec is in `crates/zvault-crypto/src/srp.rs`. The Rust client and the TypeScript server are both checked against `crates/zvault-crypto/tests/srp-v1.json`, a vector produced by an independent implementation.
 

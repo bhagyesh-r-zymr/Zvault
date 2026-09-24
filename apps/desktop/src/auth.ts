@@ -1,5 +1,6 @@
 import { api } from './api.js';
 import { core } from './core.js';
+import { thisDevice } from './device.js';
 
 export const MIN_PASSWORD_LENGTH = 10;
 
@@ -54,7 +55,11 @@ export async function signIn(email: string, password: string, secretKey: string)
     kdf: start.kdf,
     srpB: start.srpB,
   });
-  const finish = await api.loginFinish({ loginId: start.loginId, ...proof });
+  const finish = await api.loginFinish({
+    loginId: start.loginId,
+    ...proof,
+    device: await thisDevice(),
+  });
   try {
     const unlocked = await core.loginFinish(finish.srpM2, finish.encryptedKeyset);
     return { email: unlocked.email, token: finish.sessionToken, expiresAt: finish.expiresAt };

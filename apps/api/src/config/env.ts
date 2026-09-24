@@ -34,12 +34,6 @@ const EnvSchema = z
 
     /** Keys the HMACs over verification codes and decoy logins. 32+ random chars. */
     SERVER_SECRET: z.string().min(32).optional(),
-    SESSION_TTL_MINUTES: z.coerce
-      .number()
-      .int()
-      .min(5)
-      .max(60 * 24 * 30)
-      .default(12 * 60),
 
     /**
      * `log` prints emails to the server log (development only); `smtp` sends

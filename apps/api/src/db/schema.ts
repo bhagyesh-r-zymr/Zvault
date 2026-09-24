@@ -1,4 +1,4 @@
-import type { EncryptedBlob } from '@zvault/shared';
+import type { DeviceInfo, EncryptedBlob } from '@zvault/shared';
 import { sql } from 'drizzle-orm';
 import {
   customType,
@@ -95,6 +95,9 @@ export const sessions = pgTable(
       .notNull()
       .references(() => accounts.id, { onDelete: 'cascade' }),
     tokenHash: bytea('token_hash').notNull().unique(),
+    /** What the client said about itself at sign-in, shown in the device list. */
+    device: jsonb('device').$type<DeviceInfo>().notNull(),
+    /** Absolute end of the session; idle expiry is checked against lastSeenAt. */
     expiresAt: ts('expires_at').notNull(),
     revokedAt: ts('revoked_at'),
     lastSeenAt: ts('last_seen_at')

@@ -24,7 +24,7 @@ export const SESSION_ABSOLUTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /** Sessions unused for this long are treated as signed out. */
 export const SESSION_IDLE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 /** Skip lastSeenAt writes that would change it by less than this. */
-const TOUCH_GRANULARITY_MS = 60 * 1000;
+export const TOUCH_GRANULARITY_MS = 60 * 1000;
 
 export function hashToken(token: string): string {
   return createHash('sha256').update(token, 'utf8').digest('base64url');

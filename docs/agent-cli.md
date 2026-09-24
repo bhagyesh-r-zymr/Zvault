@@ -115,9 +115,12 @@ paired, 4 denied / out of scope / paused / timed out, 5 locked, 64 usage.
 
 ## For the app UI
 
-`apps/desktop/src/agents/api.ts` is the typed bridge. The UI must register
-`serveResolves`, `serveLists` and `serveWrites` while the vault is loaded, and
-show `onApprovalRequest` / `onPairingRequest` prompts. Rust events:
+`apps/desktop/src/agents/api.ts` is the typed bridge. `agents/bridge.ts`
+(`serveZv`, mounted by the app shell) answers lookups, listings and writes
+from the synced projects; a value inherited from another environment ("Same
+as Development") is decrypted with that environment's key.
+`agents/AgentPrompts.tsx` shows the approval and pairing prompts, and
+`agents/AgentsView.tsx` lists paired agents. Rust events:
 `agent://approval-request`, `agent://pairing-request`, `agent://prompt-closed`,
 `agent://resolve-request`, `agent://list-request`, `agent://write-request`,
 `agent://unlock-requested`, `agent://activity`.

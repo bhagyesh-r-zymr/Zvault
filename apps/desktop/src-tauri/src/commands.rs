@@ -184,6 +184,12 @@ fn marker_path(app: &AppHandle) -> Option<PathBuf> {
         .map(|d| d.join("touch-id-account"))
 }
 
+/// The account whose unlock key is behind Touch ID, if any. Agent approvals
+/// use it to ask for a fingerprint.
+pub(crate) fn touch_id_account(app: &AppHandle) -> Option<String> {
+    enrolled_account(app)
+}
+
 fn enrolled_account(app: &AppHandle) -> Option<String> {
     if !biometric::available() {
         return None;

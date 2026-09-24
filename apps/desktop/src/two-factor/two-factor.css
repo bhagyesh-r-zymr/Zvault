@@ -1,0 +1,66 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0.75rem 0;
+}
+
+.code-input {
+  font:
+    600 1.5rem ui-monospace,
+    'SF Mono',
+    monospace;
+  letter-spacing: 0.15em;
+  max-width: 14ch;
+  padding: 0.4rem 0.6rem;
+}
+
+.qr {
+  display: block;
+  width: 200px;
+  height: 200px;
+  margin: 1rem 0;
+  background: #fff;
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.secret {
+  font-family: ui-monospace, 'SF Mono', monospace;
+  user-select: all;
+  word-break: break-all;
+}
+
+.recovery-codes {
+  columns: 2;
+  font-family: ui-monospace, 'SF Mono', monospace;
+  user-select: all;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+button.link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: LinkText;
+  cursor: pointer;
+}
+
+.error {
+  color: #d70015;
+}
+
+.warning {
+  color: #b25000;
+}

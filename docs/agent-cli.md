@@ -1,26 +1,80 @@
-# `zv`: secrets for local agents
+# `zv`: Zvault on the command line
 
-`zv` lets coding agents (Claude Code, Cursor, CI scripts on your Mac) use
-secrets you approved in Zvault, without ever holding your master password or a
-vault key.
+`zv` lets you, your scripts and the coding agents you approve (Claude Code,
+Cursor, CI scripts on your Mac) use Zvault secrets. It never holds your master
+password or a vault key: every command asks the running Zvault app, which
+decides and decrypts.
+
+## Install
+
+Release builds ship `zv` inside Zvault.app. In Zvault, use **Install
+command-line tool**: it links `zv` into `/usr/local/bin` when that is writable,
+otherwise `~/.local/bin` (and tells you the `PATH` line to add). The release
+workflow also uploads `zv` on its own as the `zv-macOS` artifact.
+
+## For you
+
+```sh
+zv status                               # running? locked? this terminal signed in?
+zv unlock                               # bring Zvault forward and wait for unlock
+zv signin                               # approve this terminal for a while
+zv ls                                   # projects
+zv ls zv://web/development              # secrets and folders in an environment
+zv ls -r zv://web                       # every secret path below a place
+zv read zv://web/development/DATABASE_URL
+zv copy zv://web/production/STRIPE_KEY  # clipboard, cleared by Zvault later
+zv set zv://web/development/DATABASE_URL          # prompts for the value, hidden
+echo -n "$VALUE" | zv set zv://web/development/DATABASE_URL
+zv env zv://web/development             # KEY="…" lines for a .env file
+eval "$(zv env zv://web/development --format shell)"
+zv run --env-from zv://web/development -- npm test
+zv signout
+```
+
+Without `--agent`, commands run as you. Each one asks for approval in Zvault
+(with Touch ID when Touch ID unlock is set up), and when Zvault is locked it
+comes forward and waits for you to unlock. `zv signin` approves the terminal
+session (everything started from that terminal window, by its session id) for
+10 minutes of inactivity and at most an hour, or until Zvault locks. `zv set`
+and `zv signin` always ask. Agents started from a signed-in terminal share its
+approval, so sign out before starting one there, or give it its own identity
+below.
+
+`zv copy` never sends the value to the terminal: the app puts it on the
+clipboard and clears it after the delay set in Zvault.
+
+## For agents
 
 ```sh
 zv agent pair --name "Claude Code"      # approve in Zvault; code shown in both places
-zv run --env DATABASE_URL=zv://web/dev/db-url -- npm test
-zv read zv://web/dev/stripe#secret     # prints one value
-zv agent status                        # what this agent may use
+export ZV_AGENT="Claude Code"           # in the agent's environment
+zv run --env DATABASE_URL=zv://web/development/DATABASE_URL -- npm test
+zv read zv://web/development/STRIPE_KEY
+zv env zv://web/development             # only the secrets in its scopes
+zv agent status
 zv agent unpair
 ```
 
-## References
+Commands act as an agent when given `--agent NAME` or `ZV_AGENT`. An agent
+cannot copy, set or sign in.
 
-`zv://<project>/<environment>/[<folder>/]<item>[#<field>]`. Folders are one
-level deep, so three segments mean no folder and four mean a folder. The field
-defaults to `password`; `username`, `notes`, `title` and `url` also work today.
-Segments are `A-Z a-z 0-9 . _ -` and compare case-insensitively.
+## Paths
 
-An agent's scopes are references (an item, or one field of it) or prefixes
-ending in `/*`: `zv://web/*`, `zv://web/dev/*`, `zv://web/dev/payments/*`.
+`zv://<project>/<environment>/[<folder>/]<KEY>`, as in the app and
+`parseSecretPath` in `@zvault/shared`: for example
+`zv://payments-api/production/billing/STRIPE_SECRET_KEY`. Project,
+environment and folder are slugs (lowercase letters, digits and dashes); `KEY`
+is the secret's variable name, and one secret holds a value per environment.
+Folders are one level deep, so three parts mean no folder and four mean a
+folder. A place for `ls`, `env` and `--env-from` is `zv://project`,
+`zv://project/environment`, or a folder with a trailing slash
+(`zv://web/development/billing/`).
+
+`zv env` and `--env-from` export each secret under its `KEY`. Two secrets with
+the same `KEY` in different folders are an error; name one with `--env`.
+
+An agent's scopes are paths (one secret) or places ending in `/*`:
+`zv://web/*`, `zv://web/development/*`, `zv://web/development/billing/*`.
 
 ## How a request is decided
 
@@ -28,23 +82,29 @@ ending in `/*`: `zv://web/*`, `zv://web/dev/*`, `zv://web/dev/payments/*`.
    (`~/Library/Application Support/com.zvault.desktop/`, or `$ZV_SOCKET`). The
    directory is `0700`, the socket `0600`, and the app checks the peer runs as
    the same user (`getpeereid` on macOS, `SO_PEERCRED` on Linux).
-2. `zv` sends the agent's bearer token (in the login Keychain on macOS). The app
+2. An agent sends its bearer token (in the login Keychain on macOS). The app
    stores only its SHA-256 and compares in constant time.
-3. The app checks, in order: paused, every reference inside the agent's scopes,
-   Zvault unlocked, then the approval mode:
+3. For an agent the app checks, in order: paused, every reference inside its
+   scopes, Zvault unlocked, then the approval mode:
    - **Ask every time**: a prompt in the app, then Touch ID when Touch ID
      unlock is set up.
    - **15-minute session**: one approval covers the same references for 15
      minutes.
    - **While unlocked**: no prompt; locking Zvault ends it.
 
-   Locking Zvault or changing an agent's settings ends every session approval
-   and withdraws open prompts.
+   For you: unlocked (waiting for it), then the terminal's sign-in or a
+   prompt with Touch ID.
 
-4. The UI returns the encrypted item for each reference; Rust decrypts it. No
-   secret value passes through the web view.
-5. The use or denial is written to the agent's activity log (references and
-   outcome only, never values) and the values go back over the socket.
+   Locking Zvault or changing an agent's settings ends every approval and
+   sign-in and withdraws open prompts.
+
+4. The UI says which project, environment and secret each path names and
+   hands over the encrypted value; Rust decrypts it with the environment key.
+   No secret value passes through the web view. `zv set` goes the other way:
+   Rust seals the value (and, for a new secret, its metadata) and the UI
+   uploads it.
+5. Every use and denial is written to the activity log (references and
+   outcome, never values) and the answer goes back over the socket.
 
 `zv run` sets the values only in the child's environment and replaces them with
 `********` in its stdout and stderr (values under 4 characters are not
@@ -53,10 +113,19 @@ masked). `--no-mask` hands the child the terminal instead.
 Exit codes: the child's own code for `zv run`; 2 Zvault not reachable, 3 not
 paired, 4 denied / out of scope / paused / timed out, 5 locked, 64 usage.
 
+## For the app UI
+
+`apps/desktop/src/agents/api.ts` is the typed bridge. The UI must register
+`serveResolves`, `serveLists` and `serveWrites` while the vault is loaded, and
+show `onApprovalRequest` / `onPairingRequest` prompts. Rust events:
+`agent://approval-request`, `agent://pairing-request`, `agent://prompt-closed`,
+`agent://resolve-request`, `agent://list-request`, `agent://write-request`,
+`agent://unlock-requested`, `agent://activity`.
+
 ## Code
 
-- `crates/zvault-agent`: reference format, wire protocol, policy, activity
-  log, output masking. No I/O beyond reading a line.
+- `crates/zvault-agent`: reference format, wire protocol, policy, terminal
+  sign-ins, activity log, output masking.
 - `crates/zvault-cli`: the `zv` binary.
-- `apps/desktop/src-tauri/src/agents.rs`: socket server and Tauri commands.
-- `apps/desktop/src/agents/api.ts`: typed bridge for the Agents screen.
+- `apps/desktop/src-tauri/src/agents/`: socket server and Tauri commands.
+- `apps/desktop/src-tauri/src/cli_install.rs`: Install command-line tool.

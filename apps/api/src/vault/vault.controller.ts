@@ -11,14 +11,15 @@ import {
   type VaultRecord,
 } from '@zvault/shared';
 import { z } from 'zod';
-import { CurrentUser, RequireUser, type AuthenticatedUser } from './current-user.js';
+import { SessionGuard } from '../devices/session.guard.js';
+import { CurrentUser, type AuthenticatedUser } from './current-user.js';
 import { VaultService } from './vault.service.js';
 import { ZodPipe } from './zod.pipe.js';
 
 const Id = new ZodPipe(RecordId);
 
 @Controller('vaults')
-@UseGuards(RequireUser)
+@UseGuards(SessionGuard)
 export class VaultController {
   constructor(private readonly vaults: VaultService) {}
 

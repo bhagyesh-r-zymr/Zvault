@@ -272,6 +272,52 @@ impl Registry {
     }
 }
 
+/// How long `zv signin` lasts without use, and at most.
+pub const SIGNIN_IDLE_SECS: u64 = 10 * 60;
+pub const SIGNIN_MAX_SECS: u64 = 60 * 60;
+
+/// `zv signin` grants, keyed by the terminal's session id (`getsid`), so they
+/// cover that terminal's shell and whatever it starts, and nothing else. Kept
+/// in memory only; locking Zvault ends them all.
+#[derive(Debug, Default)]
+pub struct TerminalGrants {
+    /// sid -> (signed in at, last used at)
+    grants: HashMap<i32, (u64, u64)>,
+}
+
+impl TerminalGrants {
+    pub fn grant(&mut self, sid: i32, now: u64) {
+        self.grants.insert(sid, (now, now));
+    }
+
+    pub fn revoke(&mut self, sid: i32) -> bool {
+        self.grants.remove(&sid).is_some()
+    }
+
+    pub fn clear(&mut self) {
+        self.grants.clear();
+    }
+
+    /// Seconds left, without counting this as a use.
+    pub fn remaining(&self, sid: i32, now: u64) -> Option<u64> {
+        let (at, used) = *self.grants.get(&sid)?;
+        let end = (used + SIGNIN_IDLE_SECS).min(at + SIGNIN_MAX_SECS);
+        (now < end).then(|| end - now)
+    }
+
+    /// Whether `sid` is signed in; a use extends the idle window.
+    pub fn use_grant(&mut self, sid: i32, now: u64) -> bool {
+        if self.remaining(sid, now).is_none() {
+            self.grants.remove(&sid);
+            return false;
+        }
+        if let Some((_, used)) = self.grants.get_mut(&sid) {
+            *used = now;
+        }
+        true
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -396,6 +442,29 @@ mod tests {
         assert!(reg.unpair(&id).is_some());
         assert!(reg.authenticate(&id, &token).is_none());
         assert!(reg.agents().is_empty());
+    }
+
+    #[test]
+    fn terminal_sign_in_expires_when_idle_and_at_most_after_an_hour() {
+        let mut g = TerminalGrants::default();
+        assert!(!g.use_grant(7, T0));
+        g.grant(7, T0);
+        assert!(!g.use_grant(8, T0), "other terminals are not signed in");
+        assert!(g.use_grant(7, T0 + SIGNIN_IDLE_SECS - 1));
+        // Use slides the idle window...
+        assert!(g.use_grant(7, T0 + 2 * SIGNIN_IDLE_SECS - 2));
+        // ...but not past the hour.
+        let mut t = T0 + 2 * SIGNIN_IDLE_SECS - 2;
+        while t + 60 < T0 + SIGNIN_MAX_SECS {
+            t += 60;
+            assert!(g.use_grant(7, t));
+        }
+        assert!(!g.use_grant(7, T0 + SIGNIN_MAX_SECS));
+        g.grant(7, T0);
+        assert!(!g.use_grant(7, T0 + SIGNIN_IDLE_SECS));
+        g.grant(7, T0);
+        g.clear();
+        assert_eq!(g.remaining(7, T0), None);
     }
 
     #[test]

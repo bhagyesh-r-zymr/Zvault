@@ -6,6 +6,7 @@ mod agents;
 mod auth;
 mod autolock;
 mod biometric;
+mod cli_install;
 mod clipboard;
 mod commands;
 mod emergency_kit;
@@ -103,6 +104,10 @@ pub fn run() {
             agents::agent_approval_respond,
             agents::agent_pairing_respond,
             agents::agent_resolve_respond,
+            agents::agent_list_respond,
+            agents::agent_write_respond,
+            cli_install::cli_status,
+            cli_install::cli_install,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Zvault");

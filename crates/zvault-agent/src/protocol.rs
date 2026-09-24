@@ -26,6 +26,9 @@ pub struct AgentAuth {
     pub token: Zeroizing<String>,
 }
 
+/// A request comes from a paired agent when `auth` is set, and otherwise from
+/// the user at a terminal. The user's requests are approved in the app (or by
+/// a `zv signin` grant for that terminal); an agent's follow its policy.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Request {
@@ -53,6 +56,16 @@ pub struct Purpose {
 pub enum PurposeKind {
     Run,
     Read,
+    /// `zv env`: every secret in an environment or folder.
+    Export,
+    /// `zv ls`: names only.
+    List,
+    /// `zv copy`: the app puts the value on the clipboard itself.
+    Copy,
+    /// `zv set`: changes a secret.
+    Set,
+    /// `zv signin`: lets this terminal skip prompts for a while.
+    SignIn,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -72,6 +85,37 @@ pub enum RequestBody {
     Status,
     /// Removes this agent. Needs `auth`.
     Unpair,
+    /// Whether the app is locked and this terminal is signed in. Reveals
+    /// nothing else, so it needs no approval.
+    AppStatus,
+    /// Brings Zvault forward and waits until the user unlocks it.
+    Unlock,
+    /// Lets this terminal session use secrets without a prompt for a while.
+    /// User only.
+    SignIn,
+    /// Ends this terminal session's sign-in. User only.
+    SignOut,
+    /// Lists secret paths under `prefix` (everything when `None`). An agent
+    /// sees only secrets inside its scopes.
+    #[serde(rename_all = "camelCase")]
+    List { prefix: Option<ScopePattern> },
+    /// Returns the value of every secret under `prefix`.
+    #[serde(rename_all = "camelCase")]
+    Export {
+        prefix: ScopePattern,
+        purpose: Purpose,
+    },
+    /// Copies a value to the clipboard in the app, which clears it later.
+    /// The value never reaches `zv`. User only.
+    #[serde(rename_all = "camelCase")]
+    Copy { reference: SecretRef },
+    /// Sets a secret's value in its environment, creating the secret if
+    /// needed. User only.
+    #[serde(rename_all = "camelCase")]
+    Set {
+        reference: SecretRef,
+        value: Zeroizing<String>,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -104,6 +148,21 @@ pub enum Response {
         values: Vec<SecretValue>,
     },
     Status(AgentStatus),
+    #[serde(rename_all = "camelCase")]
+    AppStatus {
+        locked: bool,
+        /// Whether this terminal session is signed in.
+        signed_in: bool,
+        /// Seconds the sign-in has left.
+        signed_in_secs: Option<u64>,
+    },
+    List {
+        refs: Vec<SecretRef>,
+    },
+    #[serde(rename_all = "camelCase")]
+    Copied {
+        clear_after_secs: u32,
+    },
     Ok,
     Error {
         code: ErrorCode,
@@ -135,6 +194,8 @@ pub enum ErrorCode {
     Timeout,
     NotFound,
     Busy,
+    AgentsOnly,
+    UserOnly,
     Internal,
 }
 
@@ -151,6 +212,8 @@ impl ErrorCode {
             Self::Timeout => "nobody answered the request in Zvault",
             Self::NotFound => "that secret does not exist",
             Self::Busy => "Zvault is already showing a request; try again",
+            Self::AgentsOnly => "that command is for paired agents; pass --agent",
+            Self::UserOnly => "agents cannot do that; run it yourself without --agent",
             Self::Internal => "Zvault could not complete the request",
         }
     }

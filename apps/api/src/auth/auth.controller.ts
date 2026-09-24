@@ -1,4 +1,13 @@
-import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Inject,
+  Post,
+  UnauthorizedException,
+  UseGuards,
+} from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import {
   LoginFinishRequest,
@@ -12,12 +21,14 @@ import {
   type SignupCompleteResponse,
   type SignupVerifyResponse,
 } from '@zvault/shared';
+import { eq } from 'drizzle-orm';
 import type { z } from 'zod';
 import { ZodPipe } from '../common/zod.pipe.js';
-import { AuthGuard, CurrentSession } from './auth.guard.js';
+import { DATABASE, type Database } from '../db/database.js';
+import { accounts } from '../db/schema.js';
+import { CurrentSession, SessionGuard } from '../devices/session.guard.js';
+import { SessionStore, type Session } from '../devices/session.store.js';
 import { LoginService } from './login.service.js';
-import type { AuthenticatedSession } from './session.service.js';
-import { SessionService } from './session.service.js';
 import { SignupService } from './signup.service.js';
 
 @Controller('auth')
@@ -26,7 +37,8 @@ export class AuthController {
   constructor(
     private readonly signup: SignupService,
     private readonly login: LoginService,
-    private readonly sessions: SessionService,
+    private readonly sessions: SessionStore,
+    @Inject(DATABASE) private readonly db: Database,
   ) {}
 
   /** Emails a verification code. Always 202, registered or not. */
@@ -71,19 +83,25 @@ export class AuthController {
   }
 
   @Get('session')
-  @UseGuards(AuthGuard)
-  session(@CurrentSession() session: AuthenticatedSession): SessionResponse {
+  @UseGuards(SessionGuard)
+  async session(@CurrentSession() session: Session): Promise<SessionResponse> {
+    const [account] = await this.db
+      .select({ email: accounts.email })
+      .from(accounts)
+      .where(eq(accounts.id, session.userId))
+      .limit(1);
+    if (!account) throw new UnauthorizedException();
     return {
-      accountId: session.accountId,
-      email: session.email,
+      accountId: session.userId,
+      email: account.email,
       expiresAt: session.expiresAt.toISOString(),
     };
   }
 
   @Post('logout')
   @HttpCode(204)
-  @UseGuards(AuthGuard)
-  async logout(@CurrentSession() session: AuthenticatedSession): Promise<void> {
-    await this.sessions.revoke(session.sessionId);
+  @UseGuards(SessionGuard)
+  async logout(@CurrentSession() session: Session): Promise<void> {
+    await this.sessions.revoke(session.userId, session.id);
   }
 }

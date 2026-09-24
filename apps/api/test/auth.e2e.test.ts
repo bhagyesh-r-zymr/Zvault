@@ -1,6 +1,7 @@
 import {
   ApiError,
   KDF_DEFAULTS,
+  ListDevicesResponse,
   LoginFinishResponse,
   LoginStartResponse,
   SessionResponse,
@@ -23,6 +24,8 @@ const keyset = {
   nonce: b64(randomBytes(24)),
   ct: b64(randomBytes(48)),
 };
+
+const device = { name: 'Test Mac', platform: 'macos', appVersion: '0.1.0' } as const;
 
 describe('Auth (e2e)', () => {
   let h: Harness;
@@ -66,6 +69,7 @@ describe('Auth (e2e)', () => {
       loginId: start.loginId,
       srpA: b64(client.publicA),
       srpM1: b64(client.m1),
+      device,
     });
     return { res, start, client };
   }
@@ -218,6 +222,10 @@ describe('Auth (e2e)', () => {
       const auth = { Authorization: `Bearer ${body.sessionToken}` };
       const me = await request(h.server).get('/v1/auth/session').set(auth).expect(200);
       expect(SessionResponse.parse(me.body).email).toBe(email);
+      const devices = await request(h.server).get('/v1/devices').set(auth).expect(200);
+      expect(ListDevicesResponse.parse(devices.body).devices).toEqual([
+        expect.objectContaining({ device, current: true }),
+      ]);
 
       await request(h.server).post('/v1/auth/logout').set(auth).expect(204);
       await request(h.server).get('/v1/auth/session').set(auth).expect(401);
@@ -243,6 +251,7 @@ describe('Auth (e2e)', () => {
         loginId: start.loginId,
         srpA: b64(client.publicA),
         srpM1: b64(client.m1),
+        device,
       }).expect(401);
     });
 
@@ -265,6 +274,7 @@ describe('Auth (e2e)', () => {
         loginId: start.loginId,
         srpA: b64(client.publicA),
         srpM1: b64(client.m1),
+        device,
       }).expect(401);
     });
 
@@ -290,6 +300,7 @@ describe('Auth (e2e)', () => {
         loginId: start.loginId,
         srpA: b64(Buffer.alloc(384)),
         srpM1: b64(randomBytes(32)),
+        device,
       }).expect(401);
     });
 

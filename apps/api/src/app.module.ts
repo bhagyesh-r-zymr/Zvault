@@ -4,6 +4,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module.js';
 import { ConfigModule } from './config/config.module.js';
 import { DatabaseModule } from './db/database.module.js';
+import { DevicesModule } from './devices/devices.module.js';
 import { HealthController } from './health/health.controller.js';
 import { MailModule } from './mail/mail.module.js';
 import { MetaController } from './meta/meta.controller.js';
@@ -15,6 +16,7 @@ import { TwoFactorModule } from './two-factor/two-factor.module.js';
     DatabaseModule,
     MailModule,
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
+    DevicesModule,
     AuthModule,
     TwoFactorModule.forRoot(),
   ],

@@ -1,0 +1,109 @@
+name: Release macOS app
+
+# Builds a universal (Apple silicon + Intel) Zvault.dmg.
+#   - Push a tag like v0.1.0 to build it and attach it to a draft GitHub Release.
+#   - Or run it by hand from the Actions tab; the .dmg is then a workflow artifact.
+#
+# Signing and notarization turn on when the APPLE_* secrets are set (see
+# docs/macos-release.md). Without them the .dmg is unsigned: it installs, but
+# macOS warns on first open and Touch ID unlock is unavailable.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-macos-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  dmg:
+    name: Build Zvault.dmg
+    runs-on: macos-latest
+    env:
+      # Where the shipped app talks to. Set these as repository variables.
+      VITE_API_URL: ${{ vars.ZVAULT_API_URL }}
+      VITE_SHARE_ORIGIN: ${{ vars.ZVAULT_SHARE_ORIGIN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @zvault/shared build
+
+      - name: Require a production API URL on tagged releases
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          if [ -z "$VITE_API_URL" ]; then
+            echo "::error::Set the ZVAULT_API_URL repository variable (e.g. https://api.zvault.example) before tagging a release."
+            exit 1
+          fi
+
+      # Release-only config: version from the tag, and the API origin added to
+      # the CSP so the app may reach it.
+      - name: Write release config
+        working-directory: apps/desktop
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version="${GITHUB_REF#refs/tags/v}"
+          else
+            version="0.0.0"
+          fi
+          csp=$(jq -r '.app.security.csp' src-tauri/tauri.conf.json)
+          if [ -n "$VITE_API_URL" ]; then
+            origin=$(node -e 'console.log(new URL(process.argv[1]).origin)' "$VITE_API_URL")
+            csp="${csp/connect-src /connect-src $origin }"
+          fi
+          jq -n --arg v "$version" --arg csp "$csp" \
+            '{version: $v, app: {security: {csp: $csp}}}' > src-tauri/tauri.release.conf.json
+          cat src-tauri/tauri.release.conf.json
+
+      # Only export the signing secrets that exist: Tauri treats an empty
+      # APPLE_CERTIFICATE as "sign with this" and fails.
+      - name: Load signing secrets
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
+                      APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [ -n "${!name}" ]; then echo "$name=${!name}" >> "$GITHUB_ENV"; fi
+          done
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "::warning::No APPLE_CERTIFICATE secret: building an unsigned .dmg."
+          fi
+
+      # Signs with the Developer ID certificate and notarizes with the Apple ID
+      # when the variables above are set.
+      - name: Build
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/desktop
+          args: --target universal-apple-darwin --config src-tauri/tauri.release.conf.json
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          releaseName: Zvault ${{ github.ref_name }}
+          releaseDraft: true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Zvault-macOS
+          path: target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error

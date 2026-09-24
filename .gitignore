@@ -15,3 +15,6 @@ apps/desktop/src-tauri/gen/
 
 # CDK synth output
 cdk.out/
+
+# Written by the macOS release workflow
+apps/desktop/src-tauri/tauri.release.conf.json

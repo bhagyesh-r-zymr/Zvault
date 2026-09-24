@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   Inject,
   Post,
@@ -12,11 +13,13 @@ import { Throttle } from '@nestjs/throttler';
 import {
   LoginFinishRequest,
   LoginStartRequest,
+  LoginTwoFactorRequest,
   SignupCompleteRequest,
   SignupStartRequest,
   SignupVerifyRequest,
   type LoginFinishResponse,
   type LoginStartResponse,
+  type LoginTwoFactorResponse,
   type SessionResponse,
   type SignupCompleteResponse,
   type SignupVerifyResponse,
@@ -80,6 +83,16 @@ export class AuthController {
     @Body(new ZodPipe(LoginFinishRequest)) body: z.output<typeof LoginFinishRequest>,
   ): Promise<LoginFinishResponse> {
     return this.login.finish(body);
+  }
+
+  /** Completes a login that `login/finish` answered with `twoFactorRequired`. */
+  @Post('login/two-factor')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  loginTwoFactor(
+    @Body(new ZodPipe(LoginTwoFactorRequest)) body: z.output<typeof LoginTwoFactorRequest>,
+  ): Promise<LoginTwoFactorResponse> {
+    return this.login.finishTwoFactor(body.twoFactorToken, body.proof);
   }
 
   @Get('session')

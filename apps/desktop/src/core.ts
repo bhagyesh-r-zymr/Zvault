@@ -40,6 +40,8 @@ export const core = {
     kdf: KdfParams;
     srpB: string;
   }) => invoke<LoginProof>('login_prove', args),
+  /** Checks the server's SRP proof without finishing the login, before a 2FA code is sent. */
+  loginVerifyServer: (srpM2: string) => invoke<void>('login_verify_server', { srpM2 }),
   loginFinish: (srpM2: string, encryptedKeyset: EncryptedBlob) =>
     invoke<Unlocked>('login_finish', { srpM2, encryptedKeyset }),
   lock: () => invoke<void>('lock'),

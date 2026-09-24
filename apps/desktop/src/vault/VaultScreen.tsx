@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { OneTimePasswordCode, OneTimePasswordEditor } from '../otp/index.js';
 import type { SharingApi } from '../sharing/api.js';
 import { ShareItem } from '../sharing/ShareItem.js';
 import { CopyButton, ErrorLine, LetterTile, SecretText, Sheet } from '../ui/controls.js';
@@ -13,7 +14,14 @@ const SYNC_INTERVAL_MS = 30_000;
 /** Fired by the app shell on ⌘K so the list's search box takes focus. */
 export const FOCUS_SEARCH_EVENT = 'zvault:focus-search';
 
-const EMPTY: ItemFields = { title: '', username: '', password: '', urls: [], notes: '' };
+const EMPTY: ItemFields = {
+  title: '',
+  username: '',
+  password: '',
+  urls: [],
+  notes: '',
+  totp: '',
+};
 
 type Pane = { mode: 'view'; id: string } | { mode: 'edit'; id: string | null } | { mode: 'none' };
 
@@ -236,6 +244,8 @@ function ItemDetail(props: {
     sync.open(id).then(setFields, (e: unknown) => setError(message(e)));
   }, [sync, id]);
 
+  const totpCode = useCallback(() => sync.totpCode(id), [sync, id]);
+
   // Inline confirmation: WKWebView does not reliably show window.confirm.
   const remove = () => {
     sync.remove(id).then(onDeleted, (e: unknown) => setError(message(e)));
@@ -298,6 +308,14 @@ function ItemDetail(props: {
             </button>
             <CopyButton value={fields.password} />
           </div>
+          {fields.totp && (
+            <div className="row">
+              <div className="row-main">
+                <span className="row-label">one-time password</span>
+                <OneTimePasswordCode getCode={totpCode} />
+              </div>
+            </div>
+          )}
           {fields.urls.map((url) => (
             <div key={url} className="row">
               <div className="row-main">
@@ -442,6 +460,13 @@ function ItemEditor(props: {
               autoComplete="new-password"
             />
           </label>
+        </div>
+        <div className="field">
+          <span>One-time password</span>
+          <OneTimePasswordEditor
+            value={fields.totp}
+            onChange={(totp) => setFields({ ...fields, totp })}
+          />
         </div>
         <label className="field">
           <span>Websites (one per line)</span>

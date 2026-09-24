@@ -1,0 +1,60 @@
+.otp-code {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.otp-code code {
+  font-size: 1.25rem;
+  letter-spacing: 0.05em;
+  font-variant-numeric: tabular-nums;
+}
+
+.otp-ring {
+  width: 1.75rem;
+  height: 1.75rem;
+  transform: rotate(-90deg);
+}
+
+.otp-ring circle {
+  fill: none;
+  stroke-width: 3;
+}
+
+.otp-ring-track {
+  stroke: color-mix(in srgb, currentColor 15%, transparent);
+}
+
+.otp-ring-fill {
+  stroke: currentColor;
+  stroke-linecap: round;
+  transition: stroke-dasharray 1s linear;
+}
+
+.otp-ring-low .otp-ring-fill {
+  stroke: #d64545;
+}
+
+.otp-ring text {
+  font-size: 11px;
+  fill: currentColor;
+  transform: rotate(90deg);
+  transform-origin: 18px 18px;
+}
+
+.otp-editor {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.otp-actions {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.otp-actions input {
+  flex: 1;
+}

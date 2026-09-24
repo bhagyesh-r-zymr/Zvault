@@ -810,7 +810,7 @@ fn vault_error(e: VaultError) -> ErrorCode {
         VaultError::VaultNotOpen | VaultError::Decrypt | VaultError::InvalidRecord => {
             ErrorCode::NotFound
         }
-        VaultError::Encrypt => ErrorCode::Internal,
+        VaultError::Encrypt | VaultError::OneTimePassword(_) => ErrorCode::Internal,
     }
 }
 

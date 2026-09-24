@@ -2,10 +2,12 @@ import {
   ApiError,
   LoginFinishResponse,
   LoginStartResponse,
+  LoginTwoFactorResponse,
   SessionResponse,
   SignupCompleteResponse,
   SignupVerifyResponse,
   type LoginFinishRequest,
+  type LoginTwoFactorRequest,
   type SignupCompleteRequest,
 } from '@zvault/shared';
 import type { z } from 'zod';
@@ -17,10 +19,16 @@ export class ApiRequestError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** Machine-readable `error` from the body, e.g. `invalid_two_factor_code`. */
+    readonly code?: string,
   ) {
     super(message);
   }
 }
+
+/** The `error` and `message` fields some endpoints return instead of the standard shape. */
+const errorFields = (json: unknown): { error?: unknown; message?: unknown } =>
+  typeof json === 'object' && json !== null ? json : {};
 
 async function call<T extends z.ZodType>(
   path: string,
@@ -40,16 +48,21 @@ async function call<T extends z.ZodType>(
   } catch {
     throw new ApiRequestError(0, "Can't reach the Zvault server. Check your connection.");
   }
-  const json: unknown = res.status === 204 || res.status === 202 ? null : await res.json();
+  const json: unknown =
+    res.status === 204 || res.status === 202 ? null : await res.json().catch(() => null);
   if (!res.ok) {
     const parsed = ApiError.safeParse(json);
-    if (res.status === 429) {
+    const { error, message } = errorFields(json);
+    const code = typeof error === 'string' ? error : undefined;
+    if (res.status === 429 && !code) {
       throw new ApiRequestError(429, 'Too many attempts. Wait a minute and try again.');
     }
-    throw new ApiRequestError(
-      res.status,
-      parsed.success ? parsed.data.message : `Request failed (${res.status})`,
-    );
+    const text = parsed.success
+      ? parsed.data.message
+      : typeof message === 'string'
+        ? message
+        : `Request failed (${res.status})`;
+    throw new ApiRequestError(res.status, text, code);
   }
   return (schema ? schema.parse(json) : undefined) as z.output<T>;
 }
@@ -63,6 +76,8 @@ export const api = {
   loginStart: (email: string) => call('auth/login/start', { body: { email } }, LoginStartResponse),
   loginFinish: (body: LoginFinishRequest) =>
     call('auth/login/finish', { body }, LoginFinishResponse),
+  loginTwoFactor: (body: LoginTwoFactorRequest) =>
+    call('auth/login/two-factor', { body }, LoginTwoFactorResponse),
   session: (token: string) => call('auth/session', { token }, SessionResponse),
   logout: (token: string) => call('auth/logout', { token, method: 'POST' }, null),
 };

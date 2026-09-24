@@ -17,6 +17,8 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 arboard = { version = "3", default-features = false }
 base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp"] }
+rqrr = { version = "0.9", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
@@ -29,7 +31,11 @@ zeroize = { version = "1.8", features = ["derive"] }
 zvault-agent = { path = "../../../crates/zvault-agent" }
 zvault-crypto = { path = "../../../crates/zvault-crypto" }
 zvault-emergency-kit = { path = "../../../crates/zvault-emergency-kit" }
+zvault-otp = { path = "../../../crates/zvault-otp" }
 zvault-passwords = { path = "../../../crates/zvault-passwords" }
+
+[dev-dependencies]
+qrcode = { version = "0.14", default-features = false, features = ["image"] }
 
 # Same as the workspace lints except `unsafe_code`, which is `deny` rather than
 # `forbid` so that `src/platform/macos` alone can call Apple APIs. Nothing else

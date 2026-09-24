@@ -1,6 +1,13 @@
 import type { ItemRecord, LiveItemRecord } from '@zvault/shared';
 import { ConflictError, type VaultApi } from './api.js';
-import type { ItemCipher, ItemFields, ItemSummary, VaultCore, VaultSummary } from './core.js';
+import type {
+  ItemCipher,
+  ItemFields,
+  ItemSummary,
+  OtpCode,
+  VaultCore,
+  VaultSummary,
+} from './core.js';
 
 export interface ListedItem {
   id: string;
@@ -54,6 +61,11 @@ export class VaultSync {
   /** Decrypts an item's fields for display or editing. */
   open(itemId: string): Promise<ItemFields> {
     return this.core.openItem(this.vault.id, cipherOf(this.record(itemId)));
+  }
+
+  /** The item's current one-time password, computed in Rust from the saved item. */
+  totpCode(itemId: string): Promise<OtpCode | null> {
+    return this.core.totpCode(this.vault.id, cipherOf(this.record(itemId)));
   }
 
   /** Creates an item (`itemId` null) or saves an edit. Returns the item id. */

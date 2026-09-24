@@ -2,6 +2,8 @@
 //! into `zvault-crypto`; secrets never cross into JavaScript unless the UI
 //! must display them (for example the Secret Key on the Emergency Kit).
 
+mod generator;
+
 use serde::Serialize;
 
 /// Must match `CRYPTO_VERSION` in `@zvault/shared`.
@@ -27,7 +29,12 @@ fn core_info() -> CoreInfo {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![core_info])
+        .invoke_handler(tauri::generate_handler![
+            core_info,
+            generator::generate_password,
+            generator::generate_passphrase,
+            generator::check_password_strength,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Zvault");
 }

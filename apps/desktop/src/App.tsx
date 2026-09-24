@@ -1,6 +1,8 @@
 import { CRYPTO_VERSION } from '@zvault/shared';
 import { useEffect, useState } from 'react';
 import { core, type CoreInfo } from './core.js';
+import { Generator } from './generator/Generator.js';
+import { StrengthChecker } from './generator/StrengthChecker.js';
 
 export function App() {
   const [info, setInfo] = useState<CoreInfo | null>(null);
@@ -30,6 +32,8 @@ export function App() {
           <dd>{info.aead}</dd>
         </dl>
       )}
+      <Generator />
+      <StrengthChecker />
     </main>
   );
 }

@@ -15,6 +15,13 @@
       "when": 1790261701392,
       "tag": "0001_session_device",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790279363689,
+      "tag": "0002_team_access",
+      "breakpoints": true
     }
   ]
 }

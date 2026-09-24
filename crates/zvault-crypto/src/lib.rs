@@ -22,6 +22,7 @@
 //! Vault and item encryption (per-item keys, padding, record binding) lives in
 //! [`vault`].
 
+mod access;
 mod aead;
 mod error;
 mod kdf;
@@ -33,6 +34,10 @@ mod share;
 pub mod srp;
 pub mod vault;
 
+pub use access::{
+    ACCESS_ID_LEN, generate_environment_key, open_release, seal_release, unwrap_environment_key,
+    wrap_environment_key,
+};
 pub use aead::{NONCE_LEN, Sealed, TAG_LEN, open, seal};
 pub use error::{Error, Result};
 pub use kdf::{AccountKeys, KdfParams, SALT_LEN, derive_account_keys, normalize_account_id};

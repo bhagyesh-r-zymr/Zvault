@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+**/target
+**/.turbo
+**/cdk.out
+**/coverage
+.git
+.env
+**/.env

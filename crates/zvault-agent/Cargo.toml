@@ -1,0 +1,21 @@
+[package]
+name = "zvault-agent"
+version = "0.0.0"
+description = "Local agent access for Zvault: the zv:// reference format, the CLI-to-app wire protocol, per-agent policy, the activity log and output masking. Shared by the zv CLI and the desktop app."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+base64 = "0.22"
+getrandom = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+subtle = "2.6"
+thiserror = "2"
+zeroize = { version = "1.8", features = ["derive", "serde"] }
+
+[lints]
+workspace = true

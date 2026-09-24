@@ -2,6 +2,7 @@
 //! into `zvault-crypto`; secrets never cross into JavaScript unless the UI
 //! must display them (for example the Secret Key on the Emergency Kit).
 
+mod agents;
 mod auth;
 mod autolock;
 mod biometric;
@@ -48,8 +49,10 @@ pub fn run() {
         .manage(emergency_kit::PendingKit::default())
         .manage(Keyring::default())
         .manage(autolock::AppState::new())
+        .manage(agents::AgentHub::default())
         .setup(|app| {
             autolock::start(app.handle());
+            agents::start(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -92,6 +95,14 @@ pub fn run() {
             sharing::sharing_fingerprint,
             sharing::share_seal_to,
             sharing::share_open,
+            agents::agent_access_status,
+            agents::agent_list,
+            agents::agent_update,
+            agents::agent_unpair,
+            agents::agent_activity,
+            agents::agent_approval_respond,
+            agents::agent_pairing_respond,
+            agents::agent_resolve_respond,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Zvault");

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { AgentPrompts } from '../agents/AgentPrompts.js';
 import { AgentsView } from '../agents/AgentsView.js';
+import { serveZv } from '../agents/bridge.js';
 import type { Session } from '../auth.js';
 import { Generator } from '../generator/Generator.js';
 import { StrengthChecker } from '../generator/StrengthChecker.js';
@@ -64,6 +66,8 @@ export function AppShell(props: {
   useEffect(() => {
     void projectsSync.load();
   }, [projectsSync]);
+  // Answer `zv` lookups from these projects while the vault is unlocked.
+  useEffect(() => serveZv(projectsSync), [projectsSync]);
   const sharing = useMemo(
     () => sharingApi(() => ({ authorization: `Bearer ${session.token}` })),
     [session.token],
@@ -251,7 +255,7 @@ export function AppShell(props: {
           <div className="nav-section">
             <span className="eyebrow">Access</span>
           </div>
-          {nav({ name: 'agents' }, 'agent', 'Agents', <span className="count">1</span>)}
+          {nav({ name: 'agents' }, 'agent', 'Agents')}
           {nav({ name: 'sharing' }, 'share', 'Sharing')}
 
           <div className="nav-section">
@@ -321,6 +325,7 @@ export function AppShell(props: {
           />
         )}
       </div>
+      <AgentPrompts />
     </ProjectsContext.Provider>
   );
 }

@@ -23,8 +23,10 @@ sha2 = "0.10"
 thiserror = "2"
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
+nix = { version = "0.30", default-features = false, features = ["socket", "user"] }
 uuid = { version = "1", features = ["v4"] }
 zeroize = { version = "1.8", features = ["derive"] }
+zvault-agent = { path = "../../../crates/zvault-agent" }
 zvault-crypto = { path = "../../../crates/zvault-crypto" }
 zvault-emergency-kit = { path = "../../../crates/zvault-emergency-kit" }
 zvault-passwords = { path = "../../../crates/zvault-passwords" }

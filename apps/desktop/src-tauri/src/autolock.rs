@@ -60,6 +60,7 @@ pub fn lock(app: &AppHandle, reason: LockReason) {
         session.lock()
     };
     app.state::<crate::Keyring>().lock();
+    app.state::<crate::agents::AgentHub>().on_lock();
     crate::auth::forget(app);
     state.clipboard.clear_if_ours(None);
     if was_unlocked {

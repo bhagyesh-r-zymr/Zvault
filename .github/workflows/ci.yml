@@ -27,6 +27,7 @@ jobs:
       node_all: ${{ steps.rust.outputs.node_all }}
       infra: ${{ steps.rust.outputs.infra }}
       rust: ${{ steps.rust.outputs.rust }}
+      mobile: ${{ steps.rust.outputs.mobile }}
     steps:
       - uses: actions/checkout@v4
       # Everything except Rust sources and docs. The SRP test vectors under
@@ -43,6 +44,7 @@ jobs:
               - '!Cargo.lock'
               - '!**/*.md'
               - '!docs/**'
+              - '!apps/mobile/**'
       - uses: dorny/paths-filter@v3
         id: rust
         with:
@@ -64,6 +66,13 @@ jobs:
               - 'eslint.config.mjs'
               - '.nvmrc'
               - 'crates/zvault-crypto/tests/**'
+              - '.github/workflows/ci.yml'
+            mobile:
+              - 'apps/mobile/**'
+              - 'crates/zvault-mobile/**'
+              - 'crates/zvault-crypto/**'
+              - 'crates/zvault-otp/**'
+              - 'Cargo.lock'
               - '.github/workflows/ci.yml'
             infra:
               - 'infra/**'
@@ -148,3 +157,39 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy -p zvault-desktop --all-targets --locked -- -D warnings
       - run: cargo test -p zvault-desktop --locked
+
+  mobile:
+    name: Android app (analyze, test, build)
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.5
+          channel: stable
+          cache: true
+      # Cargokit builds the Rust core for each Android ABI with the NDK.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib/main.dart lib/src/*.dart lib/src/screens test
+      - run: flutter analyze
+      - run: flutter test
+      - name: Build the APK
+        run: flutter build apk --release --target-platform android-arm64,android-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zvault-android
+          path: apps/mobile/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 14

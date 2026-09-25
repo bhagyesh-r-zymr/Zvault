@@ -135,3 +135,100 @@ export function waitlistJoinedEmail(to: string, joinerEmail: string, total: numb
 </body></html>`,
   };
 }
+
+/** A code for recovering an account whose recovery code is set up. */
+export function recoveryCodeEmail(to: string, code: string, minutes: number): MailMessage {
+  return {
+    to,
+    subject: `${code} is your Zvault account recovery code`,
+    text: [
+      `Someone, hopefully you, is recovering the Zvault account for this email address. The code is ${code}.`,
+      '',
+      `Enter it in the Zvault app with your recovery code. It expires in ${minutes} minutes.`,
+      '',
+      "If this wasn't you, don't share this code with anyone. Your account stays as it is without your recovery code.",
+    ].join('\n'),
+    html: layout(
+      'Recover your account',
+      `<p>Someone, hopefully you, is recovering the Zvault account for this email address. Enter this code in the Zvault app with your recovery code. It expires in ${minutes} minutes.</p>
+<p style="font-size:32px;letter-spacing:8px;font-weight:600">${escape(code)}</p>
+<p>If this wasn't you, don't share this code with anyone. Your account stays as it is without your recovery code.</p>`,
+    ),
+  };
+}
+
+/** Sent instead of a code when the account never set up recovery. */
+export function recoveryUnavailableEmail(to: string): MailMessage {
+  return {
+    to,
+    subject: 'Your Zvault account has no recovery code',
+    text: [
+      'Someone tried to recover the Zvault account for this email address, but it has no recovery code set up.',
+      '',
+      'Zvault is end-to-end encrypted, so without your master password and Secret Key, or a recovery code, nobody can open your vault, including us.',
+      '',
+      'If you can still sign in on a device, set up a recovery code in Settings > Security. If this was not you, no action is needed.',
+    ].join('\n'),
+    html: layout(
+      'No recovery code set up',
+      `<p>Someone tried to recover the Zvault account for this email address, but it has no recovery code set up.</p>
+<p>Zvault is end-to-end encrypted, so without your master password and Secret Key, or a recovery code, nobody can open your vault, including us.</p>
+<p>If you can still sign in on a device, set up a recovery code in <strong>Settings &gt; Security</strong>. If this wasn't you, no action is needed.</p>`,
+    ),
+  };
+}
+
+/** Security notice after the master password changed. */
+export function passwordChangedEmail(to: string): MailMessage {
+  return {
+    to,
+    subject: 'Your Zvault master password was changed',
+    text: [
+      'The master password for your Zvault account was just changed. Your other devices were signed out.',
+      '',
+      "If you didn't do this, sign in with your recovery code right away and set a new master password.",
+    ].join('\n'),
+    html: layout(
+      'Master password changed',
+      `<p>The master password for your Zvault account was just changed. Your other devices were signed out.</p>
+<p>If you didn't do this, recover your account with your recovery code right away and set a new master password.</p>`,
+    ),
+  };
+}
+
+/** Security notice after a recovery code was set up or replaced. */
+export function recoveryCodeSetEmail(to: string, replaced: boolean): MailMessage {
+  const what = replaced ? 'replaced' : 'set up';
+  return {
+    to,
+    subject: `A Zvault recovery code was ${what}`,
+    text: [
+      `A recovery code was just ${what} for your Zvault account.${replaced ? ' The old one no longer works.' : ''}`,
+      '',
+      "If you didn't do this, change your master password and replace the recovery code in Settings > Security.",
+    ].join('\n'),
+    html: layout(
+      `Recovery code ${what}`,
+      `<p>A recovery code was just ${what} for your Zvault account.${replaced ? ' The old one no longer works.' : ''}</p>
+<p>If you didn't do this, change your master password and replace the recovery code in <strong>Settings &gt; Security</strong>.</p>`,
+    ),
+  };
+}
+
+/** Security notice after the account was recovered with its recovery code. */
+export function accountRecoveredEmail(to: string): MailMessage {
+  return {
+    to,
+    subject: 'Your Zvault account was recovered',
+    text: [
+      'Your Zvault account was just recovered with its recovery code. It has a new master password, a new Secret Key and a new recovery code, and every other device was signed out.',
+      '',
+      'Sign in on your other devices with the new Emergency Kit.',
+    ].join('\n'),
+    html: layout(
+      'Account recovered',
+      `<p>Your Zvault account was just recovered with its recovery code. It has a new master password, a new Secret Key and a new recovery code, and every other device was signed out.</p>
+<p>Sign in on your other devices with the new Emergency Kit.</p>`,
+    ),
+  };
+}

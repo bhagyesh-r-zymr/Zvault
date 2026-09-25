@@ -47,9 +47,45 @@ export const accounts = pgTable('accounts', {
   kdf: jsonb('kdf').$type<StoredKdf>().notNull(),
   srpVerifier: bytea('srp_verifier').notNull(),
   encryptedKeyset: jsonb('encrypted_keyset').$type<EncryptedBlob>().notNull(),
+  /**
+   * A second copy of the keyset, sealed with a key derived from the account's
+   * recovery code, and the SHA-256 of the auth token derived from the same
+   * code. Null until the person sets up recovery. The code itself stays on
+   * their device and paper.
+   */
+  recoveryKeyset: jsonb('recovery_keyset').$type<EncryptedBlob>(),
+  recoveryVerifier: bytea('recovery_verifier'),
+  recoveryUpdatedAt: ts('recovery_updated_at'),
   createdAt: createdAt(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
 });
+
+/**
+ * Account recovery attempts. Each row is one emailed code (stored as an HMAC);
+ * once the code and the recovery auth token check out, the row carries a
+ * single-use recovery token (hashed) for `recover/complete`. `accountId` is
+ * null for addresses with no account, which still get a row so rate limits
+ * behave the same.
+ */
+export const accountRecoveries = pgTable(
+  'account_recoveries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    accountId: uuid('account_id').references(() => accounts.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    codeHash: bytea('code_hash').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    expiresAt: ts('expires_at').notNull(),
+    verifiedAt: ts('verified_at'),
+    /** Closed without success: superseded, or too many wrong tries. */
+    closedAt: ts('closed_at'),
+    tokenHash: bytea('token_hash').unique(),
+    tokenExpiresAt: ts('token_expires_at'),
+    tokenUsedAt: ts('token_used_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('account_recoveries_email_idx').on(t.email, t.createdAt)],
+);
 
 /**
  * Sign-up email verification. A code is stored only as an HMAC; once it is

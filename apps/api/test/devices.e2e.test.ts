@@ -8,7 +8,7 @@ import {
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { accounts } from '../src/db/schema.js';
-import { SessionStore } from '../src/devices/session.store.js';
+import { SESSION_IDLE_TTL_MS, SessionStore } from '../src/devices/session.store.js';
 import { createHarness, type Harness } from './harness.js';
 
 const mac: DeviceInfo = { name: 'Work MacBook', platform: 'macos', appVersion: '0.1.0' };
@@ -138,7 +138,7 @@ describe('Devices (e2e)', () => {
 
   it('expires sessions that have been idle too long', async () => {
     const alice = await newAccount();
-    const past = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
+    const past = new Date(Date.now() - SESSION_IDLE_TTL_MS - 24 * 60 * 60 * 1000);
     const stale = await sessions.issue(alice, mac, past);
     await request(h.server).get('/v1/devices').set(auth(stale.token)).expect(401);
   });

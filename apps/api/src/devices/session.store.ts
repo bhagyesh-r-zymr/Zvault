@@ -20,9 +20,9 @@ export interface IssuedSession {
 }
 
 /** Sessions end after this long regardless of activity. */
-export const SESSION_ABSOLUTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const SESSION_ABSOLUTE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 /** Sessions unused for this long are treated as signed out. */
-export const SESSION_IDLE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+export const SESSION_IDLE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /** Skip lastSeenAt writes that would change it by less than this. */
 export const TOUCH_GRANULARITY_MS = 60 * 1000;
 

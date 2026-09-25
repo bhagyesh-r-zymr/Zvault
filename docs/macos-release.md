@@ -12,6 +12,9 @@ universal `Zvault.dmg` (Apple silicon and Intel) on a GitHub macOS runner.
    on a double-click). On macOS 15 and later, go to **System Settings → Privacy &
    Security** and click **Open Anyway** instead.
 
+Installed copies update themselves from later releases once the updater key is set up;
+see [auto-update.md](auto-update.md).
+
 Release builds talk to the `ZVAULT_API_URL` repository variable, or to the demo server
 `https://52-66-189-120.sslip.io` while it is unset. Touch ID unlock does not work in an
 unsigned build.

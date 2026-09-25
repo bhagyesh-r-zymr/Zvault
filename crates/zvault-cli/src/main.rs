@@ -9,6 +9,7 @@ mod client;
 mod credentials;
 mod format;
 mod run;
+mod update;
 
 use std::io::{BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
@@ -27,7 +28,7 @@ use crate::format::EnvFormat;
 #[derive(Parser)]
 #[command(
     name = "zv",
-    version,
+    version = update::VERSION,
     about = "Use your Zvault secrets from the terminal, scripts and AI agents",
     after_help = "Secrets are named zv://project/environment/[folder/]KEY, \
                   for example zv://payments-api/production/STRIPE_SECRET_KEY."
@@ -109,6 +110,13 @@ enum Cmd {
     /// Pair, inspect or remove AI agents.
     #[command(subcommand)]
     Agent(AgentCmd),
+    /// Update zv to the latest release. The zv inside Zvault.app updates
+    /// with the app instead.
+    Update {
+        /// Only say whether a newer zv exists.
+        #[arg(long)]
+        check: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -153,6 +161,8 @@ enum Error {
     Spawn(std::io::Error),
     #[error("could not read the value: {0}")]
     Input(std::io::Error),
+    #[error(transparent)]
+    Update(#[from] update::UpdateError),
 }
 
 impl Error {
@@ -162,7 +172,7 @@ impl Error {
             Self::Cred(CredError::NonePaired | CredError::Unknown(_)) => 3,
             Self::Usage(_) => 64,
             Self::Spawn(_) => 127,
-            Self::Cred(_) | Self::Input(_) => 1,
+            Self::Cred(_) | Self::Input(_) | Self::Update(_) => 1,
         }
     }
 }
@@ -378,6 +388,7 @@ fn dispatch(cmd: Cmd) -> Result<u8, Error> {
             Ok(run::exit_code(status))
         }
         Cmd::Agent(cmd) => agent(&store_path, cmd),
+        Cmd::Update { check } => Ok(update::run(check)?),
     }
 }
 

@@ -43,6 +43,7 @@ describe('Waitlist (e2e)', () => {
       name: 'Ada Lovelace',
       email: 'ada@example.com',
       note: 'Platform team',
+      status: 'pending',
     });
     await flush();
     const notice = h.mailer.lastTo(OWNER);

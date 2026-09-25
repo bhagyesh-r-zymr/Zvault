@@ -1,5 +1,5 @@
 {
-  "id": "d39f4571-dbe0-4348-86d5-e7718e8868c5",
+  "id": "8af003fc-f86a-4308-85b4-59db60c5d851",
   "prevId": "6106124d-15e2-43a0-a0b7-3b390e124abe",
   "version": "7",
   "dialect": "postgresql",
@@ -1859,6 +1859,14 @@
           "notNull": true,
           "default": "''"
         },
+        "status": {
+          "name": "status",
+          "type": "waitlist_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1874,7 +1882,29 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "waitlist_status_idx": {
+          "name": "waitlist_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
@@ -1909,6 +1939,11 @@
       "name": "principal_type",
       "schema": "public",
       "values": ["account", "group", "agent"]
+    },
+    "public.waitlist_status": {
+      "name": "waitlist_status",
+      "schema": "public",
+      "values": ["pending", "verification_sent", "verified"]
     }
   },
   "schemas": {},

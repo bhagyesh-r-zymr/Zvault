@@ -488,15 +488,33 @@ export const accessRequests = pgTable(
 );
 
 /**
- * People who asked to try Zvault from the landing page. One row per email;
- * joining again updates the name and note.
+ * Where a waitlist joiner is in getting Zvault email while SES is in sandbox
+ * mode. Moved along by deploy/ec2/waitlist.sh, which the owner runs.
  */
-export const waitlist = pgTable('waitlist', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  /** Normalized (trimmed, lowercased). */
-  email: text('email').notNull().unique(),
-  name: text('name').notNull(),
-  note: text('note').notNull().default(''),
-  createdAt: createdAt(),
-  updatedAt: ts('updated_at').notNull().defaultNow(),
-});
+export const waitlistStatus = pgEnum('waitlist_status', [
+  /** Joined; not yet added to SES. */
+  'pending',
+  /** SES sent them a confirmation link. */
+  'verification_sent',
+  /** They clicked it; Zvault email reaches them. */
+  'verified',
+]);
+
+/**
+ * People who asked to try Zvault from the landing page. One row per email;
+ * joining again changes nothing.
+ */
+export const waitlist = pgTable(
+  'waitlist',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** Normalized (trimmed, lowercased). */
+    email: text('email').notNull().unique(),
+    name: text('name').notNull(),
+    note: text('note').notNull().default(''),
+    status: waitlistStatus('status').notNull().default('pending'),
+    createdAt: createdAt(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [index('waitlist_status_idx').on(t.status, t.createdAt)],
+);

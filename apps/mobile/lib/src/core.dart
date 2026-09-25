@@ -1,8 +1,10 @@
 import 'rust/api/pairing.dart' as pairing;
 import 'rust/api/session.dart' as session;
+import 'rust/api/sharing.dart' as sharing;
 import 'rust/api/vault.dart' as vault;
 
 export 'rust/api/pairing.dart' show PairedAccount, ScannedCode;
+export 'rust/api/sharing.dart' show NewShareLink, NewUserShare, SharingIdentity;
 export 'rust/api/vault.dart'
     show EnvironmentView, ItemDetail, ItemSummary, OneTimeCode, VaultSummary;
 
@@ -63,5 +65,27 @@ class Core {
     secretId: secretId,
     environmentId: environmentId,
     blobJson: blobJson,
+  );
+
+  /// Encrypts an item under a fresh link key. The URL holds the key.
+  Future<sharing.NewShareLink> createShareLink(
+    String vaultId,
+    String recordJson,
+    String shareOrigin,
+  ) => sharing.shareLinkCreate(vaultId: vaultId, recordJson: recordJson, shareOrigin: shareOrigin);
+
+  Future<sharing.SharingIdentity> sharingIdentity() => sharing.sharingIdentity();
+
+  Future<String> sharingFingerprint(String publicKey) =>
+      sharing.sharingFingerprint(publicKey: publicKey);
+
+  Future<sharing.NewUserShare> sealShareTo(
+    String vaultId,
+    String recordJson,
+    String recipientPublicKey,
+  ) => sharing.shareSealTo(
+    vaultId: vaultId,
+    recordJson: recordJson,
+    recipientPublicKey: recipientPublicKey,
   );
 }

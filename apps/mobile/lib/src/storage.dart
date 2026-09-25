@@ -12,6 +12,7 @@ class SavedAccount {
     required this.sessionToken,
     required this.quickUnlock,
     this.autoLockMinutes = 1,
+    this.sharingPins = const {},
   });
 
   final String api;
@@ -22,12 +23,21 @@ class SavedAccount {
   final bool quickUnlock;
   final int autoLockMinutes;
 
-  SavedAccount copyWith({bool? quickUnlock, int? autoLockMinutes}) => SavedAccount(
+  /// Other people's sharing keys by email, pinned the first time this phone
+  /// shares with them, as the Mac does. A different key later gets a warning.
+  final Map<String, String> sharingPins;
+
+  SavedAccount copyWith({
+    bool? quickUnlock,
+    int? autoLockMinutes,
+    Map<String, String>? sharingPins,
+  }) => SavedAccount(
     api: api,
     email: email,
     sessionToken: sessionToken,
     quickUnlock: quickUnlock ?? this.quickUnlock,
     autoLockMinutes: autoLockMinutes ?? this.autoLockMinutes,
+    sharingPins: sharingPins ?? this.sharingPins,
   );
 
   Map<String, Object> toJson() => {
@@ -37,6 +47,7 @@ class SavedAccount {
     'sessionToken': sessionToken,
     'quickUnlock': quickUnlock,
     'autoLockMinutes': autoLockMinutes,
+    'sharingPins': sharingPins,
   };
 
   static SavedAccount? fromJson(String? text) {
@@ -49,6 +60,8 @@ class SavedAccount {
         sessionToken: j['sessionToken'] as String,
         quickUnlock: j['quickUnlock'] as bool? ?? false,
         autoLockMinutes: j['autoLockMinutes'] as int? ?? 1,
+        sharingPins:
+            (j['sharingPins'] as Map<String, dynamic>?)?.cast<String, String>() ?? const {},
       );
     } catch (_) {
       return null;

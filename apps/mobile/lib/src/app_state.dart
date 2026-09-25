@@ -29,6 +29,72 @@ class VaultItem {
   final ItemSummary summary;
 }
 
+/// A link that was just made. [url] holds the link key: it is shown and
+/// shared from this phone only.
+class CreatedShareLink {
+  const CreatedShareLink({
+    required this.url,
+    required this.maxViews,
+    this.allowedEmails,
+    this.unverifiedEmails = const [],
+  });
+
+  final String url;
+  final int maxViews;
+
+  /// Who may open it, or null for anyone with the link.
+  final List<String>? allowedEmails;
+
+  /// Allowed emails that may not get the code while Zvault email is in test mode.
+  final List<String> unverifiedEmails;
+}
+
+enum PinCheck { newKey, match, changed }
+
+/// Another Zvault user found by email, ready to share with.
+class ShareRecipient {
+  const ShareRecipient({
+    required this.email,
+    required this.publicKey,
+    required this.fingerprint,
+    required this.pin,
+  });
+
+  final String email;
+  final String publicKey;
+
+  /// Security code to compare with them out of band.
+  final String fingerprint;
+  final PinCheck pin;
+}
+
+/// Share limits from `SHARE_LIMITS` in `@zvault/shared`.
+abstract final class ShareLimits {
+  static const maxViews = 100;
+  static const maxAllowedEmails = 20;
+}
+
+final _emailPattern = RegExp(r"^[a-z0-9._%+'-]+@[a-z0-9-]+(\.[a-z0-9-]+)+$");
+
+/// Splits what the person typed into normalized emails, or throws a message
+/// fit to show. Same rules as the Mac's `parseEmails`.
+List<String> parseShareEmails(String text) {
+  final parts = text.split(RegExp(r'[\s,;]+')).where((p) => p.isNotEmpty);
+  if (parts.isEmpty) throw const FormatException('Add at least one email.');
+  final emails = <String>[];
+  for (final part in parts) {
+    final email = part.toLowerCase();
+    if (email.length > 254 || !_emailPattern.hasMatch(email)) {
+      throw FormatException('$part is not an email address.');
+    }
+    if (!emails.contains(email)) emails.add(email);
+  }
+  if (emails.length > ShareLimits.maxAllowedEmails) {
+    throw const FormatException('A link can name at most ${ShareLimits.maxAllowedEmails} people.');
+  }
+  return emails;
+}
+
 class Environment {
   Environment(this.id, Map<String, dynamic> meta, this.unlocked)
     : name = meta['name'] as String? ?? 'Environment',
@@ -130,6 +196,9 @@ class AppState extends ChangeNotifier {
   final AccountStore store;
   final Core core;
   final String? deviceName;
+
+  @visibleForTesting
+  set api(ZvaultApi value) => _api = value;
 
   Phase phase = Phase.loading;
   SavedAccount? account;
@@ -470,6 +539,69 @@ class AppState extends ChangeNotifier {
   Future<ItemDetail> openItem(VaultItem item) => core.openItem(item.vaultId, item.recordJson);
 
   Future<OneTimeCode?> itemCode(VaultItem item) => core.itemTotp(item.vaultId, item.recordJson);
+
+  // Sharing, as on the Mac. Rust opens and encrypts the item; only
+  // ciphertext reaches the server.
+
+  /// The share page on the same server as the API, as the Mac builds it.
+  String get shareOrigin => '${account!.api}/share';
+
+  Future<CreatedShareLink> createShareLink(
+    VaultItem item, {
+    required int expiresInSeconds,
+    required int maxViews,
+    List<String>? allowedEmails,
+  }) async {
+    final link = await core.createShareLink(item.vaultId, item.recordJson, shareOrigin);
+    final unverified = await _api!.createShareLink({
+      'id': link.id,
+      'verifier': link.verifier,
+      'blob': jsonDecode(link.blobJson) as Map<String, dynamic>,
+      'expiresInSeconds': expiresInSeconds,
+      'maxViews': maxViews,
+      'allowedEmails': ?allowedEmails,
+    });
+    return CreatedShareLink(
+      url: link.url,
+      maxViews: maxViews,
+      allowedEmails: allowedEmails,
+      unverifiedEmails: unverified,
+    );
+  }
+
+  Future<ShareRecipient> findShareRecipient(String email) async {
+    final key = await _api!.sharingKey(email.trim());
+    final pinned = account?.sharingPins[key.email.toLowerCase()];
+    return ShareRecipient(
+      email: key.email,
+      publicKey: key.publicKey,
+      fingerprint: await core.sharingFingerprint(key.publicKey),
+      pin: pinned == null
+          ? PinCheck.newKey
+          : pinned == key.publicKey
+          ? PinCheck.match
+          : PinCheck.changed,
+    );
+  }
+
+  Future<void> shareWithUser(VaultItem item, ShareRecipient to) async {
+    final api = _api!;
+    await api.publishSharingKey((await core.sharingIdentity()).publicKey);
+    final sealed = await core.sealShareTo(item.vaultId, item.recordJson, to.publicKey);
+    await api.shareWithUser({
+      'id': sealed.id,
+      'recipientEmail': to.email,
+      'recipientPublicKey': to.publicKey,
+      'senderPublicKey': sealed.senderPublicKey,
+      'ephemeralPublicKey': sealed.ephemeralPublicKey,
+      'blob': jsonDecode(sealed.blobJson) as Map<String, dynamic>,
+    });
+    final a = account;
+    if (a != null) {
+      account = a.copyWith(sharingPins: {...a.sharingPins, to.email.toLowerCase(): to.publicKey});
+      await store.save(account!);
+    }
+  }
 
   Future<String> openSecret(Project project, Secret secret, Environment env) {
     final blob = secret.values[env.id];

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+
+import 'dart:convert';
+
 import 'package:zvault_mobile/main.dart';
 import 'package:zvault_mobile/src/api.dart';
 import 'package:zvault_mobile/src/app_state.dart';
@@ -97,6 +100,107 @@ void main() {
     expect(core.locked, isTrue);
     expect(state.items, isEmpty);
     expect(state.phase, Phase.locked);
+  });
+
+  group('sharing', () {
+    const github = ItemDetail(
+      title: 'GitHub',
+      username: 'meet-oza',
+      password: 'tr0ub4dor&3',
+      urls: ['https://github.com'],
+      notes: '',
+      hasTotp: false,
+    );
+
+    Future<AppState> openShare(WidgetTester tester, List<http.Request> requests) async {
+      // A tall phone, so the whole share form fits without scrolling.
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(412, 1400);
+      addTearDown(tester.view.reset);
+      final state = unlockedState(FakeCore(details: {'i2': github}))
+        ..api = ZvaultApi(
+          'https://zvault.example',
+          token: 'token',
+          client: MockClient((req) async {
+            requests.add(req);
+            return switch (req.url.path) {
+              '/v1/shares/links' => http.Response('{"unverifiedEmails":["vivek@zymr.com"]}', 201),
+              '/v1/shares/keys' => http.Response(
+                '{"userId":"u2","email":"jayesh@zymr.com","publicKey":"their-key"}',
+                200,
+              ),
+              _ => http.Response('{}', 200),
+            };
+          }),
+        );
+      await tester.pumpWidget(ZvaultApp(state: state));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Slack'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('share-item')));
+      await tester.pumpAndSettle();
+      return state;
+    }
+
+    testWidgets('makes an email-restricted link and keeps its key off the server', (tester) async {
+      final requests = <http.Request>[];
+      await openShare(tester, requests);
+
+      await tester.tap(find.byKey(const Key('share-only-emails')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('share-emails')), 'Vivek@zymr.com, nope');
+      await tester.tap(find.byKey(const Key('share-create-link')));
+      await tester.pumpAndSettle();
+      expect(find.text('nope is not an email address.'), findsOneWidget);
+      expect(requests, isEmpty);
+
+      await tester.enterText(find.byKey(const Key('share-emails')), 'Vivek@zymr.com');
+      await tester.tap(find.byKey(const Key('share-create-link')));
+      await tester.pumpAndSettle();
+
+      expect(requests, hasLength(1));
+      final body = jsonDecode(requests.single.body) as Map<String, dynamic>;
+      expect(body['allowedEmails'], ['vivek@zymr.com']);
+      expect(body['maxViews'], 1);
+      expect(body['expiresInSeconds'], 7 * 24 * 60 * 60);
+      expect(requests.single.body, isNot(contains('linkkey')));
+
+      expect(
+        find.text('https://zvault.example/share/#AAAAAAAAAAAAAAAAAAAAAA.linkkey'),
+        findsOneWidget,
+      );
+      expect(find.text('Share link'), findsOneWidget);
+      expect(find.text('Email the link'), findsOneWidget);
+      expect(find.textContaining('test mode'), findsOneWidget);
+    });
+
+    testWidgets('shares with a Zvault user and pins their key', (tester) async {
+      final requests = <http.Request>[];
+      final state = await openShare(tester, requests);
+
+      await tester.tap(find.text('Zvault user'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('share-person-email')), 'jayesh@zymr.com');
+      await tester.pump();
+      await tester.tap(find.text('Find'));
+      await tester.pumpAndSettle();
+      expect(find.text('fp-their-key'), findsOneWidget);
+
+      await tester.tap(find.text('Share with jayesh@zymr.com'));
+      await tester.pumpAndSettle();
+
+      expect(requests.map((r) => '${r.method} ${r.url.path}'), [
+        'GET /v1/shares/keys',
+        'PUT /v1/shares/keys/me',
+        'POST /v1/shares/users',
+      ]);
+      final body = jsonDecode(requests.last.body) as Map<String, dynamic>;
+      expect(body['recipientPublicKey'], 'their-key');
+      expect(body['blob']['kid'], 'share-box');
+      expect(find.textContaining('Shared with jayesh@zymr.com'), findsOneWidget);
+      expect(state.account!.sharingPins, {'jayesh@zymr.com': 'their-key'});
+    });
   });
 
   group('ZvaultApi', () {

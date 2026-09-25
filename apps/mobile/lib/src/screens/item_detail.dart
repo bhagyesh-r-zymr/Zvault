@@ -7,6 +7,7 @@ import '../app_state.dart';
 import '../core.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'share_item.dart';
 
 class ItemDetailScreen extends StatefulWidget {
   const ItemDetailScreen({super.key, required this.item, this.revealed = false});
@@ -64,6 +65,14 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     if (mounted) showToast(context, '$label copied. Clears in a minute.');
   }
 
+  void _share(String title) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ShareItemScreen(item: widget.item, title: title),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final d = _detail;
@@ -85,6 +94,15 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             ),
             const SizedBox(height: 24),
             if (_error != null) ErrorBanner(_error!),
+            if (d != null) ...[
+              OutlinedButton.icon(
+                key: const Key('share-item'),
+                onPressed: () => _share(title),
+                icon: const Icon(Icons.share_rounded, size: 20),
+                label: const Text('Share securely'),
+              ),
+              const SizedBox(height: 20),
+            ],
             if (d == null && _error == null) const Center(child: CircularProgressIndicator()),
             if (d != null) ...[
               Panel(

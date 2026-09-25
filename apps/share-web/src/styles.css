@@ -1,18 +1,52 @@
+/* Graphite & Iris, the same palette as the landing page. */
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-  --muted: #6b7280;
-  --line: rgb(127 127 127 / 30%);
+  --bg: #0b0d12;
+  --surface: #141821;
+  --raised: #1c2230;
+  --line: #262c3a;
+  --text: #e9edf5;
+  --text-2: #a3abbd;
+  --muted: #7e879b;
+  --iris: #4c5be8;
+  --iris-hover: #5a69f0;
+  --iris-text: #8ea0ff;
+  --danger: #f38b8b;
+  --mono: ui-monospace, 'SF Mono', Menlo, monospace;
 }
 
 body {
   margin: 0;
-  padding: 2rem 1rem;
+  min-height: 100vh;
+  padding: 3rem 1rem;
+  box-sizing: border-box;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
 }
 
 main {
   max-width: 34rem;
   margin: 0 auto;
+  padding: 1.75rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+.brand {
+  margin: 0 0 0.25rem;
+  color: var(--iris-text);
+  font-weight: 600;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0 0 1rem;
+  font-size: 1.5rem;
 }
 
 .field {
@@ -25,6 +59,7 @@ main {
 }
 
 .field code {
+  font-family: var(--mono);
   overflow-wrap: anywhere;
 }
 
@@ -33,25 +68,91 @@ main {
   color: var(--muted);
 }
 
-.actions {
+.actions,
+.row {
   display: flex;
   gap: 0.4rem;
+}
+
+.row {
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  font-family: var(--mono);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 1rem 0;
+}
+
+label {
+  color: var(--text-2);
+  font-size: 0.9rem;
+}
+
+input {
+  font: inherit;
+  color: var(--text);
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
+}
+
+input:focus {
+  outline: 2px solid var(--iris);
+  outline-offset: 1px;
+}
+
+input.code {
+  font-family: var(--mono);
+  font-size: 1.6rem;
+  letter-spacing: 0.4em;
+  text-align: center;
 }
 
 button {
   font: inherit;
+  color: var(--text);
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
   padding: 0.3rem 0.7rem;
+  cursor: pointer;
 }
 
 button.primary {
-  padding: 0.6rem 1.2rem;
+  background: var(--iris);
+  border-color: var(--iris);
+  color: #fff;
+  font-weight: 600;
+  padding: 0.7rem 1.2rem;
+  border-radius: 10px;
+}
+
+button.primary:hover {
+  background: var(--iris-hover);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+button.link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--iris-text);
 }
 
 .error {
-  color: #dc2626;
+  color: var(--danger);
 }

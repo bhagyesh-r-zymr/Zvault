@@ -1,4 +1,10 @@
-import { OpenShareLinkResponse, SharedItemPayload } from '@zvault/shared';
+import {
+  CheckShareLinkResponse,
+  OpenShareLinkResponse,
+  SHARE_LIMITS,
+  ShareLinkDenial,
+  SharedItemPayload,
+} from '@zvault/shared';
 import { accessToken, openBlob, parseFragment, toBase64Url, type ParsedLink } from './link.js';
 import './styles.css';
 
@@ -18,11 +24,32 @@ function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 function render(...nodes: Node[]) {
-  app?.replaceChildren(el('h1', 'Shared with Zvault'), ...nodes);
+  app?.replaceChildren(
+    el('p', 'Zvault', { className: 'brand' }),
+    el('h1', 'Shared with Zvault'),
+    ...nodes,
+  );
+}
+
+function errorLine(message: string) {
+  return el('p', message, { className: 'error', role: 'alert' });
 }
 
 function fail(message: string) {
-  render(el('p', message, { className: 'error', role: 'alert' }));
+  render(errorLine(message));
+}
+
+const GONE = 'This link has expired, was revoked, or has already been viewed.';
+
+function post(link: ParsedLink, action: string, body: object): Promise<Response> {
+  return fetch(`${__API_ORIGIN__}/v1/shares/links/${link.id}/${action}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ accessToken: toBase64Url(accessToken(link)), ...body }),
+    credentials: 'omit',
+    referrerPolicy: 'no-referrer',
+    cache: 'no-store',
+  });
 }
 
 function field(label: string, value: string, secret = false): HTMLElement {
@@ -50,36 +77,14 @@ function field(label: string, value: string, secret = false): HTMLElement {
   return row;
 }
 
-async function reveal(link: ParsedLink) {
-  render(el('p', 'Decrypting on this device…'));
-  let res: Response;
-  try {
-    res = await fetch(`${__API_ORIGIN__}/v1/shares/links/${link.id}/open`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ accessToken: toBase64Url(accessToken(link)) }),
-      credentials: 'omit',
-      referrerPolicy: 'no-referrer',
-      cache: 'no-store',
-    });
-  } catch {
-    return fail('Could not reach Zvault. Check your connection and try again.');
-  }
-  // The view is spent once the server answers; drop the key from the address bar.
-  history.replaceState(null, '', location.pathname);
-  if (res.status === 429) return fail('Too many attempts. Wait a minute and try again.');
-  if (!res.ok) return fail('This link has expired, was revoked, or has already been viewed.');
-
+function showItem(link: ParsedLink, meta: OpenShareLinkResponse) {
   let item: SharedItemPayload;
-  let meta: OpenShareLinkResponse;
   try {
-    meta = OpenShareLinkResponse.parse(await res.json());
     const plaintext = new TextDecoder().decode(openBlob(link, meta.blob));
     item = SharedItemPayload.parse(JSON.parse(plaintext));
   } catch {
     return fail('This link is damaged and could not be decrypted.');
   }
-
   const rows = [
     item.username && field('Username', item.username),
     item.password && field('Password', item.password, true),
@@ -93,10 +98,147 @@ async function reveal(link: ParsedLink) {
   render(el('h2', item.title), ...rows, ...notes, el('p', remaining, { className: 'hint' }));
 }
 
-const link = parseFragment(location.hash);
-if (!link) {
-  fail('This link is incomplete. Ask the sender for the full link.');
-} else {
+/**
+ * Asks for the ciphertext (counting a view) and decrypts it here. For an
+ * email-restricted link, `proof` is the confirmed email and its code; a
+ * rejected code comes back to `onDenied` so the form can say so.
+ */
+async function reveal(
+  link: ParsedLink,
+  proof?: { email: string; code: string },
+  onDenied?: (message: string) => void,
+) {
+  if (!proof) render(el('p', 'Decrypting on this device…'));
+  let res: Response;
+  try {
+    res = await post(link, 'open', proof ?? {});
+  } catch {
+    return fail('Could not reach Zvault. Check your connection and try again.');
+  }
+  if (res.status === 403 && onDenied) {
+    const denial = ShareLinkDenial.safeParse(await res.json().catch(() => null));
+    return onDenied(denial.success ? denial.data.message : 'That code did not work.');
+  }
+  // The view is spent once the server answers; drop the key from the address bar.
+  history.replaceState(null, '', location.pathname);
+  if (res.status === 429) return fail('Too many attempts. Wait a minute and try again.');
+  if (!res.ok) return fail(GONE);
+
+  let meta: OpenShareLinkResponse;
+  try {
+    meta = OpenShareLinkResponse.parse(await res.json());
+  } catch {
+    return fail('This link is damaged and could not be decrypted.');
+  }
+  showItem(link, meta);
+}
+
+function askForEmail(link: ParsedLink, error?: string) {
+  const form = el('form', undefined, { className: 'stack' });
+  const input = el('input', undefined, {
+    type: 'email',
+    required: true,
+    autocomplete: 'email',
+    placeholder: 'you@company.com',
+    name: 'email',
+  });
+  const submit = el('button', 'Send me a code', { type: 'submit', className: 'primary' });
+  form.append(el('label', 'Your email', { htmlFor: 'email' }), input, submit);
+  input.id = 'email';
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const email = input.value.trim().toLowerCase();
+    if (!email) return;
+    submit.disabled = true;
+    submit.textContent = 'Sending…';
+    void sendCode(link, email).then((ok) => {
+      if (ok) return askForCode(link, email);
+      submit.disabled = false;
+      submit.textContent = 'Send me a code';
+    });
+  });
+  render(
+    el('p', 'This item was shared with specific people.'),
+    el('p', 'Enter your email and we will send you a one-time code to confirm it is you.', {
+      className: 'hint',
+    }),
+    ...(error ? [errorLine(error)] : []),
+    form,
+  );
+  input.focus();
+}
+
+/** True once the server accepted the request (it answers the same for any email). */
+async function sendCode(link: ParsedLink, email: string): Promise<boolean> {
+  let res: Response;
+  try {
+    res = await post(link, 'code', { email });
+  } catch {
+    askForEmail(link, 'Could not reach Zvault. Check your connection and try again.');
+    return false;
+  }
+  if (res.status === 429) {
+    askForEmail(link, 'Too many codes asked for. Wait a minute and try again.');
+    return false;
+  }
+  if (res.status === 400) {
+    askForEmail(link, 'That does not look like an email address.');
+    return false;
+  }
+  if (!res.ok) {
+    fail(GONE);
+    return false;
+  }
+  return true;
+}
+
+function askForCode(link: ParsedLink, email: string, error?: string) {
+  const form = el('form', undefined, { className: 'stack' });
+  const input = el('input', undefined, {
+    inputMode: 'numeric',
+    autocomplete: 'one-time-code',
+    pattern: `[0-9]{${SHARE_LIMITS.codeLength}}`,
+    maxLength: SHARE_LIMITS.codeLength,
+    required: true,
+    className: 'code',
+    placeholder: '000000',
+    name: 'code',
+  });
+  input.id = 'code';
+  const submit = el('button', 'Verify and reveal', { type: 'submit', className: 'primary' });
+  form.append(el('label', 'One-time code', { htmlFor: 'code' }), input, submit);
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    submit.disabled = true;
+    submit.textContent = 'Checking…';
+    void reveal(link, { email, code: input.value.trim() }, (message) =>
+      askForCode(link, email, message),
+    );
+  });
+
+  const resend = el('button', 'Send a new code', { type: 'button', className: 'link' });
+  resend.addEventListener('click', () => {
+    resend.disabled = true;
+    void sendCode(link, email).then((ok) => {
+      if (ok) askForCode(link, email);
+    });
+  });
+  const change = el('button', 'Use a different email', { type: 'button', className: 'link' });
+  change.addEventListener('click', () => askForEmail(link));
+  const more = el('p', undefined, { className: 'row' });
+  more.append(resend, change);
+
+  const sent = el('p');
+  sent.append(
+    'If ',
+    el('strong', email),
+    ` can open this item, we just emailed it a ${SHARE_LIMITS.codeLength}-digit code. It works once and expires in ${SHARE_LIMITS.codeTtlMinutes} minutes.`,
+  );
+  render(sent, ...(error ? [errorLine(error)] : []), form, more);
+  input.focus();
+}
+
+function askToReveal(link: ParsedLink) {
   // Opening counts a view, so wait for a person to ask. Link previewers and
   // mail scanners that merely load the page will not use it up.
   const button = el('button', 'Reveal shared item', { type: 'button', className: 'primary' });
@@ -110,3 +252,26 @@ if (!link) {
     button,
   );
 }
+
+async function start(link: ParsedLink) {
+  render(el('p', 'Checking the link…', { className: 'hint' }));
+  let res: Response;
+  try {
+    // Counts no view, so it is safe to ask as soon as the page loads.
+    res = await post(link, 'check', {});
+  } catch {
+    return fail('Could not reach Zvault. Check your connection and try again.');
+  }
+  if (res.status === 429) return fail('Too many attempts. Wait a minute and try again.');
+  if (!res.ok) {
+    history.replaceState(null, '', location.pathname);
+    return fail(GONE);
+  }
+  const check = CheckShareLinkResponse.safeParse(await res.json().catch(() => null));
+  if (check.success && check.data.emailRequired) askForEmail(link);
+  else askToReveal(link);
+}
+
+const link = parseFragment(location.hash);
+if (!link) fail('This link is incomplete. Ask the sender for the full link.');
+else void start(link);

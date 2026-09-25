@@ -112,6 +112,7 @@ pub fn run() {
             sharing::sharing_fingerprint,
             sharing::share_seal_to,
             sharing::share_open,
+            sharing::share_compose_email,
             team::project_key_wrap,
             team::environment_key_wrap,
             team::environment_rotate,

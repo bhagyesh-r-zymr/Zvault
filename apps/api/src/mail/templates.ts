@@ -68,6 +68,34 @@ export function shareReceivedEmail(to: string, senderEmail: string): MailMessage
   };
 }
 
+/** A one-time code for opening an email-restricted share link. Carries no item data. */
+export function shareCodeEmail(
+  to: string,
+  senderEmail: string | null,
+  code: string,
+  minutes: number,
+): MailMessage {
+  const who = senderEmail ?? 'Someone';
+  return {
+    to,
+    subject: `${code} is your code to view what ${who} shared`,
+    text: [
+      `${who} shared an item with you using Zvault.`,
+      '',
+      `Your code is ${code}. Enter it on the share page to view the item. It expires in ${minutes} minutes and works once.`,
+      '',
+      "If you didn't ask for this code, you can ignore this email. Nobody can open the item without it.",
+    ].join('\n'),
+    html: layout(
+      'Your code to view a shared item',
+      `<p><strong>${escape(who)}</strong> shared an item with you using Zvault.</p>
+<p>Enter this code on the share page. It expires in ${minutes} minutes and works once.</p>
+<p style="font-size:32px;letter-spacing:8px;font-weight:600">${escape(code)}</p>
+<p>If you didn't ask for this code, you can ignore this email. Nobody can open the item without it.</p>`,
+    ),
+  };
+}
+
 /** Tells a Zvault user they were invited to an organization. */
 export function orgInviteEmail(to: string, orgName: string, inviterEmail: string): MailMessage {
   return {

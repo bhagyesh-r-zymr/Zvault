@@ -13,11 +13,74 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  node:
-    name: TypeScript (lint, typecheck, test, build)
+  # Decides which of the jobs below this change needs. A job skipped by its
+  # `if` reports as passed, so required checks still go green.
+  changes:
+    name: Detect changes
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      node: ${{ steps.node.outputs.node }}
+      node_all: ${{ steps.rust.outputs.node_all }}
+      infra: ${{ steps.rust.outputs.infra }}
+      rust: ${{ steps.rust.outputs.rust }}
     steps:
       - uses: actions/checkout@v4
+      # Everything except Rust sources and docs. The SRP test vectors under
+      # crates/ are shared with the API tests, so only .rs files are left out.
+      - uses: dorny/paths-filter@v3
+        id: node
+        with:
+          predicate-quantifier: every
+          filters: |
+            node:
+              - '**'
+              - '!**/*.rs'
+              - '!**/Cargo.toml'
+              - '!Cargo.lock'
+              - '!**/*.md'
+              - '!docs/**'
+      - uses: dorny/paths-filter@v3
+        id: rust
+        with:
+          filters: |
+            rust:
+              - 'crates/**'
+              - 'apps/desktop/src-tauri/**'
+              - '**/*.rs'
+              - '**/Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain*'
+              - '.github/workflows/ci.yml'
+            node_all:
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'turbo.json'
+              - 'tsconfig.base.json'
+              - 'eslint.config.mjs'
+              - '.nvmrc'
+              - 'crates/zvault-crypto/tests/**'
+              - '.github/workflows/ci.yml'
+            infra:
+              - 'infra/**'
+              - 'pnpm-lock.yaml'
+              - '.github/workflows/ci.yml'
+
+  node:
+    name: TypeScript (lint, typecheck, test, build)
+    needs: changes
+    if: needs.changes.outputs.node == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Turbo compares against the base commit to find affected packages.
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -25,16 +88,35 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
+      # Only the packages a change touches, plus the ones that depend on them
+      # (a change to packages/shared checks every app). Shared config, the
+      # lockfile and the SRP test vectors still check everything.
+      - name: Lint, typecheck, test and build the affected packages
+        if: needs.changes.outputs.node_all != 'true'
+        env:
+          TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        # One task at a time, as before: running them all at once overloads the
+        # runner and the CDK test's setup hook times out.
+        run: |
+          for task in lint typecheck test build; do
+            pnpm turbo run "$task" --affected
+          done
+      - name: Lint, typecheck, test and build everything
+        if: needs.changes.outputs.node_all == 'true'
+        run: |
+          for task in lint typecheck test build; do
+            pnpm turbo run "$task"
+          done
       - name: Synthesize AWS infrastructure (no deploy)
+        if: needs.changes.outputs.infra == 'true'
         run: pnpm --filter @zvault/infra synth
 
   rust:
     name: Rust (fmt, clippy, test)
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Install Tauri system dependencies
@@ -51,7 +133,13 @@ jobs:
 
   macos:
     name: macOS desktop (clippy, test)
+    # macOS minutes count 10x against the private-repo allowance, so this runs
+    # only on pull requests that touch Rust, and only after the Linux Rust job
+    # passes. Merges to main were already checked here on their PR.
+    needs: [changes, rust]
+    if: github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true'
     runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

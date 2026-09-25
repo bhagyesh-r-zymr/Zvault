@@ -14,7 +14,16 @@ Anyone with the `/mail` password can read every verification code, so treat it l
 
 ## Deploy
 
-On the Mac (the box is x86_64; use `linux/arm64` for Graviton):
+Merging to `main` deploys automatically when the API, share page or these files change
+(`.github/workflows/deploy-demo.yml`). It builds on GitHub, streams everything over SSH with a key
+that `authorized_keys` locks to `deploy.sh`, then checks `/v1/health`. The key is the `DEMO_SSH_KEY`
+secret in the `demo` environment, which only `main` can use. Run it by hand from the Actions tab.
+
+The host line in `~/.ssh/authorized_keys` looks like
+`restrict,command="HOST=52-66-189-120.sslip.io /home/ec2-user/zvault/deploy.sh" ssh-ed25519 ...`.
+The `demo` environment also has variables `DEMO_HOST` and `DEMO_SSH_HOST_KEY` (`ssh-keyscan -t ed25519 $HOST`).
+
+By hand, on the Mac (the box is x86_64; use `linux/arm64` for Graviton):
 
 ```sh
 HOST=52-66-189-120.sslip.io

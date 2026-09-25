@@ -1,0 +1,74 @@
+name: Deploy demo
+
+# Ships the API and share page to the single-EC2 demo (deploy/ec2/README.md).
+# Runs only for pushes to main, never for pull requests, so fork code never sees the key.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/api/**'
+      - 'apps/share-web/**'
+      - 'packages/shared/**'
+      - 'deploy/ec2/**'
+      - 'infra/docker/api.Dockerfile'
+      - '.dockerignore'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.nvmrc'
+      - '.github/workflows/deploy-demo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-demo
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Holds the SSH key; only the main branch may deploy to it.
+    environment:
+      name: demo
+      url: https://${{ vars.DEMO_HOST }}
+    env:
+      HOST: ${{ vars.DEMO_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Build API image
+        run: docker build -f infra/docker/api.Dockerfile -t zvault-api:demo .
+
+      - name: Build share page
+        run: |
+          pnpm install --frozen-lockfile --filter '@zvault/share-web...'
+          VITE_API_URL=https://$HOST pnpm --filter @zvault/share-web... build
+
+      - name: Package
+        run: |
+          mkdir -p out
+          docker save zvault-api:demo -o out/api-image.tar
+          cp -r apps/share-web/dist out/share
+          cp deploy/ec2/{compose.yml,nginx-zvault.conf,setup.sh,deploy.sh} out/
+
+      # The key is locked to deploy/ec2/deploy.sh on the host, so it can do nothing else.
+      - name: Deploy
+        env:
+          SSH_KEY: ${{ secrets.DEMO_SSH_KEY }}
+          HOST_KEY: ${{ vars.DEMO_SSH_HOST_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          (umask 077; printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy)
+          printf '%s\n' "$HOST_KEY" > ~/.ssh/known_hosts
+          tar -C out -cz . | ssh -i ~/.ssh/deploy -o BatchMode=yes ec2-user@"$HOST"
+
+      - name: Check health
+        run: curl -fsS --retry 5 --retry-all-errors https://$HOST/v1/health

@@ -54,19 +54,51 @@ tabs.forEach((tab) =>
 // Warm the cache so switching tabs is instant.
 tabs.forEach((t) => (new Image().src = `/img/${t.dataset.img}.webp`));
 
-// Copy buttons.
-document.querySelectorAll('[data-copy]').forEach((btn) =>
-  btn.addEventListener('click', async () => {
-    const text = document.getElementById(btn.dataset.copy).textContent;
-    try {
-      await navigator.clipboard.writeText(text);
-      btn.textContent = 'Copied';
-    } catch {
-      btn.textContent = 'Select it';
+// Waitlist form. Same-origin POST to the API; it answers 204 for every valid form.
+const form = document.getElementById('waitlist-form');
+const status = document.getElementById('waitlist-status');
+const say = (text, kind = '') => {
+  status.textContent = text;
+  status.className = `status ${kind}`;
+};
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const data = Object.fromEntries(new FormData(form));
+  const name = form.elements.name;
+  const email = form.elements.email;
+  name.setAttribute('aria-invalid', String(!data.name.trim()));
+  email.setAttribute('aria-invalid', String(!email.checkValidity() || !data.email.trim()));
+  if (!data.name.trim()) return (say('Please enter your name.', 'error'), name.focus());
+  if (email.getAttribute('aria-invalid') === 'true') {
+    return (say('Please enter a valid email address.', 'error'), email.focus());
+  }
+  const button = form.querySelector('button');
+  button.disabled = true;
+  say('Joining…');
+  try {
+    const res = await fetch('/v1/waitlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (res.ok) {
+      form.classList.add('done');
+      say(`You're on the list, ${data.name.trim().split(' ')[0]}. We'll be in touch.`, 'ok');
+      return;
     }
-    setTimeout(() => (btn.textContent = 'Copy'), 1600);
-  }),
-);
+    say(
+      res.status === 429
+        ? 'Too many tries from your network. Try again in an hour.'
+        : res.status === 400
+          ? 'Please check your name and email.'
+          : 'Something went wrong. Try again in a moment.',
+      'error',
+    );
+  } catch {
+    say("Couldn't reach Zvault. Check your connection and try again.", 'error');
+  }
+  button.disabled = false;
+});
 
 // Terminal: type out an example session once it scrolls into view.
 const script = [

@@ -486,3 +486,17 @@ export const accessRequests = pgTable(
   },
   (t) => [index('access_requests_env_idx').on(t.environmentId, t.status)],
 );
+
+/**
+ * People who asked to try Zvault from the landing page. One row per email;
+ * joining again updates the name and note.
+ */
+export const waitlist = pgTable('waitlist', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  /** Normalized (trimmed, lowercased). */
+  email: text('email').notNull().unique(),
+  name: text('name').notNull(),
+  note: text('note').notNull().default(''),
+  createdAt: createdAt(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});

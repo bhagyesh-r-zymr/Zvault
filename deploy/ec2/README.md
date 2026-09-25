@@ -2,13 +2,13 @@
 
 A cheap single-box demo: no domain, no RDS, no SES. For the real AWS setup see `infra/`.
 
-| Piece    | How                                                                                        |
-| -------- | ------------------------------------------------------------------------------------------ |
-| TLS      | Host nginx + Let's Encrypt for `<ip-with-dashes>.sslip.io` (resolves to the IP, no domain) |
-| API      | `zvault-api:demo` container on `127.0.0.1:3000`, served at `/v1/`                          |
-| Database | `postgres:17-alpine` container, not exposed outside Docker                                 |
-| Email    | Mailpit catches all mail; inbox at `/mail/` behind basic auth (password in `.env`)         |
-| Share page | Static build of `apps/share-web` at `/`                                                  |
+| Piece      | How                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------ |
+| TLS        | Host nginx + Let's Encrypt for `<ip-with-dashes>.sslip.io` (resolves to the IP, no domain) |
+| API        | `zvault-api:demo` container on `127.0.0.1:3000`, served at `/v1/`                          |
+| Database   | `postgres:17-alpine` container, not exposed outside Docker                                 |
+| Email      | Mailpit catches all mail; inbox at `/mail/` behind basic auth (password in `.env`)         |
+| Share page | Static build of `apps/share-web` at `/`                                                    |
 
 Anyone with the `/mail` password can read every verification code, so treat it like an admin password.
 

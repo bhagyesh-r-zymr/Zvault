@@ -95,10 +95,18 @@ jobs:
         if: needs.changes.outputs.node_all != 'true'
         env:
           TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-        run: pnpm turbo run lint typecheck test build --affected
+        # One task at a time, as before: running them all at once overloads the
+        # runner and the CDK test's setup hook times out.
+        run: |
+          for task in lint typecheck test build; do
+            pnpm turbo run "$task" --affected
+          done
       - name: Lint, typecheck, test and build everything
         if: needs.changes.outputs.node_all == 'true'
-        run: pnpm turbo run lint typecheck test build
+        run: |
+          for task in lint typecheck test build; do
+            pnpm turbo run "$task"
+          done
       - name: Synthesize AWS infrastructure (no deploy)
         if: needs.changes.outputs.infra == 'true'
         run: pnpm --filter @zvault/infra synth

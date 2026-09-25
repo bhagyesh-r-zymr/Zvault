@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -328362799;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1827355528;
 
 // Section: executor
 
@@ -195,6 +195,43 @@ fn wire__crate__api__vault__item_open_impl(
                     (move || {
                         let output_ok =
                             crate::api::vault::item_open(api_vault_id, api_record_json)?;
+                        std::result::Result::Ok(output_ok)
+                    })(),
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__vault__item_passkey_test_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "item_passkey_test",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_vault_id = <String>::sse_decode(&mut deserializer);
+            let api_record_json = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || {
+                        let output_ok =
+                            crate::api::vault::item_passkey_test(api_vault_id, api_record_json)?;
                         std::result::Result::Ok(output_ok)
                     })(),
                 )
@@ -881,6 +918,7 @@ impl SseDecode for crate::api::vault::ItemDetail {
         let mut var_urls = <Vec<String>>::sse_decode(deserializer);
         let mut var_notes = <String>::sse_decode(deserializer);
         let mut var_hasTotp = <bool>::sse_decode(deserializer);
+        let mut var_passkey = <Option<crate::api::vault::PasskeyDetail>>::sse_decode(deserializer);
         return crate::api::vault::ItemDetail {
             title: var_title,
             username: var_username,
@@ -888,6 +926,7 @@ impl SseDecode for crate::api::vault::ItemDetail {
             urls: var_urls,
             notes: var_notes,
             has_totp: var_hasTotp,
+            passkey: var_passkey,
         };
     }
 }
@@ -899,11 +938,13 @@ impl SseDecode for crate::api::vault::ItemSummary {
         let mut var_username = <String>::sse_decode(deserializer);
         let mut var_url = <Option<String>>::sse_decode(deserializer);
         let mut var_hasTotp = <bool>::sse_decode(deserializer);
+        let mut var_hasPasskey = <bool>::sse_decode(deserializer);
         return crate::api::vault::ItemSummary {
             title: var_title,
             username: var_username,
             url: var_url,
             has_totp: var_hasTotp,
+            has_passkey: var_hasPasskey,
         };
     }
 }
@@ -1000,6 +1041,17 @@ impl SseDecode for Option<crate::api::vault::OneTimeCode> {
     }
 }
 
+impl SseDecode for Option<crate::api::vault::PasskeyDetail> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::vault::PasskeyDetail>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for crate::api::pairing::PairedAccount {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1008,6 +1060,24 @@ impl SseDecode for crate::api::pairing::PairedAccount {
         return crate::api::pairing::PairedAccount {
             email: var_email,
             keyset: var_keyset,
+        };
+    }
+}
+
+impl SseDecode for crate::api::vault::PasskeyDetail {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_rpId = <String>::sse_decode(deserializer);
+        let mut var_userName = <String>::sse_decode(deserializer);
+        let mut var_credentialId = <String>::sse_decode(deserializer);
+        let mut var_publicKey = <String>::sse_decode(deserializer);
+        let mut var_createdAt = <i64>::sse_decode(deserializer);
+        return crate::api::vault::PasskeyDetail {
+            rp_id: var_rpId,
+            user_name: var_userName,
+            credential_id: var_credentialId,
+            public_key: var_publicKey,
+            created_at: var_createdAt,
         };
     }
 }
@@ -1119,29 +1189,30 @@ fn pde_ffi_dispatcher_primary_impl(
         2 => wire__crate__api__vault__environment_open_impl(port, ptr, rust_vec_len, data_len),
         3 => wire__crate__api__init_app_impl(port, ptr, rust_vec_len, data_len),
         4 => wire__crate__api__vault__item_open_impl(port, ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__vault__item_summary_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__vault__item_totp_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__pairing__pairing_finish_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__pairing__pairing_scan_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__vault__project_open_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__sharing__secret_share_link_create_impl(
+        5 => wire__crate__api__vault__item_passkey_test_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__vault__item_summary_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__vault__item_totp_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__pairing__pairing_finish_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__pairing__pairing_scan_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__vault__project_open_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__sharing__secret_share_link_create_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        13 => {
+        14 => {
             wire__crate__api__sharing__secret_share_seal_to_impl(port, ptr, rust_vec_len, data_len)
         }
-        14 => wire__crate__api__vault__secret_value_open_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__api__sharing__share_link_create_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__sharing__share_seal_to_impl(port, ptr, rust_vec_len, data_len),
-        17 => {
+        15 => wire__crate__api__vault__secret_value_open_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__sharing__share_link_create_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__sharing__share_seal_to_impl(port, ptr, rust_vec_len, data_len),
+        18 => {
             wire__crate__api__sharing__sharing_fingerprint_impl(port, ptr, rust_vec_len, data_len)
         }
-        18 => wire__crate__api__sharing__sharing_identity_impl(port, ptr, rust_vec_len, data_len),
-        19 => wire__crate__api__session__unlock_impl(port, ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__vault__vault_open_impl(port, ptr, rust_vec_len, data_len),
+        19 => wire__crate__api__sharing__sharing_identity_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__session__unlock_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__vault__vault_open_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1154,9 +1225,9 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        7 => wire__crate__api__session__lock_impl(ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__pairing__pairing_cancel_impl(ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__session__unlocked_email_impl(ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__session__lock_impl(ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__pairing__pairing_cancel_impl(ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__session__unlocked_email_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1194,6 +1265,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::vault::ItemDetail {
             self.urls.into_into_dart().into_dart(),
             self.notes.into_into_dart().into_dart(),
             self.has_totp.into_into_dart().into_dart(),
+            self.passkey.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1214,6 +1286,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::vault::ItemSummary {
             self.username.into_into_dart().into_dart(),
             self.url.into_into_dart().into_dart(),
             self.has_totp.into_into_dart().into_dart(),
+            self.has_passkey.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1315,6 +1388,30 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::pairing::PairedAccount>
     for crate::api::pairing::PairedAccount
 {
     fn into_into_dart(self) -> crate::api::pairing::PairedAccount {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::vault::PasskeyDetail {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.rp_id.into_into_dart().into_dart(),
+            self.user_name.into_into_dart().into_dart(),
+            self.credential_id.into_into_dart().into_dart(),
+            self.public_key.into_into_dart().into_dart(),
+            self.created_at.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::vault::PasskeyDetail
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::vault::PasskeyDetail>
+    for crate::api::vault::PasskeyDetail
+{
+    fn into_into_dart(self) -> crate::api::vault::PasskeyDetail {
         self
     }
 }
@@ -1458,6 +1555,7 @@ impl SseEncode for crate::api::vault::ItemDetail {
         <Vec<String>>::sse_encode(self.urls, serializer);
         <String>::sse_encode(self.notes, serializer);
         <bool>::sse_encode(self.has_totp, serializer);
+        <Option<crate::api::vault::PasskeyDetail>>::sse_encode(self.passkey, serializer);
     }
 }
 
@@ -1468,6 +1566,7 @@ impl SseEncode for crate::api::vault::ItemSummary {
         <String>::sse_encode(self.username, serializer);
         <Option<String>>::sse_encode(self.url, serializer);
         <bool>::sse_encode(self.has_totp, serializer);
+        <bool>::sse_encode(self.has_passkey, serializer);
     }
 }
 
@@ -1540,11 +1639,32 @@ impl SseEncode for Option<crate::api::vault::OneTimeCode> {
     }
 }
 
+impl SseEncode for Option<crate::api::vault::PasskeyDetail> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::vault::PasskeyDetail>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for crate::api::pairing::PairedAccount {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.email, serializer);
         <String>::sse_encode(self.keyset, serializer);
+    }
+}
+
+impl SseEncode for crate::api::vault::PasskeyDetail {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.rp_id, serializer);
+        <String>::sse_encode(self.user_name, serializer);
+        <String>::sse_encode(self.credential_id, serializer);
+        <String>::sse_encode(self.public_key, serializer);
+        <i64>::sse_encode(self.created_at, serializer);
     }
 }
 

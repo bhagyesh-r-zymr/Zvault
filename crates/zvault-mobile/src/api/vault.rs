@@ -18,6 +18,7 @@ pub struct ItemSummary {
     pub username: String,
     pub url: Option<String>,
     pub has_totp: bool,
+    pub has_passkey: bool,
 }
 
 /// Everything in a login item, for the detail screen.
@@ -28,6 +29,19 @@ pub struct ItemDetail {
     pub urls: Vec<String>,
     pub notes: String,
     pub has_totp: bool,
+    pub passkey: Option<PasskeyDetail>,
+}
+
+/// An item's passkey without its private key, which stays in Rust.
+pub struct PasskeyDetail {
+    /// The website's domain, such as `github.com`.
+    pub rp_id: String,
+    pub user_name: String,
+    pub credential_id: String,
+    /// Base64url SubjectPublicKeyInfo.
+    pub public_key: String,
+    /// Unix seconds.
+    pub created_at: i64,
 }
 
 pub struct OneTimeCode {
@@ -58,6 +72,7 @@ pub fn item_summary(vault_id: String, record_json: String) -> anyhow::Result<Ite
         username: f.username.clone(),
         url: f.urls.first().cloned(),
         has_totp: !f.totp.is_empty(),
+        has_passkey: f.passkey.is_some(),
     })
 }
 
@@ -71,7 +86,33 @@ pub fn item_open(vault_id: String, record_json: String) -> anyhow::Result<ItemDe
         urls: f.urls.clone(),
         notes: f.notes.clone(),
         has_totp: !f.totp.is_empty(),
+        passkey: f
+            .passkey
+            .as_ref()
+            .map(|p| -> anyhow::Result<PasskeyDetail> {
+                Ok(PasskeyDetail {
+                    rp_id: p.rp_id.clone(),
+                    user_name: p.user_name.clone(),
+                    credential_id: p.credential_id.clone(),
+                    public_key: p.public_key()?,
+                    created_at: p.created_at,
+                })
+            })
+            .transpose()?,
     })
+}
+
+/// Signs a fresh WebAuthn challenge with the item's passkey and verifies it
+/// with the public key, as the website would.
+pub fn item_passkey_test(vault_id: String, record_json: String) -> anyhow::Result<()> {
+    let record: ItemRecord = records::parse(&record_json)?;
+    let f = keyring().open_item(&vault_id, &record)?;
+    let passkey = f
+        .passkey
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("This item has no passkey."))?;
+    passkey.self_test()?;
+    Ok(())
 }
 
 /// The item's current one-time password, or None if it has none.

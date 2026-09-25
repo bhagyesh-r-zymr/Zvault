@@ -102,6 +102,8 @@ pub fn run() {
             vault::item_open,
             vault::item_summary,
             vault::item_totp_code,
+            vault::item_passkey_test,
+            vault::item_share_payload,
             otp::otp_parse,
             pairing::pairing_begin,
             pairing::pairing_qr,

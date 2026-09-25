@@ -68,6 +68,48 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('a passkey shows its public details and can be tested', (tester) async {
+    final core = FakeCore(
+      details: {
+        'i2': const ItemDetail(
+          title: 'Slack',
+          username: 'meet.oza@zymr.com',
+          password: '',
+          urls: ['https://slack.com'],
+          notes: '',
+          hasTotp: false,
+          passkey: PasskeyDetail(
+            rpId: 'slack.com',
+            userName: 'meet.oza@zymr.com',
+            credentialId: 'q8Rz3kVb0cN1pLw2x4fXw',
+            publicKey: 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE',
+            createdAt: 1790000000,
+          ),
+        ),
+      },
+    );
+    final state = unlockedState(core);
+    state.items = [
+      item('i1', 'GitHub', 'meet-oza', totp: true),
+      item('i2', 'Slack', 'meet.oza@zymr.com', passkey: true),
+    ];
+    await tester.pumpWidget(ZvaultApp(state: state));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('passkey-i2')), findsOneWidget);
+    expect(find.byKey(const Key('passkey-i1')), findsNothing);
+
+    await tester.tap(find.text('Slack'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sign in to slack.com without a password'), findsOneWidget);
+    expect(find.text('q8Rz3kVb…2x4fXw'), findsOneWidget);
+    expect(find.textContaining('Private key encrypted'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('test-passkey')));
+    await tester.pumpAndSettle();
+    expect(core.passkeyTests, 1);
+    expect(find.textContaining('verified it'), findsOneWidget);
+  });
+
   testWidgets('a project opens values only where this account has access', (tester) async {
     final core = FakeCore(values: {'blob-db-dev': 'postgres://dev'});
     await tester.pumpWidget(ZvaultApp(state: unlockedState(core)));

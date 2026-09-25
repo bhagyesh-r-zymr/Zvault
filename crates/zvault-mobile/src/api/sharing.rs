@@ -78,7 +78,20 @@ struct Payload<'a> {
     #[serde(skip_serializing_if = "str::is_empty")]
     notes: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
+    passkey: Option<SharedPasskey<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     secret: Option<SecretOrigin<'a>>,
+}
+
+/// `SharedPasskey`: everything needed to use the passkey elsewhere.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SharedPasskey<'a> {
+    rp_id: &'a str,
+    user_name: &'a str,
+    user_handle: &'a str,
+    credential_id: &'a str,
+    private_key: &'a str,
 }
 
 /// `SharedItemPayload.secret`: where a shared project secret came from.
@@ -105,6 +118,11 @@ pub struct SecretShare {
 }
 
 fn payload(f: &ItemFields) -> anyhow::Result<Zeroizing<Vec<u8>>> {
+    let pem = f
+        .passkey
+        .as_ref()
+        .map(|p| p.private_key_pem())
+        .transpose()?;
     Ok(Zeroizing::new(serde_json::to_vec(&Payload {
         v: 1,
         title: &f.title,
@@ -112,6 +130,17 @@ fn payload(f: &ItemFields) -> anyhow::Result<Zeroizing<Vec<u8>>> {
         password: &f.password,
         url: f.urls.first().map_or("", String::as_str),
         notes: &f.notes,
+        passkey: f
+            .passkey
+            .as_ref()
+            .zip(pem.as_ref())
+            .map(|(p, pem)| SharedPasskey {
+                rp_id: &p.rp_id,
+                user_name: &p.user_name,
+                user_handle: &p.user_handle,
+                credential_id: &p.credential_id,
+                private_key: pem,
+            }),
         secret: None,
     })?))
 }
@@ -126,6 +155,7 @@ fn secret_payload(s: &SecretShare, value: &str) -> anyhow::Result<Zeroizing<Vec<
         password: value,
         url: "",
         notes: &s.note,
+        passkey: None,
         secret: Some(SecretOrigin {
             key: &s.key,
             project: &s.project_name,
@@ -262,7 +292,30 @@ mod tests {
             ],
             notes: String::new(),
             totp: "otpauth://totp/x?secret=JBSWY3DPEHPK3PXP".into(),
+            passkey: None,
         }
+    }
+
+    #[test]
+    fn payload_carries_the_passkey_with_its_private_key() {
+        let mut f = fields();
+        let passkey = zvault_passkeys::Passkey::generate("github.com", "octo", 0).unwrap();
+        f.passkey = Some(passkey.clone());
+        let json: serde_json::Value = serde_json::from_slice(&payload(&f).unwrap()).unwrap();
+        let shared = &json["passkey"];
+        assert_eq!(shared["rpId"], "github.com");
+        assert_eq!(shared["credentialId"], passkey.credential_id.as_str());
+        let pem = shared["privateKey"].as_str().unwrap();
+        let back = zvault_passkeys::Passkey::import(
+            "github.com",
+            "octo",
+            &passkey.credential_id,
+            "",
+            pem,
+            0,
+        )
+        .unwrap();
+        assert_eq!(back.public_key(), passkey.public_key());
     }
 
     #[test]

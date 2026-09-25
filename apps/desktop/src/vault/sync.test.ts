@@ -31,10 +31,13 @@ const fakeCore: VaultCore = {
       username: f.username,
       url: f.urls[0] ?? null,
       hasTotp: f.totp !== '',
+      hasPasskey: f.passkey !== undefined,
     });
   },
   totpCode: (_vaultId, item) =>
     Promise.resolve(decode(item).totp ? { code: '123456', period: 30, remaining: 12 } : null),
+  testPasskey: () => Promise.resolve(),
+  sharePayload: (_vaultId, item) => Promise.resolve(JSON.stringify(decode(item))),
   lock: () => Promise.resolve(),
 };
 

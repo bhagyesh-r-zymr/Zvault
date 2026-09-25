@@ -23,6 +23,7 @@ uuid = "1"
 zeroize = { version = "1.8", features = ["derive"] }
 zvault-crypto = { path = "../zvault-crypto" }
 zvault-otp = { path = "../zvault-otp" }
+zvault-passkeys = { path = "../zvault-passkeys" }
 
 # Not the workspace lints: the generated bridge needs unsafe FFI code, so
 # unsafe is denied (and allowed only on that one module) rather than forbidden.

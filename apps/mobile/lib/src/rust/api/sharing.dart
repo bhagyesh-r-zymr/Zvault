@@ -8,7 +8,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `blob_json`, `check_origin`, `open_payload`, `open_secret_payload`, `payload`, `seal_box`, `seal_link`, `secret_payload`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Payload`, `SecretOrigin`, `WireBlob`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Payload`, `SecretOrigin`, `SharedPasskey`, `WireBlob`
 
 /// Encrypts an item under a fresh link key and builds its URL on
 /// `share_origin` (the share page, such as `https://host/share`).

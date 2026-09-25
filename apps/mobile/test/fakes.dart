@@ -73,6 +73,11 @@ class FakeCore extends Core {
     blobJson: '{"v":1,"alg":"xchacha20poly1305","kid":"share-box","nonce":"n","ct":"c"}',
   );
 
+  int passkeyTests = 0;
+
+  @override
+  Future<void> testPasskey(String vaultId, String recordJson) async => passkeyTests++;
+
   @override
   void lock() => locked = true;
 
@@ -89,12 +94,24 @@ SavedAccount account({bool quickUnlock = true}) => SavedAccount(
   quickUnlock: quickUnlock,
 );
 
-VaultItem item(String id, String title, String username, {bool totp = false}) => VaultItem(
+VaultItem item(
+  String id,
+  String title,
+  String username, {
+  bool totp = false,
+  bool passkey = false,
+}) => VaultItem(
   vaultId: 'v1',
   vaultName: 'Personal',
   id: id,
   recordJson: id,
-  summary: ItemSummary(title: title, username: username, url: null, hasTotp: totp),
+  summary: ItemSummary(
+    title: title,
+    username: username,
+    url: null,
+    hasTotp: totp,
+    hasPasskey: passkey,
+  ),
 );
 
 /// An unlocked app with two items and one project, without touching the network.

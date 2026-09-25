@@ -13,6 +13,7 @@ const FIELD_NAMES: [keyof ItemFields, string][] = [
   ['totp', 'one-time password'],
   ['urls', 'website'],
   ['notes', 'notes'],
+  ['passkey', 'passkey'],
 ];
 
 /** Fields in which `a` and `b` differ, named for people. */

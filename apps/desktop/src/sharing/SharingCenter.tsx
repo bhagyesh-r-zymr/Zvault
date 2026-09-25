@@ -258,6 +258,17 @@ function IncomingRow({ share, onRemove }: { share: IncomingUserShare; onRemove: 
               </div>
             </div>
           )}
+          {item.passkey && (
+            <div className="row">
+              <div className="row-main">
+                <span className="row-label">passkey</span>
+                <span>
+                  {item.passkey.userName} on {item.passkey.rpId}
+                </span>
+              </div>
+              <CopyButton value={item.passkey.privateKey} label="Copy private key" />
+            </div>
+          )}
           {item.notes && (
             <div className="row">
               <div className="row-main">

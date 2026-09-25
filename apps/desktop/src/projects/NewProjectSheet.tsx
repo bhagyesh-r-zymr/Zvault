@@ -1,10 +1,10 @@
-import { DEFAULT_ENVIRONMENTS, slugify } from '@zvault/shared';
+import { slugify } from '@zvault/shared';
 import { useId, useState, type FormEvent } from 'react';
 import { ErrorLine, Sheet } from '../ui/controls.js';
 import { writeError } from './api.js';
 import { useProjectsSync } from './context.js';
 
-/** Creates a project with fresh keys and the default environments. */
+/** Creates a project with a fresh key. It starts with no environments. */
 export function NewProjectSheet(props: {
   onClose: () => void;
   onCreated: (projectId: string) => void;
@@ -51,7 +51,7 @@ export function NewProjectSheet(props: {
             onChange={(e) => setName(e.target.value)}
           />
           <span className="hint">
-            Starts with {DEFAULT_ENVIRONMENTS.map((e) => e.name).join(', ')}. Referenced as{' '}
+            You add its environments next. Referenced as{' '}
             <span className="mono">zv://{slugify(name) || 'project'}/…</span>
           </span>
         </div>

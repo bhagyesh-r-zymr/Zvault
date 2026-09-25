@@ -20,6 +20,13 @@ import { ProjectsSync } from './sync.js';
 
 const NOW = '2026-01-01T00:00:00.000Z';
 
+/** The environments most tests start with; new projects in the app have none. */
+const STARTER = [
+  { name: 'Development', kind: 'development' as const },
+  { name: 'Staging', kind: 'staging' as const },
+  { name: 'Production', kind: 'production' as const },
+];
+
 const served = vi.hoisted((): { find?: unknown; list?: unknown; save?: unknown } => ({}));
 vi.mock('../agents/api.js', () => {
   const stop = () => Promise.resolve(() => undefined);
@@ -170,7 +177,17 @@ class FakeServer {
   }
 
   deleteEntry(pid: string, type: EntryType, id: string, base: number): Promise<ProjectEntry> {
-    return this.save(pid, id, base, { type, deleted: true });
+    const deleted = this.save(pid, id, base, { type, deleted: true });
+    if (type === 'environment') {
+      // Like the API: the key and every value sealed with it go, without a new seq.
+      this.grants.delete(id);
+      for (const e of this.entries.values()) {
+        if (e.type === 'secret' && !e.deleted) {
+          e.values = e.values.filter((v) => v.environmentId !== id);
+        }
+      }
+    }
+    return deleted;
   }
 
   private save(pid: string, id: string, base: number, body: object): Promise<ProjectEntry> {
@@ -213,7 +230,7 @@ const device = (server: FakeServer, core: ProjectsCore = fakeCore) =>
 describe('ProjectsSync', () => {
   it('opens a shared project and its environments with the member wraps', async () => {
     const server = new FakeServer();
-    const projectId = await device(server).createProject('Shared');
+    const projectId = await device(server).createProject('Shared', STARTER);
     const envIds = [...server.entries.values()].map((e) => e.id);
     const wrap = (keyVersion: number | null) => ({
       recipientId: crypto.randomUUID(),
@@ -268,7 +285,7 @@ describe('ProjectsSync', () => {
     await mine.load();
     expect(mine.get()).toMatchObject({ status: 'ready', projects: [] });
 
-    const projectId = await mine.createProject('Payments API');
+    const projectId = await mine.createProject('Payments API', STARTER);
     const project = mine.get().projects[0]!;
     expect(project).toMatchObject({ slug: 'payments-api', owner: true });
     expect(project.environments.map((e) => [e.slug, e.short, e.locked])).toEqual([
@@ -304,7 +321,7 @@ describe('ProjectsSync', () => {
   it('shows environments without a key grant as locked, without their values', async () => {
     const server = new FakeServer();
     const mine = device(server);
-    const projectId = await mine.createProject('Portal');
+    const projectId = await mine.createProject('Portal', STARTER);
     const envs = mine.get().projects[0]!.environments;
     await mine.createSecret(projectId, {
       name: 'Auth0',
@@ -325,7 +342,7 @@ describe('ProjectsSync', () => {
   it('re-applies an environment and its values after a key rotation', async () => {
     const server = new FakeServer();
     const mine = device(server);
-    const projectId = await mine.createProject('Rotated');
+    const projectId = await mine.createProject('Rotated', STARTER);
     const dev = mine.get().projects[0]!.environments[0]!;
     const secretId = await mine.createSecret(projectId, {
       name: 'Token',
@@ -363,7 +380,7 @@ describe('ProjectsSync', () => {
 
   it('adds a custom environment after the others', async () => {
     const mine = device(new FakeServer());
-    const projectId = await mine.createProject('Zvault');
+    const projectId = await mine.createProject('Zvault', STARTER);
     await mine.createEnvironment(projectId, 'QA sandbox');
     const qa = mine.get().projects[0]!.environments.at(-1)!;
     expect(qa).toMatchObject({ slug: 'qa-sandbox', kind: 'custom', position: 3, short: 'QA' });
@@ -373,7 +390,7 @@ describe('ProjectsSync', () => {
   it('refreshes and rethrows when a delete lost a race', async () => {
     const server = new FakeServer();
     const mine = device(server);
-    const projectId = await mine.createProject('Mobile');
+    const projectId = await mine.createProject('Mobile', STARTER);
     const dev = mine.get().projects[0]!.environments[0]!;
     const secretId = await mine.createSecret(projectId, {
       name: 'Firebase',
@@ -405,6 +422,102 @@ describe('ProjectsSync', () => {
     expect(mine.get().secrets).toEqual([]);
     await other.pull(projectId);
     expect(other.get().secrets).toEqual([]);
+  });
+
+  it('starts a new project with no environments, then adds the first', async () => {
+    const server = new FakeServer();
+    const mine = device(server);
+    const projectId = await mine.createProject('Empty');
+    expect(mine.get().projects[0]!.environments).toEqual([]);
+    await mine.createEnvironment(projectId, { name: 'Prod', slug: 'prod', kind: 'production' });
+    expect(mine.get().projects[0]!.environments).toMatchObject([
+      { name: 'Prod', slug: 'prod', kind: 'production', position: 0, locked: false },
+    ]);
+  });
+
+  it('renames an environment and changes its slug, kind and fallback', async () => {
+    const server = new FakeServer();
+    const mine = device(server);
+    const projectId = await mine.createProject('Edit', STARTER);
+    const [dev, staging, prod] = mine.get().projects[0]!.environments;
+    await mine.updateEnvironment(projectId, staging!.id, {
+      name: 'QA',
+      slug: 'qa',
+      kind: 'custom',
+      inheritsFrom: dev!.id,
+    });
+    const other = device(server);
+    await other.load();
+    expect(other.get().projects[0]!.environments[1]).toMatchObject({
+      id: staging!.id,
+      name: 'QA',
+      slug: 'qa',
+      kind: 'custom',
+      inheritsFrom: dev!.id,
+      revision: 2,
+      locked: false,
+    });
+
+    await expect(
+      mine.updateEnvironment(projectId, prod!.id, { name: 'Prod', slug: 'qa' }),
+    ).rejects.toThrow('already uses');
+    await expect(
+      mine.updateEnvironment(projectId, prod!.id, { name: 'Prod', slug: 'Prod!' }),
+    ).rejects.toThrow('slug');
+    await expect(
+      mine.updateEnvironment(projectId, dev!.id, {
+        name: 'Development',
+        slug: 'development',
+        inheritsFrom: staging!.id,
+      }),
+    ).rejects.toThrow('fall back to each other');
+  });
+
+  it('deletes an environment, its values and secrets left with none', async () => {
+    const server = new FakeServer();
+    const mine = device(server);
+    const projectId = await mine.createProject('Trim', STARTER);
+    const [dev, staging, prod] = mine.get().projects[0]!.environments;
+    await mine.updateEnvironment(projectId, prod!.id, {
+      name: 'Production',
+      slug: 'production',
+      inheritsFrom: staging!.id,
+    });
+    await mine.updateEnvironment(projectId, staging!.id, {
+      name: 'Staging',
+      slug: 'staging',
+      inheritsFrom: dev!.id,
+    });
+    const shared = await mine.createSecret(projectId, {
+      name: 'Shared',
+      key: 'SHARED',
+      folderId: null,
+      tags: [],
+      values: { [dev!.id]: 'd', [staging!.id]: 's' },
+    });
+    const only = await mine.createSecret(projectId, {
+      name: 'Only staging',
+      key: 'ONLY_STAGING',
+      folderId: null,
+      tags: [],
+      values: { [staging!.id]: 's' },
+    });
+    expect(mine.secretsOnlyIn(projectId, staging!.id)).toEqual([only]);
+
+    await mine.deleteEnvironment(projectId, staging!.id);
+    const view = mine.get();
+    expect(view.projects[0]!.environments.map((e) => [e.slug, e.inheritsFrom])).toEqual([
+      ['development', null],
+      ['production', dev!.id],
+    ]);
+    expect(view.secrets.map((s) => [s.id, Object.keys(s.values)])).toEqual([[shared, [dev!.id]]]);
+
+    const other = device(server);
+    await other.load();
+    expect(other.get().secrets.map((s) => [s.id, Object.keys(s.values)])).toEqual([
+      [shared, [dev!.id]],
+    ]);
+    expect(other.get().projects[0]!.environments).toHaveLength(2);
   });
 
   it('gives a second project with the same name its own slug', async () => {
@@ -483,7 +596,7 @@ describe('zv bridge', () => {
     const server = new FakeServer();
     const mine = device(server);
     await mine.load();
-    const projectId = await mine.createProject('Payments API');
+    const projectId = await mine.createProject('Payments API', STARTER);
     const [dev, stg, prod] = mine.get().projects[0]!.environments;
     const folderId = await mine.createFolder(projectId, 'Billing');
     const secretId = await mine.createSecret(projectId, {

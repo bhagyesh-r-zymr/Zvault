@@ -2,7 +2,13 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { EncryptedBlob, EntryType, ProjectEntry, SecretValueRecord } from '@zvault/shared';
 import { and, asc, count, eq, gt, inArray } from 'drizzle-orm';
 import { DATABASE, type Database } from '../db/database.js';
-import { keyGrants, projectEntries, projects, secretValues } from '../db/schema.js';
+import {
+  environmentAccess,
+  keyGrants,
+  projectEntries,
+  projects,
+  secretValues,
+} from '../db/schema.js';
 
 type ProjectRow = typeof projects.$inferSelect;
 type EntryRow = typeof projectEntries.$inferSelect;
@@ -252,6 +258,15 @@ export class ProjectsStore {
           await tx
             .delete(keyGrants)
             .where(and(eq(keyGrants.projectId, w.projectId), eq(keyGrants.resourceId, w.id)));
+          // So do its team grants and access requests (they cascade from this row).
+          await tx
+            .delete(environmentAccess)
+            .where(
+              and(
+                eq(environmentAccess.projectId, w.projectId),
+                eq(environmentAccess.environmentId, w.id),
+              ),
+            );
         } else if (w.keyGrant) {
           await tx
             .insert(keyGrants)

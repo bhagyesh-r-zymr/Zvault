@@ -452,6 +452,21 @@ describe('Team access (e2e)', () => {
     // The new environment is registered with its creator as manager.
     expect((await detail(dana, env)).myLevel).toBe('manage');
     await grant(dana, env, { type: 'account', id: ben.id }, 'edit').expect(200);
+    // Deleting it takes its grants with it; members without the project key can't see it.
+    await api()
+      .delete(`/v1/projects/${p.id}/environments/${env}?baseRevision=1`)
+      .set(as(ben))
+      .expect(404);
+    await api()
+      .delete(`/v1/projects/${p.id}/environments/${env}?baseRevision=1`)
+      .set(as(dana))
+      .expect(200);
+    const left = await h.db
+      .select()
+      .from(environmentGrants)
+      .where(eq(environmentGrants.environmentId, env));
+    expect(left).toEqual([]);
+    await api().get(`/v1/access/environments/${env}`).set(as(dana)).expect(404);
     // Deleting the whole project stays with its owner.
     await api().delete(`/v1/projects/${p.id}`).set(as(dana)).expect(403);
   });

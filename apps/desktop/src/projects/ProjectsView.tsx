@@ -10,9 +10,10 @@ import {
   type Project,
   type ProjectSecret,
 } from './model.js';
+import { EnvironmentSheet } from './EnvironmentsView.js';
 import { NewSecretSheet } from './NewSecretSheet.js';
 import type { ProjectTeam } from './team.js';
-import { LEVEL_LABELS, buildMatrix, canEditEnv, whoCanUse } from './teamModel.js';
+import { LEVEL_LABELS, buildMatrix, canEditEnv, isOrgAdmin, whoCanUse } from './teamModel.js';
 import './projects.css';
 
 export function EnvDot({ env }: { env: Pick<Environment, 'color'> }) {
@@ -63,6 +64,7 @@ export function ProjectsView(props: {
   const [tags, setTags] = useState<string[]>([]);
   const [closed, setClosed] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
+  const [creatingEnv, setCreatingEnv] = useState(false);
 
   const inProject = useMemo(
     () => secrets.filter((s) => s.projectId === props.projectId),
@@ -70,16 +72,45 @@ export function ProjectsView(props: {
   );
   const allTags = useMemo(() => [...new Set(inProject.flatMap((s) => s.tags))].sort(), [inProject]);
 
+  if (project && !env && status !== 'loading') {
+    const canManage = project.owner || isOrgAdmin(team?.org ?? null);
+    return (
+      <>
+        <div className="empty">
+          <Icon name="folder" size={32} />
+          <strong>{project.name} has no environments yet</strong>
+          <span>
+            {canManage
+              ? 'Create one to start adding secrets, such as Development or Production.'
+              : 'Ask the project owner or an admin to add one.'}
+          </span>
+          {canManage && (
+            <button type="button" className="primary" onClick={() => setCreatingEnv(true)}>
+              <Icon name="plus" size={13} strokeWidth={2.4} />
+              Create environment
+            </button>
+          )}
+        </div>
+        {creatingEnv && (
+          <EnvironmentSheet
+            project={project}
+            env={null}
+            onClose={() => setCreatingEnv(false)}
+            onSaved={(envId) => {
+              setCreatingEnv(false);
+              props.onEnvChange(envId);
+            }}
+          />
+        )}
+      </>
+    );
+  }
   if (!project || !env) {
     return (
       <div className="empty">
         <Icon name="folder" size={32} />
         <span>
-          {status === 'loading'
-            ? 'Opening project…'
-            : !project
-              ? 'This project is no longer available.'
-              : 'This project has no environments yet.'}
+          {status === 'loading' ? 'Opening project…' : 'This project is no longer available.'}
         </span>
       </div>
     );

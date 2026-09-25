@@ -9,6 +9,6 @@ import { VaultStore } from './vault.store.js';
   imports: [DevicesModule],
   controllers: [VaultController],
   providers: [VaultService, { provide: VaultStore, useClass: DrizzleVaultStore }],
-  exports: [VaultService],
+  exports: [VaultService, VaultStore],
 })
 export class VaultModule {}

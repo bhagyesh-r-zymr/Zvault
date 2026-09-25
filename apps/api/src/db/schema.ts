@@ -197,6 +197,26 @@ export const vaultItems = pgTable(
 );
 
 /**
+ * Earlier versions of vault items: the blobs a row held before a write
+ * replaced or deleted it, kept so the owner can restore them. A deleted item's
+ * last version is what the trash shows.
+ */
+export const vaultItemVersions = pgTable(
+  'vault_item_versions',
+  {
+    vaultId: uuid('vault_id')
+      .notNull()
+      .references(() => vaults.id, { onDelete: 'cascade' }),
+    itemId: uuid('item_id').notNull(),
+    revision: integer('revision').notNull(),
+    encryptedKey: jsonb('encrypted_key').$type<EncryptedBlob>().notNull(),
+    encryptedData: jsonb('encrypted_data').$type<EncryptedBlob>().notNull(),
+    savedAt: ts('saved_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.vaultId, t.itemId, t.revision] })],
+);
+
+/**
  * Projects of secrets. Everything readable about a project (its name, its
  * environments' and folders' names, secret names and tags) is sealed with the
  * project key, which the server never holds.
@@ -282,6 +302,27 @@ export const secretValues = pgTable(
     updatedAt: ts('updated_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.projectId, t.secretId, t.environmentId] })],
+);
+
+/**
+ * Earlier versions of secrets: metadata plus every environment's value as
+ * they were before a write replaced or deleted them. `values` maps
+ * environment id to the value sealed with that environment's key; a key
+ * rotation drops that environment's old values from here.
+ */
+export const secretVersions = pgTable(
+  'secret_versions',
+  {
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    secretId: uuid('secret_id').notNull(),
+    revision: integer('revision').notNull(),
+    encryptedMeta: jsonb('encrypted_meta').$type<EncryptedBlob>().notNull(),
+    values: jsonb('values').$type<Record<string, EncryptedBlob>>().notNull(),
+    savedAt: ts('saved_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.secretId, t.revision] })],
 );
 
 // ---------------------------------------------------------------- team access

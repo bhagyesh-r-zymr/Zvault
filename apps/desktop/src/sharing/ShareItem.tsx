@@ -42,7 +42,7 @@ export function ShareItem({ item, api }: { item: SharedItemPayload; api: Sharing
 }
 
 function ShareByLink({ item, api }: { item: SharedItemPayload; api: SharingApi }) {
-  const [expiresInSeconds, setExpiry] = useState<number>(DAY);
+  const [expiresInSeconds, setExpiry] = useState<number>(7 * DAY);
   const [maxViews, setMaxViews] = useState(1);
   const [audience, setAudience] = useState<'anyone' | 'emails'>('anyone');
   const [emailText, setEmailText] = useState('');

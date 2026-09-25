@@ -3,7 +3,8 @@
 Installed copies of Zvault and `zv` update themselves from this repository's GitHub
 Releases.
 
-- **The app** checks `releases/latest/download/latest.json` when it starts. When there is
+- **The app** checks `releases/latest/download/latest.json` when it starts, and again when
+  you come back to it if the last check is over 30 minutes old. When there is
   a newer version it shows a banner; nothing installs until you click **Install and
   restart**. You can also check from **Settings → Account → Updates**. Restarting locks
   the vault.

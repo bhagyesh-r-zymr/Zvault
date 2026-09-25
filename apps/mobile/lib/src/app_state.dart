@@ -29,6 +29,58 @@ class VaultItem {
   final ItemSummary summary;
 }
 
+/// What a share sheet shares: a vault item, or one project secret's value in
+/// one environment. Either is opened and encrypted in Rust.
+sealed class ShareSubject {
+  const ShareSubject();
+
+  /// What the recipient sees it called.
+  String get label;
+
+  /// "item" or "secret", for the sheet's wording.
+  String get noun;
+}
+
+class ItemShareSubject extends ShareSubject {
+  const ItemShareSubject(this.item, this.title);
+
+  final VaultItem item;
+  final String title;
+
+  @override
+  String get label => title;
+
+  @override
+  String get noun => 'item';
+}
+
+class SecretShareSubject extends ShareSubject {
+  const SecretShareSubject(this.project, this.secret, this.environment);
+
+  final Project project;
+  final Secret secret;
+  final Environment environment;
+
+  @override
+  String get label => '${secret.key} (${environment.name})';
+
+  @override
+  String get noun => 'secret';
+
+  /// For Rust, which opens the value with this account's environment key.
+  SecretShare get request => SecretShare(
+    projectId: project.id,
+    secretId: secret.id,
+    environmentId: environment.id,
+    valueJson: secret.values[environment.id] ?? '',
+    name: secret.name,
+    key: secret.key,
+    note: secret.note ?? '',
+    projectName: project.name,
+    environmentName: environment.name,
+  );
+}
+
 /// A link that was just made. [url] holds the link key: it is shown and
 /// shared from this phone only.
 class CreatedShareLink {
@@ -551,12 +603,19 @@ class AppState extends ChangeNotifier {
   String get shareOrigin => '${account!.api}/share';
 
   Future<CreatedShareLink> createShareLink(
-    VaultItem item, {
+    ShareSubject subject, {
     required int expiresInSeconds,
     required int maxViews,
     List<String>? allowedEmails,
   }) async {
-    final link = await core.createShareLink(item.vaultId, item.recordJson, shareOrigin);
+    final link = await switch (subject) {
+      ItemShareSubject(:final item) => core.createShareLink(
+        item.vaultId,
+        item.recordJson,
+        shareOrigin,
+      ),
+      SecretShareSubject() => core.createSecretShareLink(subject.request, shareOrigin),
+    };
     final unverified = await _api!.createShareLink({
       'id': link.id,
       'verifier': link.verifier,
@@ -588,10 +647,17 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  Future<void> shareWithUser(VaultItem item, ShareRecipient to) async {
+  Future<void> shareWithUser(ShareSubject subject, ShareRecipient to) async {
     final api = _api!;
     await api.publishSharingKey((await core.sharingIdentity()).publicKey);
-    final sealed = await core.sealShareTo(item.vaultId, item.recordJson, to.publicKey);
+    final sealed = await switch (subject) {
+      ItemShareSubject(:final item) => core.sealShareTo(
+        item.vaultId,
+        item.recordJson,
+        to.publicKey,
+      ),
+      SecretShareSubject() => core.sealSecretShareTo(subject.request, to.publicKey),
+    };
     await api.shareWithUser({
       'id': sealed.id,
       'recipientEmail': to.email,

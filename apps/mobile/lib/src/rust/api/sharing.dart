@@ -7,8 +7,8 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `blob_json`, `check_origin`, `open_payload`, `payload`, `seal_box`, `seal_link`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Payload`, `WireBlob`
+// These functions are ignored because they are not marked as `pub`: `blob_json`, `check_origin`, `open_payload`, `open_secret_payload`, `payload`, `seal_box`, `seal_link`, `secret_payload`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Payload`, `SecretOrigin`, `WireBlob`
 
 /// Encrypts an item under a fresh link key and builds its URL on
 /// `share_origin` (the share page, such as `https://host/share`).
@@ -20,6 +20,24 @@ Future<NewShareLink> shareLinkCreate({
   vaultId: vaultId,
   recordJson: recordJson,
   shareOrigin: shareOrigin,
+);
+
+/// Encrypts one project secret's value under a fresh link key.
+Future<NewShareLink> secretShareLinkCreate({
+  required SecretShare secret,
+  required String shareOrigin,
+}) => RustLib.instance.api.crateApiSharingSecretShareLinkCreate(
+  secret: secret,
+  shareOrigin: shareOrigin,
+);
+
+/// Encrypts one project secret's value to another user's sharing key.
+Future<NewUserShare> secretShareSealTo({
+  required SecretShare secret,
+  required String recipientPublicKey,
+}) => RustLib.instance.api.crateApiSharingSecretShareSealTo(
+  secret: secret,
+  recipientPublicKey: recipientPublicKey,
 );
 
 /// This account's sharing public key, to publish before sending a share.
@@ -109,6 +127,61 @@ class NewUserShare {
           senderPublicKey == other.senderPublicKey &&
           ephemeralPublicKey == other.ephemeralPublicKey &&
           blobJson == other.blobJson;
+}
+
+/// One project secret's value in one environment, to share. The value is
+/// opened here; the rest is its already-open metadata, for the recipient.
+class SecretShare {
+  final String projectId;
+  final String secretId;
+  final String environmentId;
+
+  /// The sealed value, as `EncryptedBlob` JSON.
+  final String valueJson;
+  final String name;
+  final String key;
+  final String note;
+  final String projectName;
+  final String environmentName;
+
+  const SecretShare({
+    required this.projectId,
+    required this.secretId,
+    required this.environmentId,
+    required this.valueJson,
+    required this.name,
+    required this.key,
+    required this.note,
+    required this.projectName,
+    required this.environmentName,
+  });
+
+  @override
+  int get hashCode =>
+      projectId.hashCode ^
+      secretId.hashCode ^
+      environmentId.hashCode ^
+      valueJson.hashCode ^
+      name.hashCode ^
+      key.hashCode ^
+      note.hashCode ^
+      projectName.hashCode ^
+      environmentName.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SecretShare &&
+          runtimeType == other.runtimeType &&
+          projectId == other.projectId &&
+          secretId == other.secretId &&
+          environmentId == other.environmentId &&
+          valueJson == other.valueJson &&
+          name == other.name &&
+          key == other.key &&
+          note == other.note &&
+          projectName == other.projectName &&
+          environmentName == other.environmentName;
 }
 
 class SharingIdentity {

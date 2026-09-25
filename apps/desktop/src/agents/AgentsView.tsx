@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ErrorLine, Sheet } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import { agents, type ActivityEntry, type Agent, type ApprovalMode } from './api.js';
+import { ClaudeSetup, CliInstall } from './CliSetup.js';
 import './agents.css';
 
 /**
@@ -57,6 +58,7 @@ export function AgentsView() {
   const [error, setError] = useState<string | null>(null);
   const [newScope, setNewScope] = useState('');
   const [pairing, setPairing] = useState(false);
+  const [installing, setInstalling] = useState(false);
 
   const agent = list?.find((a) => a.id === selected) ?? list?.[0] ?? null;
 
@@ -103,9 +105,14 @@ export function AgentsView() {
         <div className="list-head">
           <div className="title-row">
             <h2>Agents</h2>
-            <button type="button" className="primary" onClick={() => setPairing(true)}>
-              Pair an agent
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={() => setInstalling(true)}>
+                <Icon name="terminal" size={13} /> Install CLI
+              </button>
+              <button type="button" className="primary" onClick={() => setPairing(true)}>
+                Pair an agent
+              </button>
+            </div>
           </div>
           <p className="hint" style={{ lineHeight: 1.5 }}>
             AI tools on this Mac that can use secrets through the <code>zv</code> command. They only
@@ -147,7 +154,11 @@ export function AgentsView() {
         <div className="detail-body" style={{ paddingTop: 26 }}>
           <ErrorLine error={error} />
           {!agent ? (
-            <CliSetup />
+            <>
+              <h1>Connect an agent</h1>
+              <CliInstall />
+              <ClaudeSetup />
+            </>
           ) : (
             <>
               <div className="item-head">
@@ -282,68 +293,36 @@ export function AgentsView() {
           title="Pair an agent"
           subtitle="Pairing starts from the terminal the agent uses"
           onClose={() => setPairing(false)}
-          width={480}
+          width={520}
         >
-          <CliSetup />
+          <div className="cli-setup">
+            <CliInstall />
+            <ol className="hint cli-steps">
+              <li>
+                In the agent&apos;s terminal, run{' '}
+                <code>zv agent pair --name &quot;Claude Code&quot;</code>.
+              </li>
+              <li>Zvault asks you to confirm the code and choose what the agent may use.</li>
+              <li>
+                The agent then runs <code>zv run --env KEY=zv://project/env/KEY -- command</code>.
+              </li>
+            </ol>
+          </div>
         </Sheet>
       )}
-    </div>
-  );
-}
-
-/** How to get `zv` onto the PATH and pair an agent. */
-function CliSetup() {
-  const [status, setStatus] = useState<{ bundled: boolean; installedAt: string | null } | null>(
-    null,
-  );
-  const [result, setResult] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    agents.cliStatus().then(setStatus, () => setStatus(null));
-  }, []);
-
-  const install = async () => {
-    setError(null);
-    try {
-      const r = await agents.installCli();
-      setResult(
-        r.onPath
-          ? `Installed at ${r.path}.`
-          : `Installed at ${r.path}. Add this to your shell profile: ${r.pathLine ?? ''}`,
-      );
-      setStatus(await agents.cliStatus());
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <ol className="hint" style={{ lineHeight: 1.7, paddingLeft: 18 }}>
-        <li>
-          Install the command-line tool:{' '}
-          {status?.installedAt ? (
-            <span className="mono">{status.installedAt}</span>
-          ) : status?.bundled ? (
-            <button type="button" className="link" onClick={() => void install()}>
-              Install zv
-            </button>
-          ) : (
-            'this build does not include zv'
-          )}
-        </li>
-        <li>
-          In the agent&apos;s terminal, run{' '}
-          <code>zv agent pair --name &quot;Claude Code&quot;</code>.
-        </li>
-        <li>Zvault asks you to confirm the code and choose what the agent may use.</li>
-        <li>
-          The agent then runs <code>zv run --env KEY=zv://project/env/KEY -- command</code>.
-        </li>
-      </ol>
-      {result && <p className="notice">{result}</p>}
-      <ErrorLine error={error} />
+      {installing && (
+        <Sheet
+          title="Install the zv command"
+          subtitle="Then paste the instructions into Claude Code"
+          onClose={() => setInstalling(false)}
+          width={560}
+        >
+          <div className="cli-setup">
+            <CliInstall />
+            <ClaudeSetup />
+          </div>
+        </Sheet>
+      )}
     </div>
   );
 }

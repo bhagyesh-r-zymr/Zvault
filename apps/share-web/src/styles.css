@@ -121,6 +121,7 @@ h2 {
 }
 
 .field code {
+  white-space: pre-wrap;
   color: var(--text);
   font-family: var(--mono);
   font-weight: 500;

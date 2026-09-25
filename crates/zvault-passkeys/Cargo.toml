@@ -1,0 +1,21 @@
+[package]
+name = "zvault-passkeys"
+version = "0.0.0"
+description = "Passkeys (WebAuthn ES256 credentials) stored in vault items: creation, import and signing a WebAuthn assertion. Runs only on the user's device."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+base64 = "0.22"
+getrandom = "0.3"
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8", "pem", "std"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "2"
+zeroize = { version = "1.8", features = ["derive"] }
+
+[lints]
+workspace = true

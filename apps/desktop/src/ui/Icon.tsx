@@ -174,6 +174,14 @@ const PATHS = {
       <circle cx="7.5" cy="8.5" r="1.2" />
     </>
   ),
+  passkey: (
+    <>
+      <circle cx="9" cy="7.5" r="3.5" />
+      <path d="M3 20v-1a5 5 0 0 1 8.5-3.6" />
+      <circle cx="17" cy="13" r="2.5" />
+      <path d="M17 15.5V21M17 18.5h2" />
+    </>
+  ),
   pause: <path d="M8 5v14M16 5v14" />,
   globe: (
     <>

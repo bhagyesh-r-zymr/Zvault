@@ -26,6 +26,16 @@ Future<ItemDetail> itemOpen({
   recordJson: recordJson,
 );
 
+/// Signs a fresh WebAuthn challenge with the item's passkey and verifies it
+/// with the public key, as the website would.
+Future<void> itemPasskeyTest({
+  required String vaultId,
+  required String recordJson,
+}) => RustLib.instance.api.crateApiVaultItemPasskeyTest(
+  vaultId: vaultId,
+  recordJson: recordJson,
+);
+
 /// The item's current one-time password, or None if it has none.
 Future<OneTimeCode?> itemTotp({
   required String vaultId,
@@ -112,6 +122,7 @@ class ItemDetail {
   final List<String> urls;
   final String notes;
   final bool hasTotp;
+  final PasskeyDetail? passkey;
 
   const ItemDetail({
     required this.title,
@@ -120,6 +131,7 @@ class ItemDetail {
     required this.urls,
     required this.notes,
     required this.hasTotp,
+    this.passkey,
   });
 
   @override
@@ -129,7 +141,8 @@ class ItemDetail {
       password.hashCode ^
       urls.hashCode ^
       notes.hashCode ^
-      hasTotp.hashCode;
+      hasTotp.hashCode ^
+      passkey.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -141,7 +154,8 @@ class ItemDetail {
           password == other.password &&
           urls == other.urls &&
           notes == other.notes &&
-          hasTotp == other.hasTotp;
+          hasTotp == other.hasTotp &&
+          passkey == other.passkey;
 }
 
 /// What the item list shows. The password stays in Rust.
@@ -150,17 +164,23 @@ class ItemSummary {
   final String username;
   final String? url;
   final bool hasTotp;
+  final bool hasPasskey;
 
   const ItemSummary({
     required this.title,
     required this.username,
     this.url,
     required this.hasTotp,
+    required this.hasPasskey,
   });
 
   @override
   int get hashCode =>
-      title.hashCode ^ username.hashCode ^ url.hashCode ^ hasTotp.hashCode;
+      title.hashCode ^
+      username.hashCode ^
+      url.hashCode ^
+      hasTotp.hashCode ^
+      hasPasskey.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -170,7 +190,8 @@ class ItemSummary {
           title == other.title &&
           username == other.username &&
           url == other.url &&
-          hasTotp == other.hasTotp;
+          hasTotp == other.hasTotp &&
+          hasPasskey == other.hasPasskey;
 }
 
 class OneTimeCode {
@@ -197,6 +218,47 @@ class OneTimeCode {
           code == other.code &&
           period == other.period &&
           remaining == other.remaining;
+}
+
+/// An item's passkey without its private key, which stays in Rust.
+class PasskeyDetail {
+  /// The website's domain, such as `github.com`.
+  final String rpId;
+  final String userName;
+  final String credentialId;
+
+  /// Base64url SubjectPublicKeyInfo.
+  final String publicKey;
+
+  /// Unix seconds.
+  final PlatformInt64 createdAt;
+
+  const PasskeyDetail({
+    required this.rpId,
+    required this.userName,
+    required this.credentialId,
+    required this.publicKey,
+    required this.createdAt,
+  });
+
+  @override
+  int get hashCode =>
+      rpId.hashCode ^
+      userName.hashCode ^
+      credentialId.hashCode ^
+      publicKey.hashCode ^
+      createdAt.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PasskeyDetail &&
+          runtimeType == other.runtimeType &&
+          rpId == other.rpId &&
+          userName == other.userName &&
+          credentialId == other.credentialId &&
+          publicKey == other.publicKey &&
+          createdAt == other.createdAt;
 }
 
 class VaultSummary {

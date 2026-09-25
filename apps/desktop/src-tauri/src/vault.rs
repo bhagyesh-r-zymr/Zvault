@@ -36,6 +36,8 @@ pub enum VaultError {
     InvalidRecord,
     #[error("{0}")]
     OneTimePassword(#[from] zvault_otp::OtpError),
+    #[error("{0}")]
+    Passkey(#[from] zvault_passkeys::PasskeyError),
 }
 
 impl Serialize for VaultError {
@@ -126,6 +128,55 @@ pub struct ItemFields {
     /// empty. Like the password, it never leaves the encrypted item.
     #[serde(default)]
     pub totp: String,
+    /// The item's passkey, without its private key, which stays in Rust.
+    /// Taken out before sealing: the stored passkey lives in
+    /// [`ItemPlaintext::passkey`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub passkey: Option<PasskeyFields>,
+}
+
+/// A passkey as the UI sees and edits it.
+///
+/// To create one, send only `rpId` and `userName`; to import one, also send
+/// `credentialId`, `privateKey` and optionally `userHandle`. An existing
+/// passkey is kept when its `credentialId` comes back unchanged; only its
+/// user name can be edited. The private key is accepted but never returned.
+#[derive(Default, Clone, PartialEq, Eq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+#[serde(rename_all = "camelCase")]
+pub struct PasskeyFields {
+    #[serde(default)]
+    pub rp_id: String,
+    #[serde(default)]
+    pub user_name: String,
+    #[serde(default)]
+    pub user_handle: String,
+    #[serde(default)]
+    pub credential_id: String,
+    /// Base64url SubjectPublicKeyInfo. Output only.
+    #[serde(default)]
+    pub public_key: String,
+    #[serde(default)]
+    #[zeroize(skip)]
+    pub created_at: i64,
+    /// Import only. Never serialized.
+    #[serde(default, skip_serializing)]
+    pub private_key: String,
+}
+
+impl TryFrom<&zvault_passkeys::Passkey> for PasskeyFields {
+    type Error = VaultError;
+
+    fn try_from(p: &zvault_passkeys::Passkey) -> Result<Self> {
+        Ok(Self {
+            rp_id: p.rp_id.clone(),
+            user_name: p.user_name.clone(),
+            user_handle: p.user_handle.clone(),
+            credential_id: p.credential_id.clone(),
+            public_key: p.public_key()?,
+            created_at: p.created_at,
+            private_key: String::new(),
+        })
+    }
 }
 
 impl std::fmt::Debug for ItemFields {
@@ -145,6 +196,8 @@ pub struct ItemSummary {
     pub url: Option<String>,
     /// Whether the item holds a one-time password.
     pub has_totp: bool,
+    /// Whether the item holds a passkey.
+    pub has_passkey: bool,
 }
 
 impl From<&ItemFields> for ItemSummary {
@@ -154,17 +207,23 @@ impl From<&ItemFields> for ItemSummary {
             username: f.username.clone(),
             url: f.urls.first().cloned(),
             has_totp: !f.totp.is_empty(),
+            has_passkey: f.passkey.is_some(),
         }
     }
 }
 
 /// Plaintext layout inside `encryptedData`, versioned for later item kinds.
+///
+/// A passkey is a field of a login item, as in 1Password, so apps that
+/// predate passkeys still open these items.
 #[derive(Serialize, Deserialize)]
 struct ItemPlaintext {
     v: u32,
     kind: String,
     #[serde(flatten)]
     fields: ItemFields,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    passkey: Option<zvault_passkeys::Passkey>,
 }
 
 #[derive(Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
@@ -282,23 +341,28 @@ impl Keyring {
         let vault_id = canonical_id(vault_id)?;
         let keys = self.keys();
         let vault_key = vault_key(&keys, &vault_id)?;
-        let (item_id, item_key) = match existing {
+        let (item_id, item_key, stored_passkey) = match existing {
             Some(item) => {
                 let id = canonical_id(&item.id)?;
                 let key = unwrap_item_key(vault_key, &vault_id, &id, item)?;
-                (id, key)
+                let old = open_plaintext(&key, &vault_id, &id, item)?;
+                (id, key, old.passkey.clone())
             }
             None => (
                 Uuid::new_v4().to_string(),
                 SymmetricKey::generate().map_err(|_| VaultError::Encrypt)?,
+                None,
             ),
         };
         let wrapped = wrap_key(vault_key, &item_key, &aad::item_key(&vault_id, &item_id))
             .map_err(|_| VaultError::Encrypt)?;
+        let mut fields = normalize(fields)?;
+        let passkey = resolve_passkey(fields.passkey.take(), stored_passkey)?;
         let plaintext = ItemPlaintext {
             v: 1,
             kind: ITEM_KIND_LOGIN.into(),
-            fields: normalize(fields)?,
+            fields,
+            passkey,
         };
         let json = Zeroizing::new(serde_json::to_vec(&plaintext).map_err(|_| VaultError::Encrypt)?);
         let sealed = seal_padded(&item_key, &json, &aad::item_data(&vault_id, &item_id))
@@ -311,23 +375,93 @@ impl Keyring {
     }
 
     pub fn open_item(&self, vault_id: &str, item: &ItemCipher) -> Result<ItemFields> {
+        let (mut fields, passkey) = self.open_item_with_passkey(vault_id, item)?;
+        fields.passkey = passkey.as_ref().map(PasskeyFields::try_from).transpose()?;
+        Ok(fields)
+    }
+
+    /// Opens an item along with its stored passkey, private key included.
+    /// For Rust-side use only (signing, sharing); never return it to the UI.
+    pub(crate) fn open_item_with_passkey(
+        &self,
+        vault_id: &str,
+        item: &ItemCipher,
+    ) -> Result<(ItemFields, Option<zvault_passkeys::Passkey>)> {
         let vault_id = canonical_id(vault_id)?;
         let item_id = canonical_id(&item.id)?;
         let keys = self.keys();
         let item_key = unwrap_item_key(vault_key(&keys, &vault_id)?, &vault_id, &item_id, item)?;
-        let json = open_padded(
-            &item_key,
-            &item.encrypted_data.sealed(&item_id)?,
-            &aad::item_data(&vault_id, &item_id),
-        )
-        .map_err(|_| VaultError::Decrypt)?;
-        let plaintext: ItemPlaintext =
-            serde_json::from_slice(&json).map_err(|_| VaultError::Decrypt)?;
-        if plaintext.v != 1 || plaintext.kind != ITEM_KIND_LOGIN {
-            return Err(VaultError::Decrypt);
-        }
-        Ok(plaintext.fields)
+        let mut plaintext = open_plaintext(&item_key, &vault_id, &item_id, item)?;
+        let passkey = plaintext.passkey.take();
+        let mut fields = std::mem::take(&mut plaintext.fields);
+        fields.passkey = None;
+        Ok((fields, passkey))
     }
+}
+
+fn open_plaintext(
+    item_key: &SymmetricKey,
+    vault_id: &str,
+    item_id: &str,
+    item: &ItemCipher,
+) -> Result<ItemPlaintext> {
+    let json = open_padded(
+        item_key,
+        &item.encrypted_data.sealed(item_id)?,
+        &aad::item_data(vault_id, item_id),
+    )
+    .map_err(|_| VaultError::Decrypt)?;
+    let plaintext: ItemPlaintext =
+        serde_json::from_slice(&json).map_err(|_| VaultError::Decrypt)?;
+    if plaintext.v != 1 || plaintext.kind != ITEM_KIND_LOGIN {
+        return Err(VaultError::Decrypt);
+    }
+    if let Some(passkey) = &plaintext.passkey {
+        passkey.validate().map_err(|_| VaultError::Decrypt)?;
+    }
+    Ok(plaintext)
+}
+
+/// Works out the passkey to store from what the UI sent and what the item
+/// already holds. See [`PasskeyFields`].
+fn resolve_passkey(
+    incoming: Option<PasskeyFields>,
+    stored: Option<zvault_passkeys::Passkey>,
+) -> Result<Option<zvault_passkeys::Passkey>> {
+    let Some(p) = incoming else {
+        return Ok(None);
+    };
+    let now = unix_now();
+    if p.private_key.trim().is_empty() {
+        if let Some(mut stored) = stored.filter(|s| s.credential_id == p.credential_id) {
+            stored.rename_user(&p.user_name)?;
+            return Ok(Some(stored));
+        }
+        if p.credential_id.trim().is_empty() {
+            return Ok(Some(zvault_passkeys::Passkey::generate(
+                &p.rp_id,
+                &p.user_name,
+                now,
+            )?));
+        }
+        return Err(zvault_passkeys::PasskeyError::InvalidPrivateKey.into());
+    }
+    Ok(Some(zvault_passkeys::Passkey::import(
+        &p.rp_id,
+        &p.user_name,
+        &p.credential_id,
+        &p.user_handle,
+        &p.private_key,
+        now,
+    )?))
+}
+
+fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .and_then(|d| i64::try_from(d.as_secs()).ok())
+        .unwrap_or(0)
 }
 
 fn vault_key<'a>(keys: &'a Keys, vault_id: &str) -> Result<&'a SymmetricKey> {
@@ -446,6 +580,99 @@ pub fn item_totp_code(
     Ok(Some(crate::otp::OtpCode::now(&totp)))
 }
 
+/// Signs a fresh WebAuthn challenge with the item's passkey and verifies it
+/// with the public key, as the website would. The private key stays here.
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub fn item_passkey_test(
+    keyring: tauri::State<'_, Keyring>,
+    vault_id: String,
+    item: ItemCipher,
+) -> Result<()> {
+    let (_, passkey) = keyring.open_item_with_passkey(&vault_id, &item)?;
+    passkey.ok_or(VaultError::InvalidRecord)?.self_test()?;
+    Ok(())
+}
+
+/// `SharedItemPayload` in `@zvault/shared`. Empty fields are left out.
+/// One-time password seeds are not shared.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SharePayload<'a> {
+    v: u32,
+    title: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    username: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    password: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    url: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    notes: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    passkey: Option<SharedPasskey>,
+}
+
+/// `SharedPasskey` in `@zvault/shared`: everything needed to use the passkey
+/// elsewhere, private key included.
+#[derive(Serialize, Zeroize, ZeroizeOnDrop)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SharedPasskey {
+    rp_id: String,
+    user_name: String,
+    user_handle: String,
+    credential_id: String,
+    private_key: String,
+}
+
+impl SharedPasskey {
+    pub(crate) fn of(p: &zvault_passkeys::Passkey) -> Result<Self> {
+        Ok(Self {
+            rp_id: p.rp_id.clone(),
+            user_name: p.user_name.clone(),
+            user_handle: p.user_handle.clone(),
+            credential_id: p.credential_id.clone(),
+            private_key: p.private_key_pem()?.to_string(),
+        })
+    }
+}
+
+/// The item as a `SharedItemPayload` JSON string, ready for
+/// `share_link_create` or `share_seal_to`.
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub fn item_share_payload(
+    keyring: tauri::State<'_, Keyring>,
+    vault_id: String,
+    item: ItemCipher,
+) -> Result<String> {
+    share_payload(&keyring, &vault_id, &item).map(|s| s.to_string())
+}
+
+fn share_payload(
+    keyring: &Keyring,
+    vault_id: &str,
+    item: &ItemCipher,
+) -> Result<Zeroizing<String>> {
+    let (fields, passkey) = keyring.open_item_with_passkey(vault_id, item)?;
+    let payload = SharePayload {
+        v: 1,
+        title: if fields.title.is_empty() {
+            "Untitled"
+        } else {
+            &fields.title
+        },
+        username: &fields.username,
+        password: &fields.password,
+        url: fields.urls.first().map_or("", String::as_str),
+        notes: &fields.notes,
+        passkey: passkey.as_ref().map(SharedPasskey::of).transpose()?,
+    };
+    serde_json::to_string(&payload)
+        .map(Zeroizing::new)
+        .map_err(|_| VaultError::Encrypt)
+}
+
 #[tauri::command]
 pub fn vault_lock(keyring: tauri::State<'_, Keyring>) {
     keyring.lock();
@@ -469,7 +696,120 @@ mod tests {
             urls: vec!["https://example.com".into(), "  ".into()],
             notes: "recovery codes in the safe".into(),
             totp: String::new(),
+            passkey: None,
         }
+    }
+
+    fn new_passkey(rp_id: &str) -> PasskeyFields {
+        let mut p = PasskeyFields::default();
+        p.rp_id = rp_id.into();
+        p.user_name = "alice@example.com".into();
+        p
+    }
+
+    #[test]
+    fn creates_keeps_and_removes_a_passkey() {
+        let keyring = unlocked();
+        let (vault, _) = keyring.create_vault("Personal").unwrap();
+        let mut fields = login();
+        fields.passkey = Some(new_passkey("https://GitHub.com/login"));
+        let item = keyring.seal_item(&vault.id, None, fields).unwrap();
+
+        let opened = keyring.open_item(&vault.id, &item).unwrap();
+        let pk = opened.passkey.clone().unwrap();
+        assert_eq!(pk.rp_id, "github.com");
+        assert!(!pk.public_key.is_empty());
+        assert!(pk.private_key.is_empty());
+        assert!(ItemSummary::from(&opened).has_passkey);
+        // The UI never receives the private key.
+        let to_ui = serde_json::to_string(&opened).unwrap();
+        assert!(!to_ui.contains("privateKey"));
+        // Nor can the server read any of it.
+        let wire = serde_json::to_string(&item).unwrap();
+        assert!(!wire.contains("github.com"));
+
+        // Editing the item keeps the same key pair.
+        let mut edited = opened.clone();
+        edited.passkey.as_mut().unwrap().user_name = "alice2".into();
+        edited.passkey.as_mut().unwrap().rp_id = "evil.com".into();
+        let v2 = keyring.seal_item(&vault.id, Some(&item), edited).unwrap();
+        let pk2 = keyring
+            .open_item(&vault.id, &v2)
+            .unwrap()
+            .passkey
+            .clone()
+            .unwrap();
+        assert_eq!(pk2.credential_id, pk.credential_id);
+        assert_eq!(pk2.public_key, pk.public_key);
+        assert_eq!(pk2.rp_id, "github.com");
+        assert_eq!(pk2.user_name, "alice2");
+        let (_, stored) = keyring.open_item_with_passkey(&vault.id, &v2).unwrap();
+        stored.unwrap().self_test().unwrap();
+
+        // Sending it back without the passkey removes it.
+        let mut removed = keyring.open_item(&vault.id, &v2).unwrap();
+        removed.passkey = None;
+        let v3 = keyring.seal_item(&vault.id, Some(&v2), removed).unwrap();
+        assert!(keyring.open_item(&vault.id, &v3).unwrap().passkey.is_none());
+    }
+
+    #[test]
+    fn a_passkey_cannot_be_claimed_without_its_key() {
+        let keyring = unlocked();
+        let (vault, _) = keyring.create_vault("Personal").unwrap();
+        let mut fields = login();
+        let mut p = new_passkey("example.com");
+        p.credential_id = "AAEC".into();
+        fields.passkey = Some(p);
+        assert!(matches!(
+            keyring.seal_item(&vault.id, None, fields),
+            Err(VaultError::Passkey(_))
+        ));
+    }
+
+    #[test]
+    fn imports_a_passkey_and_shares_it() {
+        let keyring = unlocked();
+        let (vault, _) = keyring.create_vault("Personal").unwrap();
+        let source = zvault_passkeys::Passkey::generate("example.com", "bob", 0).unwrap();
+        let mut fields = login();
+        let mut p = PasskeyFields::default();
+        p.rp_id = "example.com".into();
+        p.user_name = "bob".into();
+        p.credential_id = source.credential_id.clone();
+        p.private_key = source.private_key_pem().unwrap().to_string();
+        fields.passkey = Some(p);
+        let item = keyring.seal_item(&vault.id, None, fields).unwrap();
+        let opened = keyring.open_item(&vault.id, &item).unwrap();
+        assert_eq!(
+            opened.passkey.as_ref().unwrap().public_key,
+            source.public_key().unwrap()
+        );
+
+        let payload = share_payload(&keyring, &vault.id, &item).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&payload).unwrap();
+        assert_eq!(json["passkey"]["rpId"], "example.com");
+        assert!(
+            json["passkey"]["privateKey"]
+                .as_str()
+                .unwrap()
+                .starts_with("-----BEGIN PRIVATE KEY-----")
+        );
+        assert_eq!(json["username"], "alice@example.com");
+    }
+
+    #[test]
+    fn stores_the_passkey_once_in_the_plaintext() {
+        let plaintext = ItemPlaintext {
+            v: 1,
+            kind: ITEM_KIND_LOGIN.into(),
+            fields: login(),
+            passkey: Some(zvault_passkeys::Passkey::generate("example.com", "a", 0).unwrap()),
+        };
+        let json = serde_json::to_string(&plaintext).unwrap();
+        assert_eq!(json.matches("\"passkey\"").count(), 1);
+        let back: ItemPlaintext = serde_json::from_str(&json).unwrap();
+        assert!(back.passkey.is_some());
     }
 
     #[test]

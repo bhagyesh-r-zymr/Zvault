@@ -6,7 +6,7 @@ import 'rust/api/vault.dart' as vault;
 export 'rust/api/pairing.dart' show PairedAccount, ScannedCode;
 export 'rust/api/sharing.dart' show NewShareLink, NewUserShare, SharingIdentity;
 export 'rust/api/vault.dart'
-    show EnvironmentView, ItemDetail, ItemSummary, OneTimeCode, VaultSummary;
+    show EnvironmentView, ItemDetail, ItemSummary, OneTimeCode, PasskeyDetail, VaultSummary;
 
 /// The Rust core, behind an interface so screens can be tested without it.
 /// Keys never cross into Dart except the keyset handed to the biometric store.
@@ -38,6 +38,11 @@ class Core {
     recordJson: recordJson,
     unixSecs: DateTime.now().millisecondsSinceEpoch ~/ 1000,
   );
+
+  /// Signs a fresh WebAuthn challenge with the item's passkey and checks it
+  /// with the public key. The private key stays in Rust.
+  Future<void> testPasskey(String vaultId, String recordJson) =>
+      vault.itemPasskeyTest(vaultId: vaultId, recordJson: recordJson);
 
   Future<String> openProject(String recordJson, String? memberWrapJson) =>
       vault.projectOpen(recordJson: recordJson, memberWrapJson: memberWrapJson);

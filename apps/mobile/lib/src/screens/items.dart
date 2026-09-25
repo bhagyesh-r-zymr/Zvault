@@ -187,6 +187,16 @@ class _ItemRow extends StatelessWidget {
                   ],
                 ),
               ),
+              if (s.hasPasskey)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Icon(
+                    Icons.fingerprint_rounded,
+                    key: Key('passkey-${item.id}'),
+                    size: 18,
+                    color: c.accent,
+                  ),
+                ),
               if (s.hasTotp)
                 Padding(
                   padding: const EdgeInsets.only(left: 8),

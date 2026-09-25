@@ -51,6 +51,19 @@ const ttlSeconds = z.number().int().min(SHARE_LIMITS.minTtlSeconds).max(SHARE_LI
 
 const IsoDate = z.iso.datetime();
 
+/**
+ * A shared passkey: everything needed to use it in another passkey manager.
+ * Binary fields are base64url; the private key is PKCS#8 PEM (ES256).
+ */
+export const SharedPasskey = z.object({
+  rpId: z.string().min(1).max(253),
+  userName: z.string().max(500),
+  userHandle: z.string().max(200),
+  credentialId: z.string().min(1).max(1400),
+  privateKey: z.string().max(1000),
+});
+export type SharedPasskey = z.infer<typeof SharedPasskey>;
+
 /** What the decrypted payload of any share looks like. Never sent to the server. */
 export const SharedItemPayload = z.object({
   v: z.literal(1),
@@ -59,6 +72,7 @@ export const SharedItemPayload = z.object({
   password: z.string().max(4096).optional(),
   url: z.string().max(2048).optional(),
   notes: z.string().max(10_000).optional(),
+  passkey: SharedPasskey.optional(),
 });
 export type SharedItemPayload = z.infer<typeof SharedItemPayload>;
 

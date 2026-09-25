@@ -31,6 +31,28 @@ export interface ItemFields {
   notes: string;
   /** One-time password setup as an `otpauth://totp/` URI, or ''. */
   totp: string;
+  /** The item's passkey. Its private key never leaves Rust. */
+  passkey?: PasskeyFields;
+}
+
+/**
+ * A passkey as the Rust core shows it. To create one, send only `rpId` and
+ * `userName`; to import one, also send `credentialId`, `privateKey` and
+ * optionally `userHandle`. An existing passkey is kept while its
+ * `credentialId` comes back unchanged.
+ */
+export interface PasskeyFields {
+  /** The website's domain, such as `github.com`. */
+  rpId: string;
+  userName: string;
+  userHandle?: string;
+  credentialId?: string;
+  /** Base64url SubjectPublicKeyInfo. Output only. */
+  publicKey?: string;
+  /** Unix seconds. Output only. */
+  createdAt?: number;
+  /** Import only; never returned. */
+  privateKey?: string;
 }
 
 export interface ItemSummary {
@@ -38,6 +60,7 @@ export interface ItemSummary {
   username: string;
   url: string | null;
   hasTotp: boolean;
+  hasPasskey: boolean;
 }
 
 /** A one-time password as computed in Rust. */
@@ -56,6 +79,10 @@ export interface VaultCore {
   summarizeItem(vaultId: string, item: ItemCipher): Promise<ItemSummary>;
   /** The item's current one-time password, or null if it has none. */
   totpCode(vaultId: string, item: ItemCipher): Promise<OtpCode | null>;
+  /** Signs a test WebAuthn challenge with the item's passkey and verifies it. */
+  testPasskey(vaultId: string, item: ItemCipher): Promise<void>;
+  /** The item as a `SharedItemPayload` JSON string, passkey included. */
+  sharePayload(vaultId: string, item: ItemCipher): Promise<string>;
   lock(): Promise<void>;
 }
 
@@ -66,5 +93,7 @@ export const vaultCore: VaultCore = {
   openItem: (vaultId, item) => invoke('item_open', { vaultId, item }),
   summarizeItem: (vaultId, item) => invoke('item_summary', { vaultId, item }),
   totpCode: (vaultId, item) => invoke('item_totp_code', { vaultId, item }),
+  testPasskey: (vaultId, item) => invoke('item_passkey_test', { vaultId, item }),
+  sharePayload: (vaultId, item) => invoke('item_share_payload', { vaultId, item }),
   lock: () => invoke('vault_lock'),
 };

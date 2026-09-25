@@ -68,6 +68,14 @@ export class VaultSync {
     return this.core.totpCode(this.vault.id, cipherOf(this.record(itemId)));
   }
 
+  testPasskey(itemId: string): Promise<void> {
+    return this.core.testPasskey(this.vault.id, cipherOf(this.record(itemId)));
+  }
+
+  sharePayload(itemId: string): Promise<string> {
+    return this.core.sharePayload(this.vault.id, cipherOf(this.record(itemId)));
+  }
+
   /** Creates an item (`itemId` null) or saves an edit. Returns the item id. */
   async save(itemId: string | null, fields: ItemFields): Promise<string> {
     const existing = itemId === null ? null : this.record(itemId);

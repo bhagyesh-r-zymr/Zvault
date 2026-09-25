@@ -544,6 +544,8 @@ class AppState extends ChangeNotifier {
 
   Future<OneTimeCode?> itemCode(VaultItem item) => core.itemTotp(item.vaultId, item.recordJson);
 
+  Future<void> testPasskey(VaultItem item) => core.testPasskey(item.vaultId, item.recordJson);
+
   // Sharing, as on the Mac. Rust opens and encrypts the item; only
   // ciphertext reaches the server.
 

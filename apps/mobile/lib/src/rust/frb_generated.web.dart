@@ -39,6 +39,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   OneTimeCode dco_decode_box_autoadd_one_time_code(dynamic raw);
 
   @protected
+  PasskeyDetail dco_decode_box_autoadd_passkey_detail(dynamic raw);
+
+  @protected
   EnvironmentView dco_decode_environment_view(dynamic raw);
 
   @protected
@@ -72,7 +75,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   OneTimeCode? dco_decode_opt_box_autoadd_one_time_code(dynamic raw);
 
   @protected
+  PasskeyDetail? dco_decode_opt_box_autoadd_passkey_detail(dynamic raw);
+
+  @protected
   PairedAccount dco_decode_paired_account(dynamic raw);
+
+  @protected
+  PasskeyDetail dco_decode_passkey_detail(dynamic raw);
 
   @protected
   ScannedCode dco_decode_scanned_code(dynamic raw);
@@ -103,6 +112,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   OneTimeCode sse_decode_box_autoadd_one_time_code(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PasskeyDetail sse_decode_box_autoadd_passkey_detail(
     SseDeserializer deserializer,
   );
 
@@ -142,7 +156,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  PasskeyDetail? sse_decode_opt_box_autoadd_passkey_detail(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   PairedAccount sse_decode_paired_account(SseDeserializer deserializer);
+
+  @protected
+  PasskeyDetail sse_decode_passkey_detail(SseDeserializer deserializer);
 
   @protected
   ScannedCode sse_decode_scanned_code(SseDeserializer deserializer);
@@ -180,6 +202,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_one_time_code(
     OneTimeCode self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_passkey_detail(
+    PasskeyDetail self,
     SseSerializer serializer,
   );
 
@@ -226,7 +254,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_passkey_detail(
+    PasskeyDetail? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_paired_account(PairedAccount self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_passkey_detail(PasskeyDetail self, SseSerializer serializer);
 
   @protected
   void sse_encode_scanned_code(ScannedCode self, SseSerializer serializer);

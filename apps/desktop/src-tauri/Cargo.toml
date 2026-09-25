@@ -32,6 +32,7 @@ zvault-agent = { path = "../../../crates/zvault-agent" }
 zvault-crypto = { path = "../../../crates/zvault-crypto" }
 zvault-emergency-kit = { path = "../../../crates/zvault-emergency-kit" }
 zvault-otp = { path = "../../../crates/zvault-otp" }
+zvault-passkeys = { path = "../../../crates/zvault-passkeys" }
 zvault-passwords = { path = "../../../crates/zvault-passwords" }
 tauri-plugin-updater = "2"
 

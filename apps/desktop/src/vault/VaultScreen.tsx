@@ -10,10 +10,12 @@ import {
 import { OneTimePasswordCode, OneTimePasswordEditor } from '../otp/index.js';
 import type { SharingApi } from '../sharing/api.js';
 import { ShareItem } from '../sharing/ShareItem.js';
+import { SharedItemPayload } from '@zvault/shared';
 import { CopyButton, ErrorLine, LetterTile, SecretText, Sheet } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import { ConflictError, type VaultApi } from './api.js';
 import { vaultCore, type ItemFields, type VaultCore } from './core.js';
+import { PasskeyEditor, PasskeyPanel } from './Passkey.js';
 import { openDefaultVault, VaultSync } from './sync.js';
 import './vault.css';
 
@@ -39,7 +41,12 @@ const EMPTY: ItemFields = {
   totp: '',
 };
 
-type Pane = { mode: 'view'; id: string } | { mode: 'edit'; id: string | null } | { mode: 'none' };
+export type NewItemKind = 'login' | 'passkey';
+
+type Pane =
+  | { mode: 'view'; id: string }
+  | { mode: 'edit'; id: string | null; kind: NewItemKind }
+  | { mode: 'none' };
 
 /**
  * The personal vault, shown once the account is unlocked. The login flow
@@ -102,6 +109,7 @@ function VaultView({ sync, sharing }: { sync: VaultSync; sharing?: SharingApi })
   const [pane, setPane] = useState<Pane>({ mode: 'none' });
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [newMenu, setNewMenu] = useState(false);
   const search = useRef<HTMLInputElement>(null);
 
   const pull = useCallback(() => {
@@ -157,14 +165,45 @@ function VaultView({ sync, sharing }: { sync: VaultSync; sharing?: SharingApi })
           />
           {!query && <kbd>{SEARCH_SHORTCUT}</kbd>}
         </label>
-        <button
-          type="button"
-          className="primary"
-          onClick={() => setPane({ mode: 'edit', id: null })}
-        >
-          <Icon name="plus" size={13} strokeWidth={2.4} />
-          New item
-        </button>
+        <div className="new-item">
+          <button
+            type="button"
+            className="primary"
+            aria-haspopup="menu"
+            aria-expanded={newMenu}
+            onClick={() => setNewMenu((o) => !o)}
+          >
+            <Icon name="plus" size={13} strokeWidth={2.4} />
+            New item
+            <Icon name="chevronDown" size={12} strokeWidth={2.4} />
+          </button>
+          {newMenu && (
+            <div className="menu" role="menu" onMouseLeave={() => setNewMenu(false)}>
+              {(
+                [
+                  ['login', 'key', 'Login', 'Username, password, one-time code'],
+                  ['passkey', 'passkey', 'Passkey', 'Create or import a passkey'],
+                ] as const
+              ).map(([kind, icon, label, detail]) => (
+                <button
+                  key={kind}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setNewMenu(false);
+                    setPane({ mode: 'edit', id: null, kind });
+                  }}
+                >
+                  <Icon name={icon} size={16} />
+                  <span className="row-main">
+                    <span className="row-title">{label}</span>
+                    <span className="row-sub">{detail}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       <section className="list-pane" aria-label="Items">
         <div className="list-head">
@@ -199,6 +238,11 @@ function VaultView({ sync, sharing }: { sync: VaultSync; sharing?: SharingApi })
                       {summary.username || summary.url || ' '}
                     </span>
                   </span>
+                  {summary.hasPasskey && (
+                    <span className="passkey-badge" title="Has a passkey">
+                      <Icon name="passkey" size={13} />
+                    </span>
+                  )}
                 </button>
               </Fragment>
             );
@@ -238,15 +282,16 @@ function VaultView({ sync, sharing }: { sync: VaultSync; sharing?: SharingApi })
             sync={sync}
             id={pane.id}
             {...(sharing && { sharing })}
-            onEdit={() => setPane({ mode: 'edit', id: pane.id })}
+            onEdit={() => setPane({ mode: 'edit', id: pane.id, kind: 'login' })}
             onDeleted={() => setPane({ mode: 'none' })}
           />
         )}
         {pane.mode === 'edit' && (
           <ItemEditor
-            key={pane.id ?? 'new'}
+            key={pane.id ?? `new-${pane.kind}`}
             sync={sync}
             id={pane.id}
+            kind={pane.kind}
             onDone={(id) => setPane(id ? { mode: 'view', id } : { mode: 'none' })}
           />
         )}
@@ -268,11 +313,12 @@ function ItemDetail(props: {
   onEdit: () => void;
   onDeleted: () => void;
 }) {
-  const { sync, id, sharing, onEdit, onDeleted } = props;
+  const { sync, id, onEdit, onDeleted } = props;
+  const sharingApi = props.sharing;
   const [fields, setFields] = useState<ItemFields | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [sharingOpen, setSharingOpen] = useState(false);
+  const [payload, setPayload] = useState<SharedItemPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -280,6 +326,15 @@ function ItemDetail(props: {
   }, [sync, id]);
 
   const totpCode = useCallback(() => sync.totpCode(id), [sync, id]);
+
+  // The payload is built in Rust so a passkey's private key is included
+  // only when the user actually shares.
+  const openSharing = () => {
+    sync
+      .sharePayload(id)
+      .then((json) => setPayload(SharedItemPayload.parse(JSON.parse(json))))
+      .catch((e: unknown) => setError(message(e)));
+  };
 
   // Inline confirmation: WKWebView does not reliably show window.confirm.
   const remove = () => {
@@ -304,8 +359,8 @@ function ItemDetail(props: {
             {fields.urls[0] && <span className="row-sub truncate">{fields.urls[0]}</span>}
           </div>
           <div className="item-actions">
-            {sharing && (
-              <button type="button" className="small" onClick={() => setSharingOpen(true)}>
+            {sharingApi && (
+              <button type="button" className="small" onClick={openSharing}>
                 <Icon name="share" size={13} /> Share
               </button>
             )}
@@ -314,6 +369,9 @@ function ItemDetail(props: {
             </button>
           </div>
         </div>
+        {fields.passkey && (
+          <PasskeyPanel passkey={fields.passkey} onTest={() => sync.testPasskey(id)} />
+        )}
         <div className="panel rows">
           <div className="row">
             <div className="row-main">
@@ -322,26 +380,29 @@ function ItemDetail(props: {
             </div>
             <CopyButton value={fields.username} secret={false} />
           </div>
-          <div className="row">
-            <div className="row-main">
-              <span className="row-label">password</span>
-              {fields.password ? (
-                <SecretText value={fields.password} masked={!revealed} />
-              ) : (
-                <span className="muted">—</span>
-              )}
+          {/* A passkey-only item has no password to show. */}
+          {!(fields.passkey && !fields.password) && (
+            <div className="row">
+              <div className="row-main">
+                <span className="row-label">password</span>
+                {fields.password ? (
+                  <SecretText value={fields.password} masked={!revealed} />
+                ) : (
+                  <span className="muted">—</span>
+                )}
+              </div>
+              <button
+                type="button"
+                className="small"
+                onClick={() => setRevealed((r) => !r)}
+                disabled={!fields.password}
+              >
+                <Icon name={revealed ? 'eyeOff' : 'eye'} size={13} />
+                {revealed ? 'Hide' : 'Reveal'}
+              </button>
+              <CopyButton value={fields.password} />
             </div>
-            <button
-              type="button"
-              className="small"
-              onClick={() => setRevealed((r) => !r)}
-              disabled={!fields.password}
-            >
-              <Icon name={revealed ? 'eyeOff' : 'eye'} size={13} />
-              {revealed ? 'Hide' : 'Reveal'}
-            </button>
-            <CopyButton value={fields.password} />
-          </div>
+          )}
           {fields.totp && (
             <div className="row">
               <div className="row-main">
@@ -389,24 +450,23 @@ function ItemDetail(props: {
           )}
         </div>
       </article>
-      {sharingOpen && sharing && (
+      {payload && sharingApi && (
         <Sheet
           title={`Share ${title}`}
           subtitle="Encrypted on this Mac before it leaves"
           icon={<LetterTile name={title} />}
-          onClose={() => setSharingOpen(false)}
+          onClose={() => setPayload(null)}
         >
-          <ShareItem
-            api={sharing}
-            item={{
-              v: 1,
-              title,
-              ...(fields.username && { username: fields.username }),
-              ...(fields.password && { password: fields.password }),
-              ...(fields.urls[0] && { url: fields.urls[0] }),
-              ...(fields.notes && { notes: fields.notes }),
-            }}
-          />
+          {payload.passkey && (
+            <p className="preview-note" style={{ marginBottom: 12 }}>
+              <Icon name="passkey" size={16} />
+              <span>
+                The passkey for <strong>{payload.passkey.rpId}</strong> is shared too, private key
+                included. Anyone who opens it can sign in as {payload.passkey.userName}.
+              </span>
+            </p>
+          )}
+          <ShareItem api={sharingApi} item={payload} />
         </Sheet>
       )}
     </>
@@ -414,6 +474,17 @@ function ItemDetail(props: {
 }
 
 function ItemEditor(props: {
+  sync: VaultSync;
+  id: string | null;
+  kind: NewItemKind;
+  onDone: (id: string | null) => void;
+}) {
+  const { sync, id, kind, onDone } = props;
+  if (id === null && kind === 'passkey') return <PasskeyEditor sync={sync} onDone={onDone} />;
+  return <LoginEditor sync={sync} id={id} onDone={onDone} />;
+}
+
+function LoginEditor(props: {
   sync: VaultSync;
   id: string | null;
   onDone: (id: string | null) => void;
@@ -490,6 +561,39 @@ function ItemEditor(props: {
             />
           </label>
         </div>
+        {fields.passkey && (
+          <div className="field">
+            <span>Passkey</span>
+            <div className="passkey-edit">
+              <Icon name="passkey" size={16} />
+              <span className="row-main">
+                <span className="row-title">{fields.passkey.rpId}</span>
+                <span className="row-sub">The website and key can&apos;t be changed.</span>
+              </span>
+              <input
+                aria-label="Passkey user name"
+                value={fields.passkey.userName}
+                onChange={(e) =>
+                  setFields({
+                    ...fields,
+                    passkey: { ...fields.passkey!, userName: e.target.value },
+                  })
+                }
+              />
+              <button
+                type="button"
+                className="small ghost"
+                onClick={() => {
+                  const rest = { ...fields };
+                  delete rest.passkey;
+                  setFields(rest);
+                }}
+              >
+                <Icon name="trash" size={13} /> Remove
+              </button>
+            </div>
+          </div>
+        )}
         <div className="field">
           <span>One-time password</span>
           <OneTimePasswordEditor
@@ -519,6 +623,6 @@ function ItemEditor(props: {
   );
 }
 
-function message(e: unknown): string {
+export function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }

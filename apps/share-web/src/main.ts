@@ -91,11 +91,32 @@ function showItem(link: ParsedLink, meta: OpenShareLinkResponse) {
     item.url && field('Website', item.url),
   ].filter((r): r is HTMLElement => Boolean(r));
   const notes = item.notes ? [el('h3', 'Notes'), el('pre', item.notes)] : [];
+  const passkey = item.passkey
+    ? [
+        el('h3', 'Passkey'),
+        el(
+          'p',
+          `A passkey for ${item.passkey.userName} on ${item.passkey.rpId}. Import it into a passkey manager that accepts ES256 keys.`,
+          { className: 'hint' },
+        ),
+        field('Website', item.passkey.rpId),
+        field('User name', item.passkey.userName),
+        field('Credential ID', item.passkey.credentialId),
+        ...(item.passkey.userHandle ? [field('User handle', item.passkey.userHandle)] : []),
+        field('Private key', item.passkey.privateKey, true),
+      ]
+    : [];
   const remaining =
     meta.viewsRemaining === 0
       ? 'This was the last view. Save what you need now; the link no longer works.'
       : `This link can be opened ${meta.viewsRemaining} more time${meta.viewsRemaining === 1 ? '' : 's'} until ${new Date(meta.expiresAt).toLocaleString()}.`;
-  render(el('h2', item.title), ...rows, ...notes, el('p', remaining, { className: 'hint' }));
+  render(
+    el('h2', item.title),
+    ...rows,
+    ...passkey,
+    ...notes,
+    el('p', remaining, { className: 'hint' }),
+  );
 }
 
 /**

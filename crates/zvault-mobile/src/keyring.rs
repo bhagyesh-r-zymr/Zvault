@@ -55,6 +55,9 @@ pub struct ItemFields {
     /// A canonical `otpauth://totp/` URI, or empty.
     #[serde(default)]
     pub totp: String,
+    /// Set from [`ItemPlaintext::passkey`] when the item is opened.
+    #[serde(skip)]
+    pub passkey: Option<zvault_passkeys::Passkey>,
 }
 
 impl std::fmt::Debug for ItemFields {
@@ -71,6 +74,9 @@ struct ItemPlaintext {
     kind: String,
     #[serde(flatten)]
     fields: ItemFields,
+    /// A passkey is a field of a login item, as on the Mac.
+    #[serde(default)]
+    passkey: Option<zvault_passkeys::Passkey>,
 }
 
 #[derive(Deserialize, Zeroize, ZeroizeOnDrop)]
@@ -177,11 +183,17 @@ impl Keyring {
             &vault::aad::item_data(&vault_id, &item_id),
         )
         .map_err(|_| Error::Decrypt)?;
-        let plaintext: ItemPlaintext = serde_json::from_slice(&json).map_err(|_| Error::Decrypt)?;
+        let mut plaintext: ItemPlaintext =
+            serde_json::from_slice(&json).map_err(|_| Error::Decrypt)?;
         if plaintext.v != 1 || plaintext.kind != ITEM_KIND_LOGIN {
             return Err(Error::Decrypt);
         }
-        Ok(plaintext.fields)
+        if let Some(passkey) = &plaintext.passkey {
+            passkey.validate().map_err(|_| Error::Decrypt)?;
+        }
+        let mut fields = std::mem::take(&mut plaintext.fields);
+        fields.passkey = plaintext.passkey.take();
+        Ok(fields)
     }
 
     /// Unwraps a project key and returns its metadata. `wrap` is this
@@ -416,6 +428,33 @@ pub(crate) mod tests {
 
         k.lock();
         assert_eq!(k.open_item(VAULT, &item), Err(Error::Locked));
+    }
+
+    #[test]
+    fn opens_a_login_item_with_a_passkey() {
+        let (mut k, keyset) = unlocked();
+        let vault_key = SymmetricKey::generate().unwrap();
+        let item_key = SymmetricKey::generate().unwrap();
+        let vault: VaultRecord = parse(json!({
+            "id": VAULT,
+            "encryptedKey": blob(ACCOUNT_KID, &wrap_key(&keyset, &vault_key, &vault::aad::vault_key(VAULT)).unwrap()),
+            "encryptedMeta": seal_json(&vault_key, &json!({"v": 1, "name": "Personal"}), &vault::aad::vault_meta(VAULT), VAULT),
+        }));
+        let passkey = zvault_passkeys::Passkey::generate("github.com", "octo", 1).unwrap();
+        // The layout the Mac writes: the passkey next to the login fields.
+        let item: ItemRecord = parse(json!({
+            "id": ITEM,
+            "encryptedKey": blob(VAULT, &wrap_key(&vault_key, &item_key, &vault::aad::item_key(VAULT, ITEM)).unwrap()),
+            "encryptedData": seal_json(&item_key, &json!({
+                "v": 1, "kind": "login", "title": "GitHub", "username": "octo",
+                "password": "", "urls": [], "notes": "", "totp": "",
+                "passkey": serde_json::to_value(&passkey).unwrap(),
+            }), &vault::aad::item_data(VAULT, ITEM), ITEM),
+        }));
+        k.open_vault(&vault).unwrap();
+        let fields = k.open_item(VAULT, &item).unwrap();
+        assert_eq!(fields.passkey.as_ref(), Some(&passkey));
+        fields.passkey.as_ref().unwrap().self_test().unwrap();
     }
 
     #[test]

@@ -1,11 +1,12 @@
 import {
-  DEFAULT_ENVIRONMENTS,
   EnvironmentMeta,
   FolderMeta,
   MEMBER_KEY_WRAP_KID,
   ProjectMeta,
   SecretMeta,
+  Slug,
   slugify,
+  type EnvironmentKind,
   type EncryptedBlob,
   type MyProjectKeysResponse,
   type ProjectEntry,
@@ -30,6 +31,15 @@ export interface NewSecret {
   note?: string;
   /** Plaintext value per environment id. Sealed in Rust before it leaves. */
   values: Record<string, string>;
+}
+
+/** What a person picks for an environment; the slug defaults to one made from the name. */
+export interface EnvironmentDraft {
+  name: string;
+  slug?: string;
+  kind?: EnvironmentKind;
+  /** Where a secret with no value here takes it from. */
+  inheritsFrom?: string | null;
 }
 
 interface Tracked extends ProjectState {
@@ -100,36 +110,37 @@ export class ProjectsSync {
     this.emit();
   }
 
-  /** Creates a project with the default environments. Returns its id. */
-  async createProject(name: string): Promise<string> {
+  /**
+   * Creates a project. It starts with no environments unless some are given;
+   * people add their own afterwards. Returns its id.
+   */
+  async createProject(name: string, environments: EnvironmentDraft[] = []): Promise<string> {
     const taken = [...this.projects.values()].map((p) => p.meta.slug);
     const meta = ProjectMeta.parse({
       name: name.trim(),
       slug: uniqueSlug(slugify(name) || 'project', taken),
     });
-    const environments = DEFAULT_ENVIRONMENTS.map((e, position) =>
-      EnvironmentMeta.parse({ ...e, position }),
-    );
-    const request = await this.core.createProject(meta, environments);
+    const envs: EnvironmentMeta[] = [];
+    for (const draft of environments) envs.push(environmentMeta(draft, envs, envs.length));
+    const request = await this.core.createProject(meta, envs);
     const record = await this.api.createProject(request);
     this.projects.set(record.id, blank(record, meta));
     await this.pull(record.id);
     return record.id;
   }
 
-  /** Adds an environment with a fresh key (owners only). Returns its id. */
-  async createEnvironment(projectId: string, name: string): Promise<string> {
+  /** Adds an environment with a fresh key (owners and org admins). Returns its id. */
+  async createEnvironment(projectId: string, draft: string | EnvironmentDraft): Promise<string> {
     const project = this.project(projectId);
     const envs = [...project.environments.values()].map((e) => e.meta);
-    const meta = EnvironmentMeta.parse({
-      name: name.trim(),
-      slug: uniqueSlug(
-        slugify(name) || 'environment',
-        envs.map((e) => e.slug),
-      ),
-      kind: 'custom',
-      position: Math.min(1000, Math.max(-1, ...envs.map((e) => e.position)) + 1),
-    });
+    const meta = environmentMeta(
+      typeof draft === 'string' ? { name: draft } : draft,
+      envs,
+      Math.min(1000, Math.max(-1, ...envs.map((e) => e.position)) + 1),
+    );
+    if (meta.inheritsFrom && !project.environments.has(meta.inheritsFrom)) {
+      throw new Error('That environment is no longer available.');
+    }
     const sealed = await this.core.sealEnvironment(projectId, null, meta);
     const entry = await this.write(project, () =>
       this.api.putEnvironment(projectId, sealed.id, {
@@ -139,6 +150,103 @@ export class ProjectsSync {
       }),
     );
     return entry.id;
+  }
+
+  /**
+   * Renames an environment, changes its slug, kind or fallback. Only its
+   * metadata is re-sealed; its key and values stay as they are.
+   */
+  async updateEnvironment(
+    projectId: string,
+    envId: string,
+    changes: Required<Pick<EnvironmentDraft, 'name' | 'slug'>> & EnvironmentDraft,
+  ): Promise<void> {
+    const project = this.project(projectId);
+    const current = project.environments.get(envId);
+    if (!current) throw new Error('This environment is no longer available.');
+    const others = [...project.environments].filter(([id]) => id !== envId);
+    const slug = changes.slug.trim();
+    if (!Slug.safeParse(slug).success) {
+      throw new Error('Use lowercase letters, digits and single dashes in the slug.');
+    }
+    if (others.some(([, e]) => e.meta.slug === slug)) {
+      throw new Error(`Another environment already uses “${slug}”.`);
+    }
+    const inheritsFrom =
+      changes.inheritsFrom === undefined ? current.meta.inheritsFrom : changes.inheritsFrom;
+    if (inheritsFrom) {
+      // Follow the chain from the new source; reaching this one would loop.
+      const seen = new Set<string>();
+      for (let id: string | null = inheritsFrom; id;) {
+        if (id === envId || seen.has(id)) {
+          throw new Error('That would make these environments fall back to each other.');
+        }
+        seen.add(id);
+        id = project.environments.get(id)?.meta.inheritsFrom ?? null;
+      }
+      if (!project.environments.has(inheritsFrom)) {
+        throw new Error('That environment is no longer available.');
+      }
+    }
+    const meta = EnvironmentMeta.parse({
+      ...current.meta,
+      name: changes.name.trim(),
+      slug,
+      kind: changes.kind ?? current.meta.kind,
+      inheritsFrom,
+    });
+    await this.saveEnvironment(project, envId, current.revision, meta);
+  }
+
+  /**
+   * Deletes an environment with its key and every value sealed with it.
+   * Environments that fell back to it fall back to what it fell back to, and
+   * secrets left with no value anywhere are deleted too.
+   */
+  async deleteEnvironment(projectId: string, envId: string): Promise<void> {
+    const project = this.project(projectId);
+    const env = project.environments.get(envId);
+    if (!env) return;
+    const orphans = orphanedBy(project, envId);
+    for (const [id, other] of project.environments) {
+      if (other.meta.inheritsFrom !== envId) continue;
+      const parent = env.meta.inheritsFrom === id ? null : env.meta.inheritsFrom;
+      await this.saveEnvironment(project, id, other.revision, {
+        ...other.meta,
+        inheritsFrom: parent,
+      });
+    }
+    await this.write(project, () =>
+      this.api.deleteEntry(projectId, 'environment', envId, env.revision),
+    );
+    for (const secretId of orphans) {
+      const secret = project.secrets.get(secretId);
+      if (!secret) continue;
+      await this.write(project, () =>
+        this.api.deleteEntry(projectId, 'secret', secretId, secret.revision),
+      );
+    }
+  }
+
+  /** Secrets that would have no value left if `envId` went; see {@link orphanedBy}. */
+  secretsOnlyIn(projectId: string, envId: string): string[] {
+    const project = this.projects.get(projectId);
+    return project ? orphanedBy(project, envId) : [];
+  }
+
+  private async saveEnvironment(
+    project: Tracked,
+    envId: string,
+    revision: number,
+    meta: EnvironmentMeta,
+  ): Promise<void> {
+    const sealed = await this.core.sealEnvironment(project.id, envId, meta);
+    await this.write(project, () =>
+      this.api.putEnvironment(project.id, envId, {
+        baseRevision: revision,
+        encryptedMeta: sealed.encryptedMeta,
+      }),
+    );
   }
 
   /** Adds a folder (owners only). Returns its id. */
@@ -295,6 +403,10 @@ export class ProjectsSync {
     if (known && known.revision === entry.revision && !rekeyed) return;
     if (entry.deleted) {
       maps[entry.type].delete(entry.id);
+      // The server dropped the environment's values without re-sending each secret.
+      if (entry.type === 'environment') {
+        for (const secret of project.secrets.values()) delete secret.values[entry.id];
+      }
       return;
     }
     const pid = project.id;
@@ -351,6 +463,42 @@ export class ProjectsSync {
     };
     for (const listener of this.listeners) listener();
   }
+}
+
+/** Metadata for a new environment, with a slug no other environment uses. */
+function environmentMeta(
+  draft: EnvironmentDraft,
+  existing: EnvironmentMeta[],
+  position: number,
+): EnvironmentMeta {
+  const name = draft.name.trim();
+  const taken = existing.map((e) => e.slug);
+  const slug = draft.slug?.trim();
+  if (slug !== undefined && slug !== '') {
+    if (!Slug.safeParse(slug).success) {
+      throw new Error('Use lowercase letters, digits and single dashes in the slug.');
+    }
+    if (taken.includes(slug)) throw new Error(`Another environment already uses “${slug}”.`);
+  }
+  return EnvironmentMeta.parse({
+    name,
+    slug: slug || uniqueSlug(slugify(name) || 'environment', taken),
+    kind: draft.kind ?? 'custom',
+    position,
+    inheritsFrom: draft.inheritsFrom ?? null,
+  });
+}
+
+/**
+ * Secrets whose only value is in `envId`. When this account can't read some
+ * other environment, a secret may have a value there, so it is left alone.
+ */
+function orphanedBy(project: ProjectState, envId: string): string[] {
+  const others = [...project.environments].filter(([id]) => id !== envId);
+  if (others.some(([, e]) => !e.unlocked)) return [];
+  return [...project.secrets]
+    .filter(([, s]) => s.values[envId] && others.every(([id]) => !s.values[id]))
+    .map(([id]) => id);
 }
 
 function blank(record: ProjectRecord, meta: ProjectMeta): Tracked {

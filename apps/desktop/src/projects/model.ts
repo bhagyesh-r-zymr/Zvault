@@ -25,6 +25,14 @@ export const ENV_COLORS: Record<EnvironmentKind, string> = {
   custom: '#d9a3f5',
 };
 
+/** How each environment kind is named in pickers. */
+export const ENV_KIND_LABELS: Record<EnvironmentKind, string> = {
+  development: 'Development',
+  staging: 'Staging',
+  production: 'Production',
+  custom: 'Custom',
+};
+
 /** Project tiles, picked by id so a project keeps its colour. */
 const TILES: { bg: string; fg: string }[] = [
   { bg: '#4c5be8', fg: '#fff' },
@@ -61,7 +69,7 @@ export interface Project {
   slug: string;
   name: string;
   description?: string;
-  /** Whether this account owns it; only owners change environments and folders. */
+  /** Whether this account owns it; owners (and org admins) change environments and folders. */
   owner: boolean;
   tile: { bg: string; fg: string };
   environments: Environment[];

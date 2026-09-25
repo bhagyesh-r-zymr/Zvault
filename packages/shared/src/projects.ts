@@ -129,13 +129,6 @@ export const SecretValue = z.object({
 });
 export type SecretValue = z.infer<typeof SecretValue>;
 
-/** The environments a new project starts with (the user can rename or delete them). */
-export const DEFAULT_ENVIRONMENTS: readonly Pick<EnvironmentMeta, 'name' | 'slug' | 'kind'>[] = [
-  { name: 'Development', slug: 'development', kind: 'development' },
-  { name: 'Staging', slug: 'staging', kind: 'staging' },
-  { name: 'Production', slug: 'production', kind: 'production' },
-];
-
 // ---------------------------------------------------------------------------
 // Paths
 // ---------------------------------------------------------------------------
@@ -212,7 +205,7 @@ const NewEnvironment = z.object({
   encryptedKey: WrappedKey,
 });
 
-/** Creates a project together with its first environments, in one step. */
+/** Creates a project, optionally with its first environments, in one step. New projects in the app start with none. */
 export const CreateProjectRequest = z.object({
   id: RecordId,
   encryptedMeta: Meta,

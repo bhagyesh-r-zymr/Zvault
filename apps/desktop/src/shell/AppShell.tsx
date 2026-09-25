@@ -9,6 +9,7 @@ import { lock, type LockStatus } from '../lock.js';
 import { ProjectsApi } from '../projects/api.js';
 import { ProjectsContext, TeamContext } from '../projects/context.js';
 import { projectsCore, teamKeysCore } from '../projects/core.js';
+import { EnvironmentsView } from '../projects/EnvironmentsView.js';
 import { NewProjectSheet } from '../projects/NewProjectSheet.js';
 import { ProjectAccess } from '../projects/ProjectAccess.js';
 import { ProjectsView, ProjectTile } from '../projects/ProjectsView.js';
@@ -29,6 +30,7 @@ export type Route =
   | { name: 'vault' }
   | { name: 'project'; projectId: string; envId: string }
   | { name: 'access'; projectId: string }
+  | { name: 'environments'; projectId: string }
   | { name: 'agents' }
   | { name: 'sharing' }
   | { name: 'generator' }
@@ -142,7 +144,10 @@ export function AppShell(props: {
     setCreatingProject(false);
     setOpenProjects([...expanded.filter((x) => x !== projectId), projectId]);
     const first = projectsSync.get().projects.find((p) => p.id === projectId)?.environments[0];
-    setRoute({ name: 'project', projectId, envId: first?.id ?? '' });
+    // New projects start empty, so the first stop is adding an environment.
+    setRoute(
+      first ? { name: 'project', projectId, envId: first.id } : { name: 'environments', projectId },
+    );
   };
 
   return (
@@ -262,6 +267,21 @@ export function AppShell(props: {
                       type="button"
                       className="nav-item sub"
                       aria-current={
+                        route.name === 'environments' && route.projectId === p.id
+                          ? 'page'
+                          : undefined
+                      }
+                      onClick={() => setRoute({ name: 'environments', projectId: p.id })}
+                    >
+                      <Icon name="settings" size={13} />
+                      <span className="label">
+                        {p.environments.length === 0 ? 'Add environment' : 'Environments'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="nav-item sub"
+                      aria-current={
                         route.name === 'access' && route.projectId === p.id ? 'page' : undefined
                       }
                       onClick={() => setRoute({ name: 'access', projectId: p.id })}
@@ -312,6 +332,16 @@ export function AppShell(props: {
                     setRoute({ name: 'project', projectId, envId })
                   }
                   onOpenAccess={() => setRoute({ name: 'access', projectId: route.projectId })}
+                />
+              </TeamContext.Provider>
+            )}
+            {route.name === 'environments' && (
+              <TeamContext.Provider value={team}>
+                <EnvironmentsView
+                  projectId={route.projectId}
+                  onOpenEnvironment={(envId) =>
+                    setRoute({ name: 'project', projectId: route.projectId, envId })
+                  }
                 />
               </TeamContext.Provider>
             )}

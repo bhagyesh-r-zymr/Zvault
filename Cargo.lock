@@ -3385,6 +3385,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust_lib_zvault_mobile"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "flutter_rust_bridge",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "uuid",
+ "zeroize",
+ "zvault-crypto",
+ "zvault-otp",
+]
+
+[[package]]
 name = "rustc-demangle"
 version = "0.1.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5997,22 +6013,6 @@ dependencies = [
  "thiserror 2.0.21",
  "zeroize",
  "zvault-crypto",
-]
-
-[[package]]
-name = "zvault-mobile"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "flutter_rust_bridge",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
- "uuid",
- "zeroize",
- "zvault-crypto",
- "zvault-otp",
 ]
 
 [[package]]

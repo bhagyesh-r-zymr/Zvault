@@ -1,5 +1,7 @@
 [package]
-name = "zvault-mobile"
+# Cargokit finds the built library by the package name, so it matches the
+# library name the Flutter plugin loads.
+name = "rust_lib_zvault_mobile"
 version = "0.0.0"
 description = "Zvault's crypto core for the phone app, called from Flutter through flutter_rust_bridge. Keys stay in Rust."
 edition.workspace = true
@@ -8,8 +10,6 @@ publish.workspace = true
 rust-version.workspace = true
 
 [lib]
-# Cargokit and the Flutter plugin load the library by this name.
-name = "rust_lib_zvault_mobile"
 crate-type = ["cdylib", "staticlib", "lib"]
 
 [dependencies]

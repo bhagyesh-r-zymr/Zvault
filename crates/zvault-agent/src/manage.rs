@@ -313,14 +313,12 @@ impl Change {
         }
     }
 
-    /// Whether it deletes something.
+    /// Whether it deletes something for good. A deleted secret goes to the
+    /// Trash and a cleared value stays in the secret's History, so neither is.
     pub fn destructive(&self) -> bool {
         matches!(
             self,
-            Self::DeleteProject { .. }
-                | Self::DeleteEnvironment { .. }
-                | Self::DeleteFolder { .. }
-                | Self::DeleteSecret { .. }
+            Self::DeleteProject { .. } | Self::DeleteEnvironment { .. } | Self::DeleteFolder { .. }
         )
     }
 
@@ -407,12 +405,12 @@ impl Change {
             Self::DeleteSecret {
                 reference,
                 all_environments: false,
-            } => format!("Delete the value of {reference}"),
+            } => format!("Delete the value of {reference} (the old value stays in History)"),
             Self::DeleteSecret {
                 reference,
                 all_environments: true,
             } => format!(
-                "Delete {} in {SCHEME}{} from every environment",
+                "Move {} in {SCHEME}{} to Trash (restorable for 30 days)",
                 reference.key, reference.project
             ),
         }
@@ -677,6 +675,12 @@ mod tests {
         };
         assert!(del.destructive());
         assert!(del.describe().contains("zv://web"));
+        let trashed = Change::DeleteSecret {
+            reference: "zv://web/dev/API_KEY".parse().unwrap(),
+            all_environments: true,
+        };
+        assert!(!trashed.destructive());
+        assert!(trashed.describe().contains("Trash"));
     }
 
     #[test]

@@ -303,7 +303,7 @@ async function applyChange(
       if (!secret) throw new Error(`There is no secret ${change.reference}.`);
       if (change.allEnvironments) {
         await sync.deleteSecret(p.id, secret.id);
-        return `Deleted ${secret.key} from every environment of zv://${p.slug}.`;
+        return `Moved ${secret.key} in zv://${p.slug} to Trash. Restore it from the Mac app within 30 days.`;
       }
       if (!secret.values[env.id]) {
         const source = valueSource(p, secret, env.id);

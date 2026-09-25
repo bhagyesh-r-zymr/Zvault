@@ -1,4 +1,4 @@
-import type { ItemRecord, LiveItemRecord } from '@zvault/shared';
+import type { ItemRecord, ItemVersion, LiveItemRecord, TrashedItem } from '@zvault/shared';
 import { ConflictError, type VaultApi } from './api.js';
 import type {
   ItemCipher,
@@ -13,6 +13,23 @@ export interface ListedItem {
   id: string;
   revision: number;
   summary: ItemSummary;
+}
+
+/** An earlier version of an item, decrypted for the History sheet. */
+export interface ItemVersionView {
+  revision: number;
+  savedAt: string;
+  fields: ItemFields;
+  cipher: ItemVersion;
+}
+
+/** A deleted item as the Trash shows it. */
+export interface TrashedItemView {
+  id: string;
+  deletedAt: string;
+  purgeAt: string;
+  summary: ItemSummary;
+  trashed: TrashedItem;
 }
 
 /**
@@ -120,6 +137,70 @@ export class VaultSync {
     await this.write(() => this.api.deleteItem(this.vault.id, itemId, existing.revision));
   }
 
+  /** Earlier versions of an item, newest first, decrypted in Rust. Unreadable ones are skipped. */
+  async history(itemId: string): Promise<ItemVersionView[]> {
+    const versions = await this.api.itemHistory(this.vault.id, itemId);
+    const views: ItemVersionView[] = [];
+    for (const v of versions) {
+      try {
+        const fields = await this.core.openItem(this.vault.id, versionCipher(itemId, v));
+        views.push({ revision: v.revision, savedAt: v.savedAt, fields, cipher: v });
+      } catch {
+        // Tampered or corrupt; nothing to show or restore.
+      }
+    }
+    return views;
+  }
+
+  /**
+   * Makes an earlier version the current one. Its ciphertext is bound to this
+   * vault and item, not to a revision, so it is written back as it is.
+   */
+  async restoreVersion(itemId: string, version: ItemVersion): Promise<void> {
+    const current = this.record(itemId);
+    await this.write(() =>
+      this.api.putItem(this.vault.id, itemId, {
+        baseRevision: current.revision,
+        encryptedKey: version.encryptedKey,
+        encryptedData: version.encryptedData,
+      }),
+    );
+  }
+
+  /** Items deleted in the last 30 days, newest first. */
+  async trash(): Promise<TrashedItemView[]> {
+    const trashed = await this.api.trash(this.vault.id);
+    const views: TrashedItemView[] = [];
+    for (const t of trashed) {
+      try {
+        const summary = await this.core.summarizeItem(
+          this.vault.id,
+          versionCipher(t.id, t.lastVersion),
+        );
+        views.push({ id: t.id, deletedAt: t.deletedAt, purgeAt: t.purgeAt, summary, trashed: t });
+      } catch {
+        this.unreadable += 1;
+      }
+    }
+    return views;
+  }
+
+  /** Puts a deleted item back as it was when it was deleted. */
+  async restoreFromTrash(item: TrashedItem): Promise<void> {
+    await this.write(() =>
+      this.api.putItem(this.vault.id, item.id, {
+        baseRevision: item.revision,
+        encryptedKey: item.lastVersion.encryptedKey,
+        encryptedData: item.lastVersion.encryptedData,
+      }),
+    );
+  }
+
+  /** Deletes one trashed item for good, or empties the trash (`itemId` null). */
+  purge(itemId: string | null): Promise<void> {
+    return this.api.purgeTrash(this.vault.id, itemId);
+  }
+
   private async write(send: () => Promise<ItemRecord>): Promise<ItemRecord> {
     try {
       const record = await send();
@@ -186,6 +267,10 @@ async function openOrCreate(api: VaultApi, core: VaultCore): Promise<VaultSummar
   const { record, summary } = await core.createVault('Personal');
   await api.createVault(record);
   return summary;
+}
+
+function versionCipher(id: string, v: ItemVersion): ItemCipher {
+  return { id, encryptedKey: v.encryptedKey, encryptedData: v.encryptedData };
 }
 
 function cipherOf(record: LiveItemRecord): ItemCipher {

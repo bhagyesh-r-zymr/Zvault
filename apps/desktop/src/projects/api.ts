@@ -6,6 +6,8 @@ import {
   MyProjectKeysResponse,
   ProjectEntry,
   ProjectRecord,
+  ProjectTrashResponse,
+  SecretHistoryResponse,
   SyncProjectResponse,
   type AddEnvironmentWrapsRequest,
   type AddProjectWrapsRequest,
@@ -16,6 +18,8 @@ import {
   type PutFolderRequest,
   type PutSecretRequest,
   type RotateEnvironmentKeyRequest,
+  type SecretVersion,
+  type TrashedSecret,
   type UpdateProjectRequest,
 } from '@zvault/shared';
 import { ApiError, type ApiSession } from '../vault/api.js';
@@ -103,6 +107,23 @@ export class ProjectsApi {
   ): Promise<ProjectEntry> {
     const path = `/projects/${projectId}/${PATHS[type]}/${id}?baseRevision=${baseRevision}`;
     return ProjectEntry.parse(await this.request('DELETE', path));
+  }
+
+  /** Earlier versions of a secret, newest first. */
+  async secretHistory(projectId: string, secretId: string): Promise<SecretVersion[]> {
+    const path = `/projects/${projectId}/secrets/${secretId}/history`;
+    return SecretHistoryResponse.parse(await this.request('GET', path)).versions;
+  }
+
+  /** Secrets deleted in the last 30 days, newest first. */
+  async trash(projectId: string): Promise<TrashedSecret[]> {
+    return ProjectTrashResponse.parse(await this.request('GET', `/projects/${projectId}/trash`))
+      .secrets;
+  }
+
+  /** Deletes one trashed secret for good, or empties the trash (`secretId` null). */
+  async purgeTrash(projectId: string, secretId: string | null): Promise<void> {
+    await this.request('DELETE', `/projects/${projectId}/trash${secretId ? `/${secretId}` : ''}`);
   }
 
   /** The caller's member wraps in a project someone shared with them. */

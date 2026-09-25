@@ -1,14 +1,27 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   CreateVaultRequest,
   DeleteItemQuery,
   PutItemRequest,
   RecordId,
   SyncItemsQuery,
+  type ItemHistoryResponse,
   type ItemRecord,
   type ListVaultsResponse,
   type SyncItemsResponse,
   type VaultRecord,
+  type VaultTrashResponse,
 } from '@zvault/shared';
 import { z } from 'zod';
 import { SessionGuard } from '../devices/session.guard.js';
@@ -63,5 +76,41 @@ export class VaultController {
     @Query(new ZodPipe(DeleteItemQuery)) query: z.infer<typeof DeleteItemQuery>,
   ): Promise<ItemRecord> {
     return this.vaults.deleteItem(user, vaultId, itemId, query.baseRevision);
+  }
+
+  @Get(':vaultId/items/:itemId/history')
+  history(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('vaultId', Id) vaultId: string,
+    @Param('itemId', Id) itemId: string,
+  ): Promise<ItemHistoryResponse> {
+    return this.vaults.history(user, vaultId, itemId);
+  }
+
+  @Get(':vaultId/trash')
+  trash(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('vaultId', Id) vaultId: string,
+  ): Promise<VaultTrashResponse> {
+    return this.vaults.trash(user, vaultId);
+  }
+
+  @Delete(':vaultId/trash')
+  @HttpCode(204)
+  emptyTrash(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('vaultId', Id) vaultId: string,
+  ): Promise<void> {
+    return this.vaults.purge(user, vaultId, null);
+  }
+
+  @Delete(':vaultId/trash/:itemId')
+  @HttpCode(204)
+  purge(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('vaultId', Id) vaultId: string,
+    @Param('itemId', Id) itemId: string,
+  ): Promise<void> {
+    return this.vaults.purge(user, vaultId, itemId);
   }
 }

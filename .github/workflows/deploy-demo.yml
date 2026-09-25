@@ -1,6 +1,6 @@
 name: Deploy demo
 
-# Ships the API and share page to the single-EC2 demo (deploy/ec2/README.md).
+# Ships the API, landing page and share page to the single-EC2 demo (deploy/ec2/README.md).
 # Runs only for pushes to main, never for pull requests, so fork code never sees the key.
 on:
   push:
@@ -8,6 +8,7 @@ on:
     paths:
       - 'apps/api/**'
       - 'apps/share-web/**'
+      - 'apps/site/**'
       - 'packages/shared/**'
       - 'deploy/ec2/**'
       - 'infra/docker/api.Dockerfile'
@@ -56,7 +57,10 @@ jobs:
         run: |
           mkdir -p out
           docker save zvault-api:demo -o out/api-image.tar
-          cp -r apps/share-web/dist out/share
+          # Landing page at the root, share page under /share/. The host still
+          # unpacks this into its zvault-share folder, so keep the name.
+          cp -r apps/site out/share
+          cp -r apps/share-web/dist out/share/share
           cp deploy/ec2/{compose.yml,nginx-zvault.conf,setup.sh,deploy.sh} out/
 
       # The key is locked to deploy/ec2/deploy.sh on the host, so it can do nothing else.
@@ -71,4 +75,7 @@ jobs:
           tar -C out -cz . | ssh -i ~/.ssh/deploy -o BatchMode=yes ec2-user@"$HOST"
 
       - name: Check health
-        run: curl -fsS --retry 5 --retry-all-errors https://$HOST/v1/health
+        run: |
+          curl -fsS --retry 5 --retry-all-errors https://$HOST/v1/health
+          curl -fsS https://$HOST/ | grep -q '<title>Zvault</title>'
+          curl -fsS https://$HOST/share/ | grep -q 'Shared with Zvault'

@@ -37,7 +37,8 @@ jobs:
       # Where the shipped app talks to. Set these as repository variables to
       # move off the demo server.
       VITE_API_URL: ${{ vars.ZVAULT_API_URL || 'https://52-66-189-120.sslip.io' }}
-      VITE_SHARE_ORIGIN: ${{ vars.ZVAULT_SHARE_ORIGIN || vars.ZVAULT_API_URL || 'https://52-66-189-120.sslip.io' }}
+      # The share page is served under /share/; the landing page owns the root.
+      VITE_SHARE_ORIGIN: ${{ vars.ZVAULT_SHARE_ORIGIN || format('{0}/share', vars.ZVAULT_API_URL || 'https://52-66-189-120.sslip.io') }}
       # Printed on the Emergency Kit as the address to sign in at.
       ZVAULT_SIGN_IN_URL: ${{ vars.ZVAULT_SIGN_IN_URL || vars.ZVAULT_API_URL || 'https://52-66-189-120.sslip.io' }}
       RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_tag }}

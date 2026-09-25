@@ -1,16 +1,26 @@
 # Zvault demo on one EC2 host
 
-A cheap single-box demo: no domain, no RDS, no SES. For the real AWS setup see `infra/`.
+A cheap single-box demo: no domain, no RDS. For the real AWS setup see `infra/`.
 
 | Piece      | How                                                                                        |
 | ---------- | ------------------------------------------------------------------------------------------ |
 | TLS        | Host nginx + Let's Encrypt for `<ip-with-dashes>.sslip.io` (resolves to the IP, no domain) |
 | API        | `zvault-api:demo` container on `127.0.0.1:3000`, served at `/v1/`                          |
 | Database   | `postgres:17-alpine` container, not exposed outside Docker                                 |
-| Email      | Mailpit catches all mail; inbox at `/mail/` behind basic auth (password in `.env`)         |
+| Email      | Amazon SES in `ap-south-1` over SMTP (STARTTLS, port 587); see below                       |
 | Share page | Static build of `apps/share-web` at `/`                                                    |
 
-Anyone with the `/mail` password can read every verification code, so treat it like an admin password.
+## Email (SES)
+
+The API sends through the SES SMTP endpoint with an IAM user that may only call `ses:SendRawEmail`.
+`.env` on the box holds `SES_SMTP_USER`, `SES_SMTP_PASS` (the SMTP password derived from that user's
+access key, not the key itself) and `MAIL_FROM`, which must be an SES-verified address. The stack
+refuses to start while the SES values are empty.
+
+The account is in the SES sandbox: it sends only to verified addresses, at most 200 a day. Verify a
+tester with `aws sesv2 create-email-identity --email-identity them@example.com --region ap-south-1`
+and have them click the link AWS emails them. Mail to anyone else is rejected. Leaving the sandbox
+needs a production-access request, which AWS grants more readily with a domain you own.
 
 ## Deploy
 
@@ -55,4 +65,5 @@ VITE_API_URL=https://$HOST VITE_SHARE_ORIGIN=https://$HOST pnpm tauri build --co
 ## Known demo limits
 
 - Share links are held in memory by the API today, so they disappear when the API restarts.
+- Only SES-verified addresses receive email (sandbox).
 - One box, no backups. Snapshot the EBS volume if the data matters.

@@ -18,18 +18,11 @@ if [ ! -f .env ]; then
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
 SERVER_SECRET=$(openssl rand -base64 48 | tr -d '\n')
 TWO_FACTOR_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')
-MAIL_UI_AUTH=demo:$(openssl rand -hex 8)
 CORS_ORIGINS=https://$HOST,tauri://localhost,http://tauri.localhost
-MAIL_FROM=Zvault <no-reply@$HOST>
+MAIL_FROM=Zvault <sender-you-verified-in-ses@example.com>
+SES_SMTP_USER=
+SES_SMTP_PASS=
 EOF
-fi
-
-# Self-signed cert so the API can talk STARTTLS to Mailpit.
-if [ ! -f certs/mailpit.crt ]; then
-  mkdir -p certs
-  openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj /CN=mailpit \
-    -addext subjectAltName=DNS:mailpit -keyout certs/mailpit.key -out certs/mailpit.crt 2>/dev/null
-  chmod 644 certs/mailpit.key # read by the Mailpit container user
 fi
 
 # Let's Encrypt cert for $HOST via the webroot on port 80.
@@ -62,4 +55,4 @@ WantedBy=timers.target
 EOF
 sudo systemctl daemon-reload && sudo systemctl enable --now zvault-certbot.timer
 
-docker compose up -d
+docker compose up -d --remove-orphans

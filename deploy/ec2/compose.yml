@@ -15,21 +15,6 @@ services:
       interval: 5s
       retries: 10
 
-  # Catches every outgoing email; the inbox is served at /mail behind a password.
-  # STARTTLS with a self-signed cert because the API refuses plaintext SMTP in production.
-  mailpit:
-    image: axllent/mailpit:v1.31
-    restart: unless-stopped
-    environment:
-      MP_WEBROOT: mail
-      MP_UI_AUTH: ${MAIL_UI_AUTH:?}
-      MP_SMTP_TLS_CERT: /certs/mailpit.crt
-      MP_SMTP_TLS_KEY: /certs/mailpit.key
-      MP_SMTP_REQUIRE_STARTTLS: 'true'
-      MP_MAX_MESSAGES: 1000
-    volumes: ['./certs:/certs:ro']
-    ports: ['127.0.0.1:8025:8025']
-
   migrate:
     image: zvault-api:demo
     command: ['dist/db/migrate.js']
@@ -38,10 +23,12 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgres://zvault:${POSTGRES_PASSWORD}@postgres:5432/zvault
       DATABASE_SSL: 'false'
+      # Amazon SES over SMTP (STARTTLS). Credentials come from .env; see README.
       MAIL_TRANSPORT: smtp
-      SMTP_HOST: mailpit
-      SMTP_PORT: 1025
-      NODE_EXTRA_CA_CERTS: /certs/mailpit.crt
+      SMTP_HOST: email-smtp.ap-south-1.amazonaws.com
+      SMTP_PORT: 587
+      SMTP_USER: ${SES_SMTP_USER:?}
+      SMTP_PASS: ${SES_SMTP_PASS:?}
     depends_on:
       postgres: { condition: service_healthy }
 
@@ -53,11 +40,9 @@ services:
       <<: *api-env
       PORT: 3000
       TRUST_PROXY_HOPS: 1
-    volumes: ['./certs/mailpit.crt:/certs/mailpit.crt:ro']
     ports: ['127.0.0.1:3000:3000']
     depends_on:
       migrate: { condition: service_completed_successfully }
-      mailpit: { condition: service_started }
 
 volumes:
   pgdata:

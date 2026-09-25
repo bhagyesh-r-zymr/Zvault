@@ -116,9 +116,7 @@ export function EmergencyKitStep({ email, onDone }: Props) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span className="k">Master password</span>
             <div className="write-box" />
-            <span style={{ fontSize: 11, color: '#5b6272' }}>
-              Write it by hand. Never type it into the file.
-            </span>
+            <span className="note">Write it by hand. Never type it into the file.</span>
           </div>
         </div>
       </div>

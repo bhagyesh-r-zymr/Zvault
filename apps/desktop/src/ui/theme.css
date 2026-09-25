@@ -1,57 +1,172 @@
 /*
- * Zvault design system: "Graphite & Iris".
- * Dark graphite surfaces, one iris accent, Geist for text and Geist Mono for
- * secrets. Every colour lives in a token here; components use the tokens.
+ * Zvault design system: "Porcelain".
+ * Light by default with a matching dark mode that follows macOS. Navy ink on
+ * white, a soft grey sidebar, one denim accent. Plus Jakarta Sans for
+ * headings, Onest for text and JetBrains Mono for secrets. Every colour lives
+ * in a token here; components use the tokens.
  */
 
 :root {
-  color-scheme: dark;
+  color-scheme: light dark;
 
-  --bg: #0b0d12;
-  --bg-sidebar: #0f1218;
-  --bg-sunken: #0f1218;
-  --surface: #141821;
-  --raised: #1c2230;
-  --selected: #1a2033;
-  --line: #262c3a;
-  --line-soft: #1f2432;
-  --line-strong: #2e3860;
+  /* Surfaces */
+  --bg: #ffffff;
+  --bg-sidebar: #f2f4f8;
+  --sidebar-selected: #e3eafb;
+  --sidebar-hover: #e8ecf3;
+  --toolbar: #fbfcfe;
+  --surface: #ffffff;
+  --bg-sunken: #f7f9fc;
+  --raised: #f2f4f8;
+  --hover: #f2f5fa;
+  --selected: #e6eefc;
+  --line: #e4e8f0;
+  --line-soft: #edf0f5;
+  --line-strong: #c7d6f5;
 
-  --text: #e9edf5;
-  --text-2: #a3abbd;
-  --muted: #7e879b;
+  /* Text */
+  --text: #10204a;
+  --text-2: #3f4b6b;
+  --muted: #65718c;
+  --faint: #a4adc2;
 
-  --iris: #4c5be8;
-  --iris-hover: #5a69f0;
-  --iris-text: #8ea0ff;
-  --iris-ring: #1d2350;
+  /* Accent (denim). `--iris*` names are kept so every screen follows. */
+  --iris: #2f63d9;
+  --iris-hover: #2757c4;
+  --iris-text: #2f63d9;
+  --iris-ring: #d3e0fa;
+  --on-accent: #ffffff;
+  --on-accent-2: rgb(255 255 255 / 78%);
+  --on-accent-soft: rgb(255 255 255 / 22%);
+  --accent-soft: #e6eefc;
 
-  --secure: #45d6a0;
-  --secure-bg: #10261f;
-  --secure-line: #1d4a3b;
-  --attn: #f2b64c;
-  --attn-bg: #2b2413;
-  --attn-line: #54431f;
-  --danger: #ff9a9a;
-  --danger-dot: #ff7a7a;
-  --danger-bg: #2a1519;
-  --danger-line: #5a2a30;
-  --violet: #d9a3f5;
+  /* Secrets: digits blue, symbols coral. */
+  --digit: #2f63d9;
+  --symbol: #e0573f;
 
-  --radius-s: 8px;
-  --radius-m: 10px;
-  --radius-l: 14px;
-  --radius-xl: 20px;
+  /* States */
+  --secure: #0f8a6a;
+  --secure-bg: #e2f4ed;
+  --secure-line: #bfe5d5;
+  --attn: #c9771f;
+  --attn-bg: #fff4e2;
+  --attn-line: #f3dcb4;
+  --attn-ink: #7a4510;
+  --danger: #d63a4a;
+  --danger-dot: #d63a4a;
+  --danger-bg: #fdecee;
+  --danger-line: #f5c7cd;
+  --violet: #7a4fd6;
+  --violet-bg: #efe9fd;
 
-  --font: 'Geist Variable', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+  /* Item and project tiles: brand-like colours that read on both modes. */
+  --tile-navy: #10204a;
+  --tile-denim: #2f63d9;
+  --tile-coral: #e0573f;
+  --tile-green: #0f8a6a;
+  --tile-orange: #f08c00;
+  --tile-violet: #8b5cf6;
+  --tile-indigo: #635bff;
+  --tile-plum: #4a154b;
+  --tile-ink: #ffffff;
+
+  /* Paper for the Emergency Kit preview (always light, like the PDF). */
+  --paper: #ffffff;
+  --paper-ink: #10204a;
+  --paper-muted: #65718c;
+  --paper-key: #e6eefc;
+  --paper-key-line: #c7d6f5;
+  --paper-rule: #a4adc2;
+
+  --qr-bg: #ffffff;
+  --scrim: rgb(16 32 74 / 28%);
+  --shadow-sheet: 0 30px 70px -20px rgb(16 32 74 / 35%), 0 0 0 1px rgb(16 32 74 / 6%);
+  --shadow-pop: 0 12px 32px -8px rgb(16 32 74 / 25%);
+  --shadow-paper: 0 30px 70px -30px rgb(16 32 74 / 45%);
+  --shadow-seg: 0 1px 2px rgb(16 32 74 / 10%), 0 0 0 1px var(--line);
+  --shadow-knob: 0 1px 2px rgb(16 32 74 / 25%);
+  --select-bg: #cddcfa;
+  --scrollbar: #cfd6e3;
+  --spinner-track: rgb(255 255 255 / 35%);
+  --spinner-head: #ffffff;
+  --dot-grid: #e4e8f0;
+
+  --radius-s: 7px;
+  --radius-m: 8px;
+  --radius-l: 12px;
+  --radius-xl: 16px;
+
+  --font: 'Onest', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-display: 'Plus Jakarta Sans', 'Onest', -apple-system, system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
   font-family: var(--font);
-  font-size: 14px;
+  font-size: 13.5px;
   line-height: 1.45;
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141c33;
+    --bg-sidebar: #0f162a;
+    --sidebar-selected: #223465;
+    --sidebar-hover: #18223d;
+    --toolbar: #141c33;
+    --surface: #1a2440;
+    --bg-sunken: #18213b;
+    --raised: #202b4a;
+    --hover: #1c2744;
+    --selected: #1f2f5c;
+    --line: #26324f;
+    --line-soft: #212b46;
+    --line-strong: #34467a;
+
+    --text: #e9eefa;
+    --text-2: #bac4dc;
+    --muted: #8e9ab8;
+    --faint: #56617f;
+
+    --iris: #5b8bf5;
+    --iris-hover: #6e99f7;
+    --iris-text: #7ea6ff;
+    --iris-ring: #25386b;
+    --accent-soft: #1f2f5c;
+
+    --digit: #7ea6ff;
+    --symbol: #ff8a70;
+
+    --secure: #3cc79a;
+    --secure-bg: #13302b;
+    --secure-line: #1f4a3f;
+    --attn: #f2a94a;
+    --attn-bg: #3a2c17;
+    --attn-line: #5a4322;
+    --attn-ink: #f7d49f;
+    --danger: #ff6b78;
+    --danger-dot: #ff6b78;
+    --danger-bg: #3a1a24;
+    --danger-line: #5e2a36;
+    --violet: #b89cff;
+    --violet-bg: #2a2352;
+
+    --tile-navy: #34467a;
+
+    --paper: #f7f9fc;
+    --paper-rule: #8e9ab8;
+
+    --scrim: rgb(4 8 20 / 62%);
+    --shadow-sheet: 0 30px 80px -20px rgb(0 0 0 / 70%), 0 0 0 1px var(--line);
+    --shadow-pop: 0 12px 32px -8px rgb(0 0 0 / 55%);
+    --shadow-paper: 0 30px 70px -30px rgb(0 0 0 / 70%);
+    --shadow-seg: 0 1px 2px rgb(0 0 0 / 30%), 0 0 0 1px var(--line-strong);
+    --shadow-knob: 0 1px 2px rgb(0 0 0 / 40%);
+    --select-bg: #2d4580;
+    --scrollbar: #2e3a5a;
+    --dot-grid: #1f2944;
+  }
 }
 
 *,
@@ -80,21 +195,28 @@ p {
   margin: 0;
 }
 
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
 h1 {
   font-size: 24px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+  font-weight: 800;
+  line-height: 1.12;
 }
 
 h2 {
   font-size: 17px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 h3 {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 a {
@@ -106,6 +228,11 @@ code,
 kbd,
 .mono {
   font-family: var(--mono);
+}
+
+kbd {
+  font-size: 10.5px;
+  font-weight: 500;
 }
 
 ul,
@@ -132,39 +259,40 @@ legend {
 }
 
 :focus-visible {
-  outline: 2px solid var(--iris-text);
+  outline: 2px solid var(--iris);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: #34409a;
+  background: var(--select-bg);
 }
 
 /* ---------- Buttons ---------- */
 
 button,
 .btn {
-  font: 500 13px var(--font);
-  height: 34px;
-  padding: 0 14px;
-  border-radius: 9px;
+  font: 500 12.5px var(--font);
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--radius-m);
   border: 1px solid var(--line);
-  background: var(--raised);
+  background: var(--surface);
   color: var(--text);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 6px;
   white-space: nowrap;
   transition:
     background 120ms,
-    border-color 120ms;
+    border-color 120ms,
+    color 120ms;
 }
 
 button:hover:not(:disabled) {
-  border-color: #353d50;
-  background: #212839;
+  border-color: var(--line-strong);
+  background: var(--hover);
 }
 
 button:disabled {
@@ -176,7 +304,8 @@ button.primary,
 .btn-primary {
   background: var(--iris);
   border-color: var(--iris);
-  color: #fff;
+  color: var(--on-accent);
+  font-weight: 600;
 }
 
 button.primary:hover:not(:disabled) {
@@ -192,8 +321,8 @@ button.danger,
 }
 
 button.danger:hover:not(:disabled) {
-  background: #361a20;
-  border-color: #6d333b;
+  background: var(--danger-bg);
+  border-color: var(--danger);
 }
 
 button.ghost {
@@ -203,7 +332,7 @@ button.ghost {
 }
 
 button.ghost:hover:not(:disabled) {
-  background: var(--raised);
+  background: var(--hover);
   border-color: transparent;
   color: var(--text);
 }
@@ -214,26 +343,27 @@ button.link {
   border: 0;
   background: none;
   color: var(--iris-text);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 button.link:hover:not(:disabled) {
   background: none;
-  color: #b4c0ff;
+  color: var(--iris-hover);
+  text-decoration: underline;
 }
 
 button.small {
-  height: 28px;
+  height: 26px;
   padding: 0 10px;
   font-size: 12px;
   border-radius: var(--radius-s);
 }
 
 button.large {
-  height: 48px;
-  padding: 0 20px;
-  font-size: 15px;
-  border-radius: 12px;
+  height: 42px;
+  padding: 0 18px;
+  font-size: 14px;
+  border-radius: 9px;
 }
 
 button.block {
@@ -241,7 +371,7 @@ button.block {
 }
 
 button.icon {
-  width: 32px;
+  width: 30px;
   padding: 0;
 }
 
@@ -255,22 +385,23 @@ input[type='number'],
 input:not([type]),
 select,
 textarea {
-  font: 14px var(--font);
+  font: 13.5px var(--font);
   color: var(--text);
   background: var(--bg-sunken);
   border: 1px solid var(--line);
   border-radius: var(--radius-m);
-  height: 40px;
-  padding: 0 12px;
+  height: 36px;
+  padding: 0 11px;
   width: 100%;
   transition:
     border-color 120ms,
-    box-shadow 120ms;
+    box-shadow 120ms,
+    background 120ms;
 }
 
 textarea {
   height: auto;
-  padding: 10px 12px;
+  padding: 9px 11px;
   resize: vertical;
   line-height: 1.5;
 }
@@ -284,6 +415,7 @@ input:focus,
 select:focus,
 textarea:focus {
   outline: none;
+  background: var(--surface);
   border-color: var(--iris);
   box-shadow: 0 0 0 3px var(--iris-ring);
 }
@@ -297,7 +429,8 @@ textarea:disabled {
 input[type='password'],
 input.mono {
   font-family: var(--mono);
-  letter-spacing: 0.04em;
+  font-size: 13px;
+  letter-spacing: 0.02em;
 }
 
 input[type='checkbox'],
@@ -323,7 +456,7 @@ input[type='checkbox'] {
 .field > label {
   font-size: 12px;
   color: var(--text-2);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .field small,
@@ -337,7 +470,7 @@ input[type='checkbox'] {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  font-size: 14px;
+  font-size: 13.5px;
   color: var(--text-2);
   cursor: pointer;
 }
@@ -364,18 +497,17 @@ input[type='checkbox'] {
 .eyebrow {
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
   color: var(--muted);
 }
 
 .alert {
-  padding: 10px 14px;
-  border-radius: var(--radius-m);
+  padding: 9px 12px;
+  border-radius: 10px;
   border: 1px solid var(--danger-line);
   background: var(--danger-bg);
   color: var(--danger);
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 .notice {
@@ -405,18 +537,19 @@ input[type='checkbox'] {
 
 .secret {
   font-family: var(--mono);
-  font-size: 15px;
-  letter-spacing: 0.04em;
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
   overflow-wrap: anywhere;
   user-select: all;
 }
 
 .secret .d {
-  color: var(--iris-text);
+  color: var(--digit);
 }
 
 .secret .s {
-  color: var(--attn);
+  color: var(--symbol);
 }
 
 .secret.masked {
@@ -434,19 +567,19 @@ input[type='checkbox'] {
 }
 
 .panel-pad {
-  padding: 18px 20px;
+  padding: 16px 18px;
 }
 
 .rows > * + * {
-  border-top: 1px solid var(--line-soft);
+  border-top: 1px solid var(--line);
 }
 
 .row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  min-height: 56px;
+  gap: 10px;
+  padding: 10px 14px;
+  min-height: 52px;
 }
 
 .row-main {
@@ -454,21 +587,21 @@ input[type='checkbox'] {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
 .row-label {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
 }
 
 .row-title {
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .row-sub {
   font-size: 12px;
-  color: var(--text-2);
+  color: var(--muted);
 }
 
 .truncate {
@@ -480,82 +613,95 @@ input[type='checkbox'] {
 /* ---------- Chips, pills, badges ---------- */
 
 .chip {
-  height: 24px;
+  height: 22px;
   padding: 0 9px;
   border-radius: 999px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--text-2);
-  font: 12px var(--font);
+  border: 1px solid transparent;
+  background: var(--accent-soft);
+  color: var(--iris-text);
+  font: 600 11.5px var(--font);
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+}
+
+button.chip {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--text-2);
+  font-weight: 500;
 }
 
 button.chip:hover:not(:disabled) {
-  background: var(--raised);
+  background: var(--hover);
+  border-color: var(--line-strong);
 }
 
 .chip[aria-pressed='true'],
-.chip.active {
-  background: var(--selected);
-  border-color: var(--line-strong);
-  color: #b4c0ff;
+.chip.active,
+button.chip[aria-pressed='true'] {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--iris-text);
+  font-weight: 600;
 }
 
-.chip.add {
+.chip.add,
+button.chip.add {
   border-style: dashed;
-  border-color: #333a4c;
+  border-color: var(--line-strong);
+  background: transparent;
   color: var(--muted);
 }
 
 .pill {
-  height: 26px;
-  padding: 0 11px;
+  height: 24px;
+  padding: 0 10px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  font-size: 12px;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
   border: 1px solid var(--line);
-  background: var(--raised);
+  background: var(--surface);
   color: var(--text-2);
   white-space: nowrap;
 }
 
 .pill.secure {
   background: var(--secure-bg);
-  border-color: var(--secure-line);
+  border-color: transparent;
   color: var(--secure);
 }
 
 .pill.attn {
   background: var(--attn-bg);
-  border-color: var(--attn-line);
+  border-color: transparent;
   color: var(--attn);
 }
 
 .pill.danger {
   background: var(--danger-bg);
-  border-color: var(--danger-line);
+  border-color: transparent;
   color: var(--danger);
 }
 
 .pill.iris {
-  background: var(--selected);
-  border-color: var(--line-strong);
-  color: #b4c0ff;
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--iris-text);
 }
 
 .count {
   min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
+  height: 17px;
+  padding: 0 6px;
   border-radius: 9px;
   background: var(--attn);
-  color: #1a1406;
-  font-size: 11px;
-  font-weight: 600;
+  color: var(--on-accent);
+  font-size: 10px;
+  font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -570,32 +716,32 @@ button.chip:hover:not(:disabled) {
 }
 
 .tile {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: 15px;
-  background: var(--raised);
-  border: 1px solid var(--line);
+  font: 800 14px var(--font-display);
+  background: var(--accent-soft);
+  border: 1px solid transparent;
   color: var(--iris-text);
 }
 
 .tile.large {
-  width: 52px;
-  height: 52px;
-  border-radius: 15px;
-  font-size: 22px;
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  font-size: 24px;
 }
 
 .tile.small {
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
   font-size: 10px;
+  font-weight: 700;
   border: 0;
 }
 
@@ -605,49 +751,51 @@ button.chip:hover:not(:disabled) {
   display: grid;
   grid-auto-columns: minmax(0, 1fr);
   grid-auto-flow: column;
-  gap: 3px;
-  padding: 3px;
+  gap: 2px;
+  padding: 2px;
   border-radius: var(--radius-m);
-  background: var(--bg-sunken);
-  border: 1px solid var(--line-soft);
+  background: var(--raised);
+  border: 1px solid var(--line);
 }
 
 .seg > button {
-  height: 28px;
+  height: 26px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 6px;
   background: transparent;
   color: var(--text-2);
   font-size: 12px;
-  font-weight: 400;
+  font-weight: 500;
   padding: 0 10px;
 }
 
 .seg > button:hover:not(:disabled) {
-  background: #161b26;
+  background: var(--hover);
   border: 0;
+  color: var(--text);
 }
 
 .seg > button[aria-checked='true'],
 .seg > button[aria-selected='true'],
 .seg > button[aria-pressed='true'] {
-  background: #262d40;
+  background: var(--surface);
   color: var(--text);
-  font-weight: 500;
+  font-weight: 600;
+  box-shadow: var(--shadow-seg);
 }
 
 .seg.large > button {
-  height: 36px;
+  height: 32px;
   font-size: 13px;
 }
 
 .switch {
   appearance: none;
   -webkit-appearance: none;
-  width: 42px !important;
-  height: 24px !important;
-  border-radius: 12px;
-  background: #2a3142;
+  width: 38px !important;
+  height: 22px !important;
+  border-radius: 11px;
+  background: var(--line);
   position: relative;
   cursor: pointer;
   transition: background 150ms;
@@ -657,12 +805,13 @@ button.chip:hover:not(:disabled) {
 .switch::after {
   content: '';
   position: absolute;
-  left: 3px;
-  top: 3px;
+  left: 2px;
+  top: 2px;
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--on-accent);
+  box-shadow: var(--shadow-knob);
   transition: transform 150ms;
 }
 
@@ -671,7 +820,7 @@ button.chip:hover:not(:disabled) {
 }
 
 .switch:checked::after {
-  transform: translateX(18px);
+  transform: translateX(16px);
 }
 
 /* ---------- Choice cards ---------- */
@@ -685,15 +834,15 @@ button.chip:hover:not(:disabled) {
 
 .choice {
   height: auto;
-  padding: 11px 12px;
-  border-radius: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
   text-align: left;
   background: var(--surface);
   border: 1px solid var(--line);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 3px;
+  gap: 2px;
   font-weight: 400;
   white-space: normal;
 }
@@ -701,16 +850,17 @@ button.chip:hover:not(:disabled) {
 .choice[aria-checked='true'],
 .choice[aria-pressed='true'] {
   border-color: var(--iris);
-  background: var(--selected);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--iris);
 }
 
 .choice strong {
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .choice span {
   font-size: 12px;
-  color: var(--text-2);
+  color: var(--muted);
 }
 
 /* ---------- Sheets (modals) ---------- */
@@ -718,7 +868,7 @@ button.chip:hover:not(:disabled) {
 .sheet-backdrop {
   position: fixed;
   inset: 0;
-  background: rgb(4 5 8 / 72%);
+  background: var(--scrim);
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -731,13 +881,13 @@ button.chip:hover:not(:disabled) {
 .sheet {
   width: min(560px, 100%);
   background: var(--surface);
-  border: 1px solid #2a3040;
+  border: 0;
   border-radius: var(--radius-xl);
-  box-shadow: 0 40px 120px rgb(0 0 0 / 60%);
-  padding: 24px;
+  box-shadow: var(--shadow-sheet);
+  padding: 22px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
   animation: rise 160ms ease-out;
 }
 
@@ -786,33 +936,34 @@ button.chip:hover:not(:disabled) {
   align-items: center;
   gap: 10px;
   font-size: 12px;
+  font-weight: 600;
 }
 
 .strength meter {
-  width: 96px;
-  height: 6px;
+  width: 120px;
+  height: 4px;
 }
 
 .strength meter::-webkit-meter-bar {
-  background: var(--raised);
+  background: var(--line);
   border: 0;
-  border-radius: 3px;
-  height: 6px;
+  border-radius: 4px;
+  height: 4px;
 }
 
 .strength meter::-webkit-meter-optimum-value {
   background: var(--secure);
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .strength meter::-webkit-meter-suboptimum-value {
   background: var(--attn);
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .strength meter::-webkit-meter-even-less-good-value {
   background: var(--danger-dot);
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .empty {
@@ -828,16 +979,23 @@ button.chip:hover:not(:disabled) {
 }
 
 .empty svg {
-  color: #3b4357;
+  color: var(--faint);
 }
 
 .spinner {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 2px solid rgb(255 255 255 / 25%);
-  border-top-color: #fff;
+  border: 2px solid var(--spinner-track);
+  border-top-color: var(--spinner-head);
   animation: spin 700ms linear infinite;
+}
+
+.empty .spinner,
+.page .spinner,
+button:not(.primary) .spinner {
+  --spinner-track: var(--line);
+  --spinner-head: var(--iris);
 }
 
 @keyframes spin {
@@ -852,7 +1010,7 @@ button.chip:hover:not(:disabled) {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #232939;
+  background: var(--scrollbar);
   border-radius: 10px;
   border: 3px solid transparent;
   background-clip: content-box;

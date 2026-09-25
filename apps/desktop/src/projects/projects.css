@@ -102,7 +102,7 @@
 }
 
 .access-table thead th {
-  background: #10131a;
+  background: var(--bg-sunken);
   color: var(--muted);
   font-size: 12px;
   font-weight: 500;
@@ -141,18 +141,19 @@
   padding: 0 8px 0 10px;
   border-radius: var(--radius-s);
   font: 12px var(--font);
-  background: var(--raised);
+  background: var(--surface);
   border: 1px solid var(--line);
   color: var(--text);
+  font-weight: 500;
   width: auto;
   max-width: 180px;
 }
 
 .level[data-level='manage'],
 .level[data-level='edit'] {
-  background: var(--selected);
+  background: var(--accent-soft);
   border-color: var(--line-strong);
-  color: #b4c0ff;
+  color: var(--iris-text);
 }
 
 .level[data-level='approval'] {
@@ -164,7 +165,7 @@
 .level[data-level='none'] {
   background: transparent;
   border-style: dashed;
-  border-color: #2a3040;
+  border-color: var(--line-strong);
   color: var(--muted);
 }
 

@@ -168,7 +168,7 @@ export function AppShell(props: {
                 height="16"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke="#fff"
+                stroke="currentColor"
                 strokeWidth="2.4"
                 strokeLinecap="round"
                 strokeLinejoin="round"

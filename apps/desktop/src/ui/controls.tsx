@@ -224,7 +224,17 @@ export function SwitchRow({
   );
 }
 
-const TILE_COLORS = ['#e9edf5', '#635bff', '#ff9900', '#4a154b', '#1e3b33', '#3a2a14', '#33203a'];
+/** Tile colours, as theme tokens so they can be tuned per light and dark mode. */
+const TILE_COLORS = [
+  'var(--tile-navy)',
+  'var(--tile-indigo)',
+  'var(--tile-orange)',
+  'var(--tile-plum)',
+  'var(--tile-denim)',
+  'var(--tile-coral)',
+  'var(--tile-green)',
+  'var(--tile-violet)',
+];
 
 /** A letter tile for an item without an icon. The colour is stable per name. */
 export function LetterTile({ name, size }: { name: string; size?: 'small' | 'large' }) {
@@ -232,11 +242,10 @@ export function LetterTile({ name, size }: { name: string; size?: 'small' | 'lar
   let hash = 0;
   for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
   const bg = TILE_COLORS[hash % TILE_COLORS.length]!;
-  const light = bg === '#e9edf5' || bg === '#ff9900';
   return (
     <span
       className={size ? `tile ${size}` : 'tile'}
-      style={{ background: bg, borderColor: bg, color: light ? '#0b0d12' : '#fff' }}
+      style={{ background: bg, borderColor: bg, color: 'var(--tile-ink)' }}
       aria-hidden="true"
     >
       {letter}

@@ -28,6 +28,37 @@ class FakeCore extends Core {
   ) async => values[blobJson]!;
 
   @override
+  Future<NewShareLink> createShareLink(
+    String vaultId,
+    String recordJson,
+    String shareOrigin,
+  ) async => NewShareLink(
+    id: 'AAAAAAAAAAAAAAAAAAAAAA',
+    verifier: 'verifier',
+    blobJson: '{"v":1,"alg":"xchacha20poly1305","kid":"share-link","nonce":"n","ct":"c"}',
+    url: '$shareOrigin/#AAAAAAAAAAAAAAAAAAAAAA.linkkey',
+  );
+
+  @override
+  Future<SharingIdentity> sharingIdentity() async =>
+      const SharingIdentity(publicKey: 'my-key', fingerprint: 'mine');
+
+  @override
+  Future<String> sharingFingerprint(String publicKey) async => 'fp-$publicKey';
+
+  @override
+  Future<NewUserShare> sealShareTo(
+    String vaultId,
+    String recordJson,
+    String recipientPublicKey,
+  ) async => const NewUserShare(
+    id: 'BBBBBBBBBBBBBBBBBBBBBB',
+    senderPublicKey: 'my-key',
+    ephemeralPublicKey: 'eph',
+    blobJson: '{"v":1,"alg":"xchacha20poly1305","kid":"share-box","nonce":"n","ct":"c"}',
+  );
+
+  @override
   void lock() => locked = true;
 
   @override

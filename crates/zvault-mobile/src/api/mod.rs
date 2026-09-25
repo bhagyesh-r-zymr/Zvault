@@ -3,6 +3,7 @@
 
 pub mod pairing;
 pub mod session;
+pub mod sharing;
 pub mod vault;
 
 use std::sync::{LazyLock, Mutex, MutexGuard};

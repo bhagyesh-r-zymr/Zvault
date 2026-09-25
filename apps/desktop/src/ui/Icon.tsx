@@ -175,6 +175,13 @@ const PATHS = {
     </>
   ),
   pause: <path d="M8 5v14M16 5v14" />,
+  history: (
+    <>
+      <path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.5" />
+      <path d="M4 4v4.5h4.5M12 8v4l3 2" />
+    </>
+  ),
+  restore: <path d="M9 14l-5-5 5-5M4 9h10a6 6 0 0 1 0 12h-3" />,
   globe: (
     <>
       <circle cx="12" cy="12" r="9" />

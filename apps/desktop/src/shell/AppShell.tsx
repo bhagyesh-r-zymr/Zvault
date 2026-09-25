@@ -25,11 +25,13 @@ import { VaultApi } from '../vault/api.js';
 import { vaultCore } from '../vault/core.js';
 import { FOCUS_SEARCH_EVENT, VaultScreen } from '../vault/VaultScreen.js';
 import type { RememberedAccount } from '../core.js';
+import { TrashView } from '../trash/TrashView.js';
 import { SettingsView, type SettingsSection } from './SettingsView.js';
 import { TeamInvites } from './TeamInvites.js';
 
 export type Route =
   | { name: 'vault' }
+  | { name: 'trash' }
   | { name: 'project'; projectId: string; envId: string }
   | { name: 'access'; projectId: string }
   | { name: 'environments'; projectId: string }
@@ -312,6 +314,7 @@ export function AppShell(props: {
             <span className="eyebrow">Tools</span>
           </div>
           {nav({ name: 'generator' }, 'wand', 'Password generator')}
+          {nav({ name: 'trash' }, 'trash', 'Trash')}
 
           <div className="sidebar-foot">
             {nav({ name: 'settings', section: 'security' }, 'settings', 'Settings')}
@@ -358,6 +361,7 @@ export function AppShell(props: {
               </TeamContext.Provider>
             )}
             {route.name === 'agents' && <AgentsView />}
+            {route.name === 'trash' && <TrashView api={vaultApi} />}
             {route.name === 'sharing' && <SharingCenter api={sharing} />}
             {route.name === 'generator' && (
               <div className="page">

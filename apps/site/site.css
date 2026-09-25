@@ -863,6 +863,11 @@ main {
 .ef-card h3 {
   margin-top: 14px;
 }
+.ef-cap {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
 .ef-num {
   position: absolute;
   top: 12px;

@@ -50,6 +50,14 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
+    // The camera view is always dark, whatever the phone's theme.
+    return Theme(
+      data: zvaultTheme(ZvColors.dark),
+      child: Builder(builder: _build),
+    );
+  }
+
+  Widget _build(BuildContext context) {
     final camera = _camera;
     return Scaffold(
       backgroundColor: Colors.black,
@@ -59,7 +67,7 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
           if (camera != null)
             MobileScanner(controller: camera, onDetect: _found)
           else
-            const ColoredBox(color: Color(0xFF07080B)),
+            const ColoredBox(color: Colors.black),
           LayoutBuilder(
             builder: (context, box) {
               final side = box.maxWidth * 0.68;
@@ -91,7 +99,7 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
                               ? 'This device has no camera. Paste the code instead.'
                               : 'Settings › Devices › Add phone',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: Zv.text2, fontSize: 14),
+                          style: TextStyle(color: context.zv.muted, fontSize: 14),
                         ),
                       ],
                     ),
@@ -157,7 +165,7 @@ class _Mask extends CustomPainter {
       ..fillType = PathFillType.evenOdd
       ..addRect(Offset.zero & size)
       ..addRRect(hole);
-    canvas.drawPath(path, Paint()..color = const Color(0xB3000000));
+    canvas.drawPath(path, Paint()..color = Colors.black.withValues(alpha: 0.7));
   }
 
   @override
@@ -172,11 +180,18 @@ class _Viewfinder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.zv;
     return Stack(
       children: [
-        Positioned.fill(child: CustomPaint(painter: _Corners())),
+        Positioned.fill(child: CustomPaint(painter: _Corners(c.accent))),
         if (empty)
-          const Center(child: Icon(Icons.qr_code_2_rounded, size: 96, color: Color(0x33E9EDF5))),
+          Center(
+            child: Icon(
+              Icons.qr_code_2_rounded,
+              size: 96,
+              color: Colors.white.withValues(alpha: 0.2),
+            ),
+          ),
         AnimatedBuilder(
           animation: sweep,
           builder: (context, _) => Positioned(
@@ -185,9 +200,9 @@ class _Viewfinder extends StatelessWidget {
             top: 18 + (sweep.value * (MediaQuery.of(context).size.width * 0.68 - 38)),
             child: Container(
               height: 2,
-              decoration: const BoxDecoration(
-                color: Zv.irisText,
-                boxShadow: [BoxShadow(color: Zv.iris, blurRadius: 12, spreadRadius: 1)],
+              decoration: BoxDecoration(
+                color: c.accent,
+                boxShadow: [BoxShadow(color: c.accent, blurRadius: 12, spreadRadius: 1)],
               ),
             ),
           ),
@@ -198,10 +213,14 @@ class _Viewfinder extends StatelessWidget {
 }
 
 class _Corners extends CustomPainter {
+  _Corners(this.color);
+
+  final Color color;
+
   @override
   void paint(Canvas canvas, Size size) {
     final p = Paint()
-      ..color = Zv.irisText
+      ..color = color
       ..strokeWidth = 4
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;

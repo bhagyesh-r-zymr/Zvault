@@ -58,18 +58,21 @@ class _QuickUnlockScreenState extends State<QuickUnlockScreen> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Zv.secureBg,
+                    color: context.zv.okSoft,
                     borderRadius: BorderRadius.circular(99),
-                    border: Border.all(color: Zv.secureLine),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.check_circle_rounded, size: 16, color: Zv.secure),
+                      Icon(Icons.check_circle_rounded, size: 16, color: context.zv.ok),
                       const SizedBox(width: 6),
                       Text(
                         'Signed in as ${app.account?.email ?? ''}',
-                        style: const TextStyle(color: Zv.secure, fontSize: 13),
+                        style: TextStyle(
+                          color: context.zv.ok,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ],
                   ),
@@ -87,7 +90,7 @@ class _QuickUnlockScreenState extends State<QuickUnlockScreen> {
               Text(
                 'Your keys stay in this phone’s secure hardware. Only your fingerprint or face can open them.',
                 textAlign: TextAlign.center,
-                style: t.bodyLarge?.copyWith(color: Zv.text2),
+                style: t.bodyLarge?.copyWith(color: context.zv.muted),
               ),
               if (support == QuickUnlockSupport.notEnrolled) ...[
                 const SizedBox(height: 16),
@@ -144,6 +147,7 @@ class _FingerprintState extends State<_Fingerprint> with SingleTickerProviderSta
 
   @override
   Widget build(BuildContext context) {
+    final c = context.zv;
     return AnimatedBuilder(
       animation: _c,
       builder: (context, child) {
@@ -153,11 +157,11 @@ class _FingerprintState extends State<_Fingerprint> with SingleTickerProviderSta
           height: 112,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Zv.secureBg,
-            border: Border.all(color: Zv.secure.withValues(alpha: 0.6), width: 1.5),
+            color: c.okSoft,
+            border: Border.all(color: c.ok.withValues(alpha: 0.6), width: 1.5),
             boxShadow: [
               BoxShadow(
-                color: Zv.secure.withValues(alpha: 0.28 * (1 - v)),
+                color: c.ok.withValues(alpha: 0.28 * (1 - v)),
                 spreadRadius: 22 * v,
               ),
             ],
@@ -165,7 +169,7 @@ class _FingerprintState extends State<_Fingerprint> with SingleTickerProviderSta
           child: child,
         );
       },
-      child: const Icon(Icons.fingerprint_rounded, size: 60, color: Zv.secure),
+      child: Icon(Icons.fingerprint_rounded, size: 60, color: c.ok),
     );
   }
 }

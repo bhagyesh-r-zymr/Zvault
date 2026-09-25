@@ -1,19 +1,50 @@
-/* Graphite & Iris, the same palette as the landing page. */
+/* Porcelain, the same palette and type as the landing page (apps/site). */
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  src: url('./fonts/plus-jakarta-sans.woff2') format('woff2');
+  font-weight: 200 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Onest';
+  src: url('./fonts/onest.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('./fonts/jetbrains-mono.woff2') format('woff2');
+  font-weight: 100 800;
+  font-display: swap;
+}
+
 :root {
-  color-scheme: dark;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-  --bg: #0b0d12;
-  --surface: #141821;
-  --raised: #1c2230;
-  --line: #262c3a;
-  --text: #e9edf5;
-  --text-2: #a3abbd;
-  --muted: #7e879b;
-  --iris: #4c5be8;
-  --iris-hover: #5a69f0;
-  --iris-text: #8ea0ff;
-  --danger: #f38b8b;
-  --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  color-scheme: light;
+  font-family:
+    'Onest',
+    -apple-system,
+    BlinkMacSystemFont,
+    system-ui,
+    sans-serif;
+  --sky: #eaf0fc;
+  --line: #e4e8f0;
+  --line-strong: #cbd4e6;
+  --raised: #f5f7fb;
+  --text: #10204a;
+  --text-2: #4a5675;
+  --muted: #65718c;
+  --iris: #2f63d9;
+  --iris-hover: #2753bd;
+  --accent-soft: #e6eefc;
+  --danger: #c2412d;
+  --display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+html {
+  min-height: 100%;
+  background: linear-gradient(180deg, #fff, var(--sky) 70%) no-repeat;
+  background-color: var(--sky);
 }
 
 body {
@@ -21,32 +52,63 @@ body {
   min-height: 100vh;
   padding: 3rem 1rem;
   box-sizing: border-box;
-  background: var(--bg);
-  color: var(--text);
+  color: var(--text-2);
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
 main {
   max-width: 34rem;
   margin: 0 auto;
-  padding: 1.75rem;
-  background: var(--surface);
+  padding: 2rem 1.75rem;
+  box-sizing: border-box;
+  background: #fff;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 22px;
+  box-shadow:
+    0 30px 70px -30px rgba(47, 99, 217, 0.45),
+    0 0 0 1px rgba(16, 32, 74, 0.03);
 }
 
 .brand {
-  margin: 0 0 0.25rem;
-  color: var(--iris-text);
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+  color: var(--text);
+  font: 800 1.05rem var(--display);
+  letter-spacing: -0.02em;
+}
+
+.brand::before {
+  content: 'Z';
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 0.5rem;
+  background: var(--iris);
+  color: #fff;
   font-size: 0.85rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  margin: 0 0 1rem;
+  color: var(--text);
+  font-family: var(--display);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
 }
 
 h1 {
-  margin: 0 0 1rem;
-  font-size: 1.5rem;
+  font-size: 1.75rem;
+}
+
+h2 {
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
 }
 
 .field {
@@ -54,18 +116,24 @@ h1 {
   grid-template-columns: 6rem 1fr auto;
   gap: 0.75rem;
   align-items: center;
-  padding: 0.6rem 0;
+  padding: 0.7rem 0;
   border-bottom: 1px solid var(--line);
 }
 
 .field code {
+  color: var(--text);
   font-family: var(--mono);
+  font-weight: 500;
   overflow-wrap: anywhere;
 }
 
 .label,
 .hint {
   color: var(--muted);
+}
+
+.label {
+  font-size: 0.85rem;
 }
 
 .actions,
@@ -80,6 +148,11 @@ h1 {
 }
 
 pre {
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--raised);
+  color: var(--text);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-family: var(--mono);
@@ -95,20 +168,22 @@ pre {
 label {
   color: var(--text-2);
   font-size: 0.9rem;
+  font-weight: 500;
 }
 
 input {
   font: inherit;
   color: var(--text);
-  background: var(--raised);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 0.65rem 0.8rem;
+  background: #fff;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 0.65rem 1rem;
 }
 
 input:focus {
-  outline: 2px solid var(--iris);
-  outline-offset: 1px;
+  outline: none;
+  border-color: var(--iris);
+  box-shadow: 0 0 0 3px rgba(47, 99, 217, 0.18);
 }
 
 input.code {
@@ -116,29 +191,42 @@ input.code {
   font-size: 1.6rem;
   letter-spacing: 0.4em;
   text-align: center;
+  border-radius: 14px;
 }
 
 button {
   font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
   color: var(--text);
-  background: var(--raised);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0.3rem 0.7rem;
+  background: #fff;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 0.3rem 0.85rem;
   cursor: pointer;
+}
+
+button:hover {
+  border-color: #aebbd6;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--iris);
+  outline-offset: 2px;
 }
 
 button.primary {
   background: var(--iris);
   border-color: var(--iris);
   color: #fff;
-  font-weight: 600;
-  padding: 0.7rem 1.2rem;
-  border-radius: 10px;
+  font-size: 1rem;
+  padding: 0.75rem 1.3rem;
+  box-shadow: 0 10px 24px -12px rgba(47, 99, 217, 0.7);
 }
 
 button.primary:hover {
   background: var(--iris-hover);
+  border-color: var(--iris-hover);
 }
 
 button:disabled {
@@ -150,7 +238,7 @@ button.link {
   background: none;
   border: none;
   padding: 0;
-  color: var(--iris-text);
+  color: var(--iris);
 }
 
 .error {

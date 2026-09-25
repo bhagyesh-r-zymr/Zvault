@@ -30,7 +30,7 @@ export function PrincipalAvatar({ type, name }: { type: PrincipalType; name: str
         type === 'agent'
           ? { background: 'var(--attn-bg)', color: 'var(--attn)' }
           : type === 'account'
-            ? { borderRadius: '50%', background: '#33203a', color: '#d9a3f5' }
+            ? { borderRadius: '50%', background: 'var(--violet-bg)', color: 'var(--violet)' }
             : undefined
       }
     >

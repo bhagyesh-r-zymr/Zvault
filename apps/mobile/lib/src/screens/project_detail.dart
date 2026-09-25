@@ -79,6 +79,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.zv;
     final p = widget.project;
     final env = _current;
     final groups = <String?, List<Secret>>{};
@@ -95,7 +96,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       appBar: AppBar(title: Text(p.name)),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
           children: [
             if (p.environments.isNotEmpty)
               SingleChildScrollView(
@@ -114,11 +115,11 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                                   width: 8,
                                   height: 8,
                                   decoration: BoxDecoration(
-                                    color: hexColor(e.color) ?? Zv.text2,
+                                    color: hexColor(e.color) ?? c.muted,
                                     shape: BoxShape.circle,
                                   ),
                                 )
-                              : const Icon(Icons.lock_rounded, size: 14, color: Zv.muted),
+                              : Icon(Icons.lock_rounded, size: 14, color: c.muted),
                           label: Text(e.name),
                           onSelected: (_) => setState(() {
                             _env = i;
@@ -131,35 +132,20 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
               ),
             const SizedBox(height: 16),
             if (env != null && !env.unlocked) ...[
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Zv.attnBg,
-                  borderRadius: BorderRadius.circular(Zv.radiusM),
-                  border: Border.all(color: Zv.attnLine),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.lock_outline_rounded, color: Zv.attn, size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        "You don't have access to ${env.name}. Ask a project admin on the Mac.",
-                        style: const TextStyle(color: Zv.attn, fontSize: 14),
-                      ),
-                    ),
-                  ],
-                ),
+              Notice(
+                tone: ZvTone.attention,
+                icon: Icons.lock_outline_rounded,
+                text: "You don't have access to ${env.name}. Ask a project admin on the Mac.",
               ),
               const SizedBox(height: 16),
             ],
             if (p.secrets.isEmpty)
-              const Padding(
-                padding: EdgeInsets.only(top: 48),
+              Padding(
+                padding: const EdgeInsets.only(top: 48),
                 child: Text(
                   'No secrets in this project yet.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Zv.text2),
+                  style: TextStyle(color: c.muted),
                 ),
               ),
             for (final folder in order) ...[
@@ -207,7 +193,7 @@ class _SecretRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 4, 12),
+      padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
       child: Row(
         children: [
           Expanded(
@@ -216,11 +202,11 @@ class _SecretRow extends StatelessWidget {
               children: [
                 Text(
                   secret.key,
-                  style: Zv.monoStyle.copyWith(fontSize: 14, fontWeight: FontWeight.w500),
+                  style: Zv.monoStyle.copyWith(fontSize: 12.5, color: context.zv.muted),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
                 if (!readable)
-                  const Text('Not set here', style: TextStyle(color: Zv.muted, fontSize: 13))
+                  Text('Not set here', style: TextStyle(color: context.zv.muted, fontSize: 13))
                 else if (value != null)
                   SecretText(value!, size: 14)
                 else
@@ -235,13 +221,12 @@ class _SecretRow extends StatelessWidget {
               icon: Icon(
                 value == null ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                 size: 20,
-                color: Zv.text2,
               ),
             ),
             IconButton(
               tooltip: 'Copy',
               onPressed: onCopy,
-              icon: const Icon(Icons.copy_rounded, size: 20, color: Zv.text2),
+              icon: const Icon(Icons.copy_rounded, size: 19),
             ),
           ],
         ],

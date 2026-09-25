@@ -44,7 +44,7 @@ class _ShareItemScreenState extends State<ShareItemScreen> {
           children: [
             Row(
               children: [
-                LetterTile(widget.title, size: 44),
+                LetterTile(widget.title, size: 44, radius: 12),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
@@ -52,9 +52,9 @@ class _ShareItemScreenState extends State<ShareItemScreen> {
                     children: [
                       Text(widget.title, style: Theme.of(context).textTheme.titleLarge),
                       const SizedBox(height: 2),
-                      const Text(
+                      Text(
                         'Encrypted on this phone before it leaves',
-                        style: TextStyle(fontSize: 13, color: Zv.muted),
+                        style: TextStyle(fontSize: 13, color: context.zv.muted),
                       ),
                     ],
                   ),
@@ -64,12 +64,6 @@ class _ShareItemScreenState extends State<ShareItemScreen> {
             const SizedBox(height: 20),
             SegmentedButton<_Mode>(
               showSelectedIcon: false,
-              style: SegmentedButton.styleFrom(
-                selectedBackgroundColor: Zv.irisRing,
-                selectedForegroundColor: Zv.text,
-                foregroundColor: Zv.text2,
-                side: const BorderSide(color: Zv.line),
-              ),
               segments: const [
                 ButtonSegment(
                   value: _Mode.link,
@@ -208,25 +202,21 @@ class _ShareByLinkState extends State<_ShareByLink> {
           child: SelectableText(
             link.url,
             key: const Key('share-link-url'),
-            style: Zv.monoStyle.copyWith(fontSize: 13, color: Zv.irisText),
+            style: Zv.monoStyle.copyWith(fontSize: 13, color: context.zv.accent),
           ),
         ),
         const SizedBox(height: 14),
-        _Notice(
+        Notice(
           icon: Icons.shield_outlined,
-          color: Zv.secure,
-          background: Zv.secureBg,
-          border: Zv.secureLine,
+          tone: ZvTone.ok,
           text:
               'The key is in the part after #, which browsers never send to our servers. It stops working after ${link.maxViews} ${link.maxViews == 1 ? 'view' : 'views'} or when it expires.',
         ),
         if (unverified.isNotEmpty) ...[
           const SizedBox(height: 10),
-          _Notice(
+          Notice(
             icon: Icons.warning_amber_rounded,
-            color: Zv.attn,
-            background: Zv.attnBg,
-            border: Zv.attnLine,
+            tone: ZvTone.attention,
             text:
                 'Zvault email is in test mode, so only verified addresses get the code. ${unverified.join(', ')} ${unverified.length == 1 ? 'is' : 'are'} not verified yet and may not receive it. Ask the Zvault owner to verify ${unverified.length == 1 ? 'that address' : 'those addresses'} first.',
           ),
@@ -341,9 +331,9 @@ class _ShareByLinkState extends State<_ShareByLink> {
             decoration: const InputDecoration(hintText: 'name@company.com, other@company.com'),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'They open the link, enter their email and type the one-time code Zvault emails them. No Zvault account needed.',
-            style: TextStyle(fontSize: 13, color: Zv.muted, height: 1.4),
+            style: TextStyle(fontSize: 13, color: context.zv.muted, height: 1.4),
           ),
         ],
         if (_error != null) ...[const SizedBox(height: 16), ErrorBanner(_error!)],
@@ -418,11 +408,9 @@ class _ShareWithPersonState extends State<_ShareWithPerson> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _Notice(
+          Notice(
             icon: Icons.verified_user_outlined,
-            color: Zv.secure,
-            background: Zv.secureBg,
-            border: Zv.secureLine,
+            tone: ZvTone.ok,
             text: 'Shared with $sentTo. They will get an email and see it in Zvault.',
           ),
           const SizedBox(height: 16),
@@ -460,28 +448,29 @@ class _ShareWithPersonState extends State<_ShareWithPerson> {
               children: [
                 Text(
                   'Security code for ${r.email}',
-                  style: const TextStyle(fontSize: 12, color: Zv.muted),
+                  style: TextStyle(fontSize: 12, color: context.zv.muted),
                 ),
                 const SizedBox(height: 6),
-                SelectableText(r.fingerprint, style: Zv.monoStyle.copyWith(fontSize: 14)),
+                SelectableText(
+                  r.fingerprint,
+                  style: Zv.monoStyle.copyWith(fontSize: 14, color: context.zv.ink),
+                ),
               ],
             ),
           ),
           if (r.pin == PinCheck.changed) ...[
             const SizedBox(height: 10),
-            _Notice(
+            Notice(
               icon: Icons.warning_amber_rounded,
-              color: Zv.danger,
-              background: Zv.dangerBg,
-              border: Zv.dangerLine,
+              tone: ZvTone.danger,
               text:
                   'This security code is different from the one ${r.email} had before. Someone may be pretending to be them. Check the code with them before sending.',
             ),
           ],
           const SizedBox(height: 10),
-          const Text(
+          Text(
             'For sensitive items, ask them to read out the code in their Zvault settings. If it differs, do not send.',
-            style: TextStyle(fontSize: 13, color: Zv.muted, height: 1.4),
+            style: TextStyle(fontSize: 13, color: context.zv.muted, height: 1.4),
           ),
           const SizedBox(height: 16),
           FilledButton(
@@ -491,44 +480,6 @@ class _ShareWithPersonState extends State<_ShareWithPerson> {
         ],
         if (_error != null) ...[const SizedBox(height: 16), ErrorBanner(_error!)],
       ],
-    );
-  }
-}
-
-class _Notice extends StatelessWidget {
-  const _Notice({
-    required this.icon,
-    required this.color,
-    required this.background,
-    required this.border,
-    required this.text,
-  });
-
-  final IconData icon;
-  final Color color;
-  final Color background;
-  final Color border;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(Zv.radiusM),
-        border: Border.all(color: border),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(text, style: TextStyle(fontSize: 13.5, color: color, height: 1.4)),
-          ),
-        ],
-      ),
     );
   }
 }

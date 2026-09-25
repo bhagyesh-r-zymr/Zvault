@@ -102,28 +102,28 @@ class _PairingScreenState extends State<PairingScreen> {
                     const SizedBox(height: 8),
                     Text(
                       'Your Mac shows a code too. If they match, tap Allow on your Mac.',
-                      style: t.bodyLarge?.copyWith(color: Zv.text2),
+                      style: t.bodyLarge?.copyWith(color: context.zv.muted),
                     ),
                     const SizedBox(height: 24),
                     _Code(pending.scanned.code),
                     const Spacer(),
-                    const Row(
+                    Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        SizedBox(
+                        const SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
-                        SizedBox(width: 12),
-                        Text('Waiting for your Mac…', style: TextStyle(color: Zv.text2)),
+                        const SizedBox(width: 12),
+                        Text('Waiting for your Mac…', style: TextStyle(color: context.zv.muted)),
                       ],
                     ),
                     const SizedBox(height: 20),
-                    const Text(
+                    Text(
                       "Don't recognise this? Tap Deny on your Mac.",
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Zv.muted, fontSize: 13),
+                      style: TextStyle(color: context.zv.muted, fontSize: 13),
                     ),
                   ],
                 ),
@@ -145,9 +145,8 @@ class _Code extends StatelessWidget {
       key: const Key('pair-code'),
       padding: const EdgeInsets.symmetric(vertical: 22),
       decoration: BoxDecoration(
-        color: Zv.attnBg,
+        color: context.zv.attentionSoft,
         borderRadius: BorderRadius.circular(Zv.radiusL),
-        border: Border.all(color: Zv.attnLine),
       ),
       child: Text(
         grouped,
@@ -155,7 +154,7 @@ class _Code extends StatelessWidget {
         semanticsLabel: 'Code ${code.split('').join(' ')}',
         style: Zv.monoStyle.copyWith(
           fontSize: 44,
-          color: Zv.attn,
+          color: context.zv.attention,
           letterSpacing: 6,
           fontWeight: FontWeight.w500,
         ),
@@ -186,20 +185,21 @@ class _LinkState extends State<_Link> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.zv;
     Widget node(IconData icon, String label, {bool me = false}) => Column(
       children: [
         Container(
           width: 56,
           height: 56,
           decoration: BoxDecoration(
-            color: me ? Zv.irisRing : Zv.raised,
+            color: me ? c.accentSoft : c.well,
             borderRadius: BorderRadius.circular(Zv.radiusL),
-            border: Border.all(color: me ? Zv.lineStrong : Zv.line),
+            border: Border.all(color: me ? c.accentSoft : c.line),
           ),
-          child: Icon(icon, color: me ? Zv.irisText : Zv.text2),
+          child: Icon(icon, color: me ? c.accent : c.muted),
         ),
         const SizedBox(height: 8),
-        Text(label, style: const TextStyle(fontSize: 12, color: Zv.text2)),
+        Text(label, style: TextStyle(fontSize: 12, color: c.muted)),
       ],
     );
     return Row(
@@ -211,7 +211,7 @@ class _LinkState extends State<_Link> with SingleTickerProviderStateMixin {
             child: AnimatedBuilder(
               animation: _c,
               builder: (context, _) =>
-                  CustomPaint(size: const Size.fromHeight(12), painter: _Dots(_c.value)),
+                  CustomPaint(size: const Size.fromHeight(12), painter: _Dots(_c.value, c)),
             ),
           ),
         ),
@@ -222,9 +222,10 @@ class _LinkState extends State<_Link> with SingleTickerProviderStateMixin {
 }
 
 class _Dots extends CustomPainter {
-  _Dots(this.t);
+  _Dots(this.t, this.colors);
 
   final double t;
+  final ZvColors colors;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -236,7 +237,7 @@ class _Dots extends CustomPainter {
       canvas.drawCircle(
         Offset(gap * i, size.height / 2),
         2 + glow * 1.5,
-        Paint()..color = Color.lerp(Zv.line, Zv.irisText, glow)!,
+        Paint()..color = Color.lerp(colors.line, colors.accent, glow)!,
       );
     }
   }

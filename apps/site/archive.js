@@ -30,7 +30,7 @@ function start() {
   });
   renderer.setPixelRatio(Math.min(devicePixelRatio, small ? 1.5 : 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMappingExposure = pal.exposure;
   renderer.setClearColor(0x000000, 0);
 
   const scene = new THREE.Scene();
@@ -78,7 +78,7 @@ function start() {
   const key = new THREE.DirectionalLight(pal.key, 2.2);
   key.position.set(4, 8, 7);
   scene.add(key);
-  const rim = new THREE.DirectionalLight(pal.accent, 0.9);
+  const rim = new THREE.DirectionalLight(pal.accent, pal.rim);
   rim.position.set(-6, 2, -4);
   scene.add(rim);
   // A soft lamp that travels a little ahead of the camera, so nearby drawers
@@ -899,6 +899,8 @@ function backdrop(inside, pal) {
         side: THREE.BackSide,
         fog: false,
         depthWrite: false,
+        // Exact sky colours from CSS, so the room meets the page without a seam.
+        toneMapped: false,
       }),
     ),
   );
@@ -974,7 +976,7 @@ function labelTexture(text) {
     g.fillStyle = 'rgba(0,0,0,0.05)';
     for (let i = 0; i < 400; i++) g.fillRect(Math.random() * 360, Math.random() * 100, 2, 2);
     g.fillStyle = '#23262e';
-    g.font = '600 46px "Geist Mono", ui-monospace, monospace';
+    g.font = '600 44px "JetBrains Mono", ui-monospace, monospace';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText(text, 180, 54);
@@ -999,8 +1001,8 @@ function roundRect(s, x, y, w, h, r) {
 
 // Card face colours; filled from the palette when the scene starts.
 const C = {};
-const SANS = 'Geist, -apple-system, system-ui, sans-serif';
-const MONO = '"Geist Mono", ui-monospace, Menlo, monospace';
+const SANS = 'Onest, -apple-system, system-ui, sans-serif';
+const MONO = '"JetBrains Mono", ui-monospace, Menlo, monospace';
 
 function header(g, w, left, right, rightColor = C.mint) {
   g.textBaseline = 'alphabetic';
@@ -1246,6 +1248,8 @@ function palette(el) {
     accent: v('accent', '#6f7dff'),
     accentSoft: v('accent-soft', '#8ea0ff'),
     secure: v('secure', '#45d6a0'),
+    exposure: parseFloat(v('exposure', '1')),
+    rim: parseFloat(v('rim', '0.9')),
     leds: list('leds', '#3a46b8 #3a46b8 #4c5be8 #2c7a5e #45d6a0 #6b4f8f'),
     card: {
       text: v('card-text', '#e9edf5'),

@@ -19,10 +19,10 @@ import {
 
 /** Default dot colour of each environment kind; `EnvironmentMeta.color` overrides it. */
 export const ENV_COLORS: Record<EnvironmentKind, string> = {
-  development: '#45d6a0',
-  staging: '#f2b64c',
-  production: '#ff7a7a',
-  custom: '#d9a3f5',
+  development: 'var(--secure)',
+  staging: 'var(--attn)',
+  production: 'var(--danger)',
+  custom: 'var(--violet)',
 };
 
 /** How each environment kind is named in pickers. */
@@ -35,10 +35,10 @@ export const ENV_KIND_LABELS: Record<EnvironmentKind, string> = {
 
 /** Project tiles, picked by id so a project keeps its colour. */
 const TILES: { bg: string; fg: string }[] = [
-  { bg: '#4c5be8', fg: '#fff' },
-  { bg: '#1e3b33', fg: '#7fe6be' },
-  { bg: '#3a2a14', fg: '#f2b64c' },
-  { bg: '#33203a', fg: '#d9a3f5' },
+  { bg: 'var(--tile-navy)', fg: 'var(--tile-ink)' },
+  { bg: 'var(--tile-denim)', fg: 'var(--tile-ink)' },
+  { bg: 'var(--tile-green)', fg: 'var(--tile-ink)' },
+  { bg: 'var(--tile-coral)', fg: 'var(--tile-ink)' },
 ];
 
 export interface Environment {
@@ -117,7 +117,7 @@ function shortName(name: string, kind: EnvironmentKind): string {
 }
 
 function tileFor(id: string, color: string | undefined): { bg: string; fg: string } {
-  if (color) return { bg: color, fg: '#fff' };
+  if (color) return { bg: color, fg: 'var(--tile-ink)' };
   let h = 0;
   for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return TILES[h % TILES.length]!;

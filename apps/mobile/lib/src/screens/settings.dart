@@ -10,8 +10,8 @@ class SettingsTab extends StatelessWidget {
   const SettingsTab({super.key});
 
   // ListTile gives trailing text the small caps label style; keep it body text.
-  static const _trailing = TextStyle(
-    color: Zv.text2,
+  static TextStyle _trailing(BuildContext context) => TextStyle(
+    color: context.zv.muted,
     fontSize: 14,
     fontWeight: FontWeight.w400,
     letterSpacing: 0,
@@ -30,10 +30,6 @@ class SettingsTab extends StatelessWidget {
     final current = app.account?.autoLockMinutes ?? defaultAutoLockMinutes;
     final picked = await showModalBottomSheet<int>(
       context: context,
-      backgroundColor: Zv.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(Zv.radiusXl)),
-      ),
       builder: (context) => SafeArea(
         child: RadioGroup<int>(
           groupValue: current,
@@ -42,11 +38,11 @@ class SettingsTab extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(20, 20, 20, 8),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
                 child: Text(
                   'Lock after leaving Zvault for',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 17),
                 ),
               ),
               for (final e in _autoLock.entries)
@@ -64,7 +60,6 @@ class SettingsTab extends StatelessWidget {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Zv.surface,
         title: const Text('Sign out of this phone?'),
         content: const Text(
           'Your keys are removed from this phone. To sign in again, scan a new code on your Mac.',
@@ -76,7 +71,7 @@ class SettingsTab extends StatelessWidget {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Zv.danger),
+            style: TextButton.styleFrom(foregroundColor: context.zv.danger),
             child: const Text('Sign out'),
           ),
         ],
@@ -90,35 +85,51 @@ class SettingsTab extends StatelessWidget {
     final app = context.watch<AppState>();
     final a = app.account;
     final minutes = a?.autoLockMinutes ?? defaultAutoLockMinutes;
+    final c = context.zv;
+    final email = a?.email ?? '';
     return SafeArea(
       bottom: false,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
         children: [
-          Text('Settings', style: Theme.of(context).textTheme.headlineMedium),
-          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text('Settings', style: Theme.of(context).textTheme.headlineMedium),
+          ),
+          const SizedBox(height: 16),
           Panel(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(14),
             child: Row(
               children: [
-                LetterTile(a?.email ?? '?', size: 44),
+                // The account avatar: initial on the soft accent.
+                Container(
+                  width: 44,
+                  height: 44,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(color: c.accentSoft, shape: BoxShape.circle),
+                  child: Text(
+                    email.isEmpty ? '?' : email[0].toUpperCase(),
+                    style: TextStyle(
+                      fontFamily: Zv.display,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: c.accent,
+                    ),
+                  ),
+                ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        a?.email ?? '',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          color: Zv.text,
-                        ),
+                        email,
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.ink),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         Uri.tryParse(a?.api ?? '')?.host ?? '',
-                        style: const TextStyle(fontSize: 13, color: Zv.text2),
+                        style: TextStyle(fontSize: 13, color: c.muted),
                       ),
                     ],
                   ),
@@ -132,27 +143,27 @@ class SettingsTab extends StatelessWidget {
             child: Column(
               children: [
                 ListTile(
-                  leading: const Icon(Icons.fingerprint_rounded, color: Zv.text2),
+                  leading: const Icon(Icons.fingerprint_rounded),
                   title: const Text('Fingerprint unlock'),
                   trailing: _Pill(on: a?.quickUnlock == true),
                 ),
                 const Divider(),
                 ListTile(
                   key: const Key('auto-lock'),
-                  leading: const Icon(Icons.timer_outlined, color: Zv.text2),
+                  leading: const Icon(Icons.timer_outlined),
                   title: const Text('Auto-lock'),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(_autoLock[minutes] ?? '$minutes minutes', style: _trailing),
-                      const Icon(Icons.chevron_right_rounded, color: Zv.muted),
+                      Text(_autoLock[minutes] ?? '$minutes minutes', style: _trailing(context)),
+                      Icon(Icons.chevron_right_rounded, color: c.muted),
                     ],
                   ),
                   onTap: () => _pickAutoLock(context, app),
                 ),
                 const Divider(),
                 ListTile(
-                  leading: const Icon(Icons.lock_outline_rounded, color: Zv.text2),
+                  leading: const Icon(Icons.lock_outline_rounded),
                   title: const Text('Lock now'),
                   onTap: app.lock,
                 ),
@@ -165,16 +176,16 @@ class SettingsTab extends StatelessWidget {
             child: Column(
               children: [
                 ListTile(
-                  leading: const Icon(Icons.sync_rounded, color: Zv.text2),
+                  leading: const Icon(Icons.sync_rounded),
                   title: const Text('Last synced'),
-                  trailing: Text(_ago(app.lastSynced), style: _trailing),
+                  trailing: Text(_ago(app.lastSynced), style: _trailing(context)),
                   onTap: app.sync,
                 ),
                 const Divider(),
                 ListTile(
-                  leading: const Icon(Icons.info_outline_rounded, color: Zv.text2),
+                  leading: const Icon(Icons.info_outline_rounded),
                   title: const Text('Version'),
-                  trailing: const Text(appVersion, style: _trailing),
+                  trailing: Text(appVersion, style: _trailing(context)),
                 ),
               ],
             ),
@@ -184,16 +195,16 @@ class SettingsTab extends StatelessWidget {
             key: const Key('sign-out'),
             onPressed: () => _confirmSignOut(context, app),
             style: OutlinedButton.styleFrom(
-              foregroundColor: Zv.danger,
-              side: const BorderSide(color: Zv.dangerLine),
+              foregroundColor: c.danger,
+              backgroundColor: c.dangerSoft,
             ),
             child: const Text('Sign out of this phone'),
           ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             'Read-only on phones for now. Add and edit on your Mac.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Zv.muted, fontSize: 13),
+            style: TextStyle(color: c.muted, fontSize: 13),
           ),
         ],
       ),
@@ -216,16 +227,17 @@ class _Pill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.zv;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: on ? Zv.secureBg : Zv.sunken,
+        color: on ? c.okSoft : c.well,
         borderRadius: BorderRadius.circular(99),
-        border: Border.all(color: on ? Zv.secureLine : Zv.line),
+        border: Border.all(color: on ? c.okSoft : c.line),
       ),
       child: Text(
         on ? 'On' : 'Off',
-        style: TextStyle(fontSize: 12, color: on ? Zv.secure : Zv.muted),
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: on ? c.ok : c.muted),
       ),
     );
   }

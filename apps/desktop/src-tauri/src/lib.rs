@@ -14,6 +14,7 @@ mod generator;
 mod otp;
 mod platform;
 mod projects;
+mod remembered;
 mod session;
 mod sharing;
 mod team;
@@ -52,6 +53,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Mutex::new(auth::AuthState::default()))
         .manage(emergency_kit::PendingKit::default())
+        .manage(remembered::KitImport::default())
         .manage(Keyring::default())
         .manage(autolock::AppState::new())
         .manage(agents::AgentHub::default())
@@ -72,6 +74,10 @@ pub fn run() {
             emergency_kit::emergency_kit_pending,
             emergency_kit::save_emergency_kit,
             emergency_kit::discard_emergency_kit,
+            remembered::remembered_account,
+            remembered::import_emergency_kit,
+            remembered::clear_emergency_kit_import,
+            remembered::forget_secret_key,
             vault::vault_create,
             vault::vault_open,
             vault::vault_lock,

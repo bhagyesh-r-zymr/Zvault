@@ -29,6 +29,22 @@ export interface Unlocked {
   email: string;
 }
 
+/** The account whose Secret Key is saved in this Mac's Keychain. */
+export interface RememberedAccount {
+  email: string;
+  /** The public first part of the key, safe to show. */
+  secretKeyId: string;
+}
+
+/** What was read from an Emergency Kit PDF. The key itself stays in Rust. */
+export interface ImportedKit {
+  email: string | null;
+  secretKeyId: string;
+}
+
+/** How a Secret Key the UI never sees is shown: `Z1-ABC123-•••••-…`. */
+export const maskedSecretKey = (id: string) => `Z1-${id}${'-•••••'.repeat(5)}`;
+
 export const core = {
   info: () => invoke<CoreInfo>('core_info'),
   createAccount: (email: string, password: string) =>
@@ -36,7 +52,8 @@ export const core = {
   loginProve: (args: {
     email: string;
     password: string;
-    secretKey: string;
+    /** Null uses the key from a picked Emergency Kit or saved on this Mac. */
+    secretKey: string | null;
     kdf: KdfParams;
     srpB: string;
   }) => invoke<LoginProof>('login_prove', args),
@@ -57,4 +74,16 @@ export const core = {
   saveEmergencyKit: (email: string) => invoke<boolean>('save_emergency_kit', { email }),
   /** Drops the staged Secret Key once the person confirms the kit is saved. */
   discardEmergencyKit: () => invoke<void>('discard_emergency_kit'),
+
+  /** The account whose Secret Key this Mac remembers, if any. */
+  rememberedAccount: () => invoke<RememberedAccount | null>('remembered_account'),
+  /**
+   * Opens a file dialog for the Emergency Kit PDF and reads the Secret Key
+   * from it in Rust. The next sign-in uses it and saves it to the Keychain.
+   * Resolves to null if the person cancelled.
+   */
+  importEmergencyKit: () => invoke<ImportedKit | null>('import_emergency_kit'),
+  clearEmergencyKitImport: () => invoke<void>('clear_emergency_kit_import'),
+  /** Deletes the saved Secret Key from this Mac's Keychain. */
+  forgetSecretKey: () => invoke<void>('forget_secret_key'),
 };

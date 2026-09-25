@@ -23,6 +23,7 @@ import { ErrorBoundary } from '../ui/ErrorBoundary.js';
 import { Icon, type IconName } from '../ui/Icon.js';
 import { VaultApi } from '../vault/api.js';
 import { FOCUS_SEARCH_EVENT, VaultScreen } from '../vault/VaultScreen.js';
+import type { RememberedAccount } from '../core.js';
 import { SettingsView, type SettingsSection } from './SettingsView.js';
 import { TeamInvites } from './TeamInvites.js';
 
@@ -44,6 +45,8 @@ export function AppShell(props: {
   session: Session;
   lockStatus: LockStatus | null;
   onLockChanged: () => void;
+  remembered: RememberedAccount | null;
+  onForgetSecretKey: () => Promise<void>;
   onSignOut: () => void;
 }) {
   const { session } = props;
@@ -376,6 +379,8 @@ export function AppShell(props: {
                 onSection={(section) => setRoute({ name: 'settings', section })}
                 lockStatus={props.lockStatus}
                 onLockChanged={props.onLockChanged}
+                remembered={props.remembered}
+                onForgetSecretKey={props.onForgetSecretKey}
                 onSignOut={props.onSignOut}
               />
             )}

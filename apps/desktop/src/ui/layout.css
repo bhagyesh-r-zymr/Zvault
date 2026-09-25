@@ -512,6 +512,29 @@
   gap: 16px;
 }
 
+.saved-key {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 12px;
+  color: var(--text-2);
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+
+.saved-key .mono {
+  flex-grow: 1;
+  font: 13px var(--mono);
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+
+.saved-key-check {
+  color: var(--secure);
+}
+
 .auth-foot {
   display: flex;
   justify-content: space-between;

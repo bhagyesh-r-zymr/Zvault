@@ -1,5 +1,8 @@
+import { secretSharePayload, type SharedItemPayload } from '@zvault/shared';
 import { useMemo, useState } from 'react';
-import { CopyButton, ErrorLine, SecretText } from '../ui/controls.js';
+import type { SharingApi } from '../sharing/api.js';
+import { ShareItem } from '../sharing/ShareItem.js';
+import { CopyButton, ErrorLine, SecretText, Sheet } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import { useProjects, useProjectsSync, useProjectTeam, useTeamStore } from './context.js';
 import {
@@ -54,6 +57,8 @@ export function ProjectsView(props: {
   onEnvChange: (envId: string) => void;
   onOpenProject: (projectId: string, envId: string) => void;
   onOpenAccess: () => void;
+  /** Absent in previews; hides Share. */
+  sharing?: SharingApi;
 }) {
   const { projects, secrets, status } = useProjects();
   const team = useProjectTeam(props.projectId);
@@ -258,6 +263,7 @@ export function ProjectsView(props: {
             canEdit={canEdit}
             onEnvChange={props.onEnvChange}
             onOpenAccess={props.onOpenAccess}
+            {...(props.sharing && { sharing: props.sharing })}
           />
         ) : (
           <div className="empty">
@@ -293,10 +299,12 @@ function SecretDetail(props: {
   canEdit: boolean;
   onEnvChange: (envId: string) => void;
   onOpenAccess: () => void;
+  sharing?: SharingApi;
 }) {
-  const { project, env, secret } = props;
+  const { project, env, secret, sharing } = props;
   const sync = useProjectsSync();
   const [revealed, setRevealed] = useState<string | null>(null);
+  const [sharePayload, setSharePayload] = useState<SharedItemPayload | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -310,6 +318,26 @@ function SecretDetail(props: {
     setError(null);
     try {
       setRevealed(await open());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'This value could not be decrypted.');
+    }
+  };
+
+  // Only someone holding this environment's key (Use or higher) can open the
+  // value, so only they get Share. It is encrypted on this Mac before it leaves.
+  const share = async () => {
+    setError(null);
+    try {
+      setSharePayload(
+        secretSharePayload({
+          name: secret.name,
+          key: secret.key,
+          value: await open(),
+          note: secret.note,
+          project: project.name,
+          environment: env.name,
+        }),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'This value could not be decrypted.');
     }
@@ -365,6 +393,13 @@ function SecretDetail(props: {
               ))}
             </div>
           </div>
+          {sharing && source && (
+            <div className="item-actions">
+              <button type="button" className="small" onClick={() => void share()}>
+                <Icon name="share" size={13} /> Share
+              </button>
+            </div>
+          )}
         </div>
 
         <div>
@@ -487,6 +522,20 @@ function SecretDetail(props: {
           )}
         </div>
       </div>
+      {sharePayload && sharing && (
+        <Sheet
+          title={`Share ${secret.key}`}
+          subtitle={`The ${env.name} value, encrypted on this Mac before it leaves`}
+          icon={
+            <span className="tile">
+              <Icon name="key" size={15} />
+            </span>
+          }
+          onClose={() => setSharePayload(null)}
+        >
+          <ShareItem api={sharing} item={sharePayload} />
+        </Sheet>
+      )}
     </>
   );
 }

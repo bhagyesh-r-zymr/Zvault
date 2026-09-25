@@ -39,6 +39,21 @@ class FakeCore extends Core {
     url: '$shareOrigin/#AAAAAAAAAAAAAAAAAAAAAA.linkkey',
   );
 
+  /// Project secrets shared through [createSecretShareLink] or [sealSecretShareTo].
+  final sharedSecrets = <SecretShare>[];
+
+  @override
+  Future<NewShareLink> createSecretShareLink(SecretShare secret, String shareOrigin) async {
+    sharedSecrets.add(secret);
+    return createShareLink('', '', shareOrigin);
+  }
+
+  @override
+  Future<NewUserShare> sealSecretShareTo(SecretShare secret, String recipientPublicKey) async {
+    sharedSecrets.add(secret);
+    return sealShareTo('', '', recipientPublicKey);
+  }
+
   @override
   Future<SharingIdentity> sharingIdentity() async =>
       const SharingIdentity(publicKey: 'my-key', fingerprint: 'mine');

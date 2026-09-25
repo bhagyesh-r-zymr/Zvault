@@ -39,6 +39,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   OneTimeCode dco_decode_box_autoadd_one_time_code(dynamic raw);
 
   @protected
+  SecretShare dco_decode_box_autoadd_secret_share(dynamic raw);
+
+  @protected
   EnvironmentView dco_decode_environment_view(dynamic raw);
 
   @protected
@@ -78,6 +81,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ScannedCode dco_decode_scanned_code(dynamic raw);
 
   @protected
+  SecretShare dco_decode_secret_share(dynamic raw);
+
+  @protected
   SharingIdentity dco_decode_sharing_identity(dynamic raw);
 
   @protected
@@ -105,6 +111,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   OneTimeCode sse_decode_box_autoadd_one_time_code(
     SseDeserializer deserializer,
   );
+
+  @protected
+  SecretShare sse_decode_box_autoadd_secret_share(SseDeserializer deserializer);
 
   @protected
   EnvironmentView sse_decode_environment_view(SseDeserializer deserializer);
@@ -148,6 +157,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ScannedCode sse_decode_scanned_code(SseDeserializer deserializer);
 
   @protected
+  SecretShare sse_decode_secret_share(SseDeserializer deserializer);
+
+  @protected
   SharingIdentity sse_decode_sharing_identity(SseDeserializer deserializer);
 
   @protected
@@ -180,6 +192,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_one_time_code(
     OneTimeCode self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_secret_share(
+    SecretShare self,
     SseSerializer serializer,
   );
 
@@ -230,6 +248,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_scanned_code(ScannedCode self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_secret_share(SecretShare self, SseSerializer serializer);
 
   @protected
   void sse_encode_sharing_identity(

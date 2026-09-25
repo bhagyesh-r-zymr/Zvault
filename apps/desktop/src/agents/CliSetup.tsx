@@ -16,19 +16,24 @@ export const AGENT_NAME = 'Claude Code';
 
 /**
  * What to paste into Claude Code (or ~/.claude/CLAUDE.md). Reads go through
- * the paired agent's scopes; `zv set` always acts as the user, so Zvault asks
- * for approval on every write.
+ * the paired agent's scopes; every change (`zv set`, projects, environments,
+ * folders, `zv rm`, `zv item`) acts as the user, so Zvault asks for approval
+ * each time. `zv guide` carries the full reference.
  */
 export const CLAUDE_GUIDE = `# Zvault secrets
 
-My secrets live in Zvault, a password manager app on this Mac. Use its \`zv\` command to work with them. Never print secret values into this conversation, into files, or into logs.
+My secrets and logins live in Zvault, a password manager app on this Mac. Use its \`zv\` command (also \`zvault\`) for them. Run \`zv guide\` once for the full reference, and \`zv <command> --help\` for any command. Never print secret values into this conversation, into files, or into logs.
 
-- Paths look like \`zv://<project>/<environment>/[<folder>/]<KEY>\`, for example \`zv://web/staging/DATABASE_URL\`.
+- Paths look like \`zv://<project>/<environment>/[<folder>/]<KEY>\`, for example \`zv://web/staging/DATABASE_URL\`. Slugs are lowercase with dashes; KEY is the variable name.
 - First time only: run \`zv agent pair --name "${AGENT_NAME}"\` and wait while I approve it in Zvault (up to 2 minutes).
-- See what exists (names only): \`zv ls --agent "${AGENT_NAME}" -r zv://<project>\`.
+- See what exists (names only): \`zv projects\` and \`zv ls -r zv://<project>\`. Add \`--json\` when you want to parse it.
+- Set up structure: \`zv project create "<Name>" --env Development --env Production\`, \`zv environment create zv://<project> <Name> [--inherits <env>]\`, \`zv folder create zv://<project> <Name>\`. Rename with \`zv project rename\`, \`zv environment edit\`, \`zv folder rename\`.
+- Store a secret: \`printf '%s' '<value>' | zv set zv://<project>/<environment>/<KEY>\`. For a new random value use \`zv set <path> --generate 48\`, so the value never appears here.
 - Use secrets in a command without seeing them: \`zv run --agent "${AGENT_NAME}" --env NAME=zv://<project>/<environment>/<KEY> -- <command>\`, or \`--env-from zv://<project>/<environment>\` for a whole environment.
-- Create or update a secret: \`printf '%s' '<value>' | zv set zv://<project>/<environment>/<KEY>\`. For a new random value, pipe a generator instead so the value never appears here: \`openssl rand -base64 32 | zv set zv://<project>/<environment>/<KEY>\`. Zvault asks me to approve every change, so tell me to check the app. The project and environment must already exist.
-- If zv says Zvault is locked or a request was denied, ask me instead of retrying.
+- Logins: \`zv item list\`, \`zv item create --title <T> --username <U> --url <URL> --generate\`, \`zv item edit <T> --generate\`, \`zv item get <T> --field username\`.
+- Delete only when I ask: \`zv rm <path> --yes\`, \`zv folder delete\`, \`zv environment delete\`, \`zv project delete\`, \`zv item delete\`, each with \`--yes\`.
+- Zvault asks me to approve every change, so tell me to check the app when you make one. If zv says Zvault is locked or not running, or a request was denied, ask me instead of retrying.
+- zv only works on this Mac while Zvault is open; it does not work from cloud agents.
 `;
 
 /** Install button, terminal command, and where `zv` is linked. */

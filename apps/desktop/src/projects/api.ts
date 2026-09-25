@@ -16,6 +16,7 @@ import {
   type PutFolderRequest,
   type PutSecretRequest,
   type RotateEnvironmentKeyRequest,
+  type UpdateProjectRequest,
 } from '@zvault/shared';
 import { ApiError, type ApiSession } from '../vault/api.js';
 
@@ -62,6 +63,15 @@ export class ProjectsApi {
 
   async createProject(body: CreateProjectRequest): Promise<ProjectRecord> {
     return ProjectRecord.parse(await this.request('POST', '/projects', body));
+  }
+
+  async updateProject(projectId: string, body: UpdateProjectRequest): Promise<ProjectRecord> {
+    return ProjectRecord.parse(await this.request('PATCH', `/projects/${projectId}`, body));
+  }
+
+  /** Deletes a project with everything in it (owner only). */
+  async deleteProject(projectId: string): Promise<void> {
+    await this.request('DELETE', `/projects/${projectId}`);
   }
 
   async syncProject(projectId: string, since: number): Promise<SyncProjectResponse> {

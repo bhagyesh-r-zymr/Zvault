@@ -39,7 +39,7 @@ pub enum RefError {
 }
 
 /// Matches `Slug` in `@zvault/shared`.
-fn slug(s: &str) -> Result<String, RefError> {
+pub fn slug(s: &str) -> Result<String, RefError> {
     let ok = !s.is_empty()
         && s.len() <= MAX_SLUG
         && !s.starts_with('-')

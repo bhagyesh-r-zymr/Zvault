@@ -21,6 +21,9 @@ const WANTS: Record<PurposeKind, string> = {
   copy: 'wants to copy',
   set: 'wants to change',
   signIn: 'wants to sign in to zv',
+  change: 'wants to make a change',
+  readItem: 'wants to see a vault item',
+  changeItem: 'wants to change your vault',
 };
 
 const MODES = Object.keys(APPROVAL_MODE_TEXT) as ApprovalMode[];
@@ -95,6 +98,13 @@ function ApprovalSheet({ prompt, onDone }: { prompt: ApprovalPrompt; onDone: () 
       onClose={() => void answer(false)}
       width={480}
     >
+      {prompt.purpose.detail && (
+        <p className={prompt.purpose.destructive ? 'notice danger' : 'notice'}>
+          <Icon name={prompt.purpose.destructive ? 'trash' : 'edit'} size={14} />
+          {prompt.purpose.detail}
+          {prompt.purpose.destructive && ' This cannot be undone.'}
+        </p>
+      )}
       <dl className="request-facts">
         {prompt.purpose.command.length > 0 && (
           <>

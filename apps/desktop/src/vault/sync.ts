@@ -82,6 +82,39 @@ export class VaultSync {
     return saved.id;
   }
 
+  /**
+   * The item whose id is `query`, or the one item titled `query` (ignoring
+   * case). Throws when none or several match, for `zv item`.
+   */
+  find(query: string): ListedItem {
+    const byId = this.snapshot.find((i) => i.id === query);
+    if (byId) return byId;
+    const wanted = query.trim().toLowerCase();
+    const matches = this.snapshot.filter((i) => i.summary.title.trim().toLowerCase() === wanted);
+    if (matches.length === 1) return matches[0]!;
+    if (matches.length === 0) throw new Error(`No item is called “${query}”.`);
+    throw new Error(
+      `${matches.length} items are called “${query}”; use its id (zv item list shows it).`,
+    );
+  }
+
+  /** An item's ciphertext, for the Rust core to open. */
+  cipher(itemId: string): ItemCipher {
+    return cipherOf(this.record(itemId));
+  }
+
+  /** Uploads an item the Rust core already sealed (`zv item create` / `edit`). */
+  async putSealed(sealed: ItemCipher): Promise<void> {
+    const existing = this.records.get(sealed.id);
+    await this.write(() =>
+      this.api.putItem(this.vault.id, sealed.id, {
+        baseRevision: existing?.revision ?? 0,
+        encryptedKey: sealed.encryptedKey,
+        encryptedData: sealed.encryptedData,
+      }),
+    );
+  }
+
   async remove(itemId: string): Promise<void> {
     const existing = this.record(itemId);
     await this.write(() => this.api.deleteItem(this.vault.id, itemId, existing.revision));

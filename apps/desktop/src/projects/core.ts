@@ -57,6 +57,8 @@ export interface ProjectsCore {
    * `GET /access/projects/:id/keys/me`.
    */
   openProject(project: ProjectCipher, memberWrap?: StoredMemberWrap | null): Promise<unknown>;
+  /** Re-seals a project's metadata under its key, for renaming it. */
+  sealProject(projectId: string, meta: ProjectMeta): Promise<EncryptedBlob>;
   openEnvironment(
     projectId: string,
     environment: EnvironmentCipher,
@@ -99,6 +101,7 @@ export const projectsCore: ProjectsCore = {
   createProject: (meta, environments) => invoke('project_create', { meta, environments }),
   openProject: (project, memberWrap) =>
     invoke('project_open', { project, memberWrap: memberWrap ?? null }),
+  sealProject: (projectId, meta) => invoke('project_seal', { projectId, meta }),
   openEnvironment: (projectId, environment, memberWrap) =>
     invoke('environment_open', { projectId, environment, memberWrap: memberWrap ?? null }),
   sealEnvironment: (projectId, id, meta) => invoke('environment_seal', { projectId, id, meta }),

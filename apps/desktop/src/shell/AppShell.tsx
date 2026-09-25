@@ -22,6 +22,7 @@ import { SharingCenter } from '../sharing/SharingCenter.js';
 import { ErrorBoundary } from '../ui/ErrorBoundary.js';
 import { Icon, type IconName } from '../ui/Icon.js';
 import { VaultApi } from '../vault/api.js';
+import { vaultCore } from '../vault/core.js';
 import { FOCUS_SEARCH_EVENT, VaultScreen } from '../vault/VaultScreen.js';
 import type { RememberedAccount } from '../core.js';
 import { SettingsView, type SettingsSection } from './SettingsView.js';
@@ -94,7 +95,10 @@ export function AppShell(props: {
     void team.store.loadOrgs();
   }, [team]);
   // Answer `zv` lookups from these projects while the vault is unlocked.
-  useEffect(() => serveZv(projectsSync), [projectsSync]);
+  useEffect(
+    () => serveZv(projectsSync, { api: vaultApi, core: vaultCore }),
+    [projectsSync, vaultApi],
+  );
   const sharing = useMemo(
     () => sharingApi(() => ({ authorization: `Bearer ${session.token}` })),
     [session.token],

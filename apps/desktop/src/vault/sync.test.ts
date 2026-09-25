@@ -117,6 +117,24 @@ describe('VaultSync', () => {
     expect(sync.items().map((i) => i.summary.title)).toEqual(['Amazon']);
   });
 
+  it('finds items for zv by id or title and uploads what Rust sealed', async () => {
+    const sync = device(new FakeServer());
+    const gh = await sync.save(null, login('GitHub'));
+    await sync.save(null, login('Bank'));
+    await sync.save(null, login('bank'));
+    expect(sync.find('github').id).toBe(gh);
+    expect(sync.find(gh).summary.title).toBe('GitHub');
+    expect(() => sync.find('Bank')).toThrow(/2 items/);
+    expect(() => sync.find('Nope')).toThrow(/No item/);
+
+    const sealed = await fakeCore.sealItem(VAULT.id, sync.cipher(gh), login('GitHub', 'rotated'));
+    await sync.putSealed(sealed);
+    expect((await sync.open(gh)).password).toBe('rotated');
+    const fresh = await fakeCore.sealItem(VAULT.id, null, login('Stripe'));
+    await sync.putSealed(fresh);
+    expect(sync.find('Stripe').id).toBe(fresh.id);
+  });
+
   it('pulls other devices’ changes across pages, including deletions', async () => {
     const server = new FakeServer();
     const laptop = device(server);

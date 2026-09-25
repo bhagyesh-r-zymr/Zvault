@@ -45,8 +45,11 @@ function describe(a: ActivityEntry): string {
     case 'unpaired':
       return 'Unpaired';
     case 'denied':
+      if (a.purpose?.detail)
+        return `Denied: ${a.purpose.detail}${a.reason ? ` (${a.reason})` : ''}`;
       return `Denied${a.refs.length ? ` ${what}` : ''}${a.reason ? ` (${a.reason})` : ''}`;
     default:
+      if (a.purpose?.detail) return a.purpose.detail;
       return a.refs.length ? `Used ${what}${cmd}` : `Allowed ${a.purpose?.kind ?? 'request'}`;
   }
 }

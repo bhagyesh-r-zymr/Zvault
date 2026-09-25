@@ -12,6 +12,7 @@
 //! activity log and output masking.
 
 pub mod activity;
+pub mod manage;
 pub mod mask;
 pub mod paths;
 pub mod policy;

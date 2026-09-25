@@ -5,13 +5,16 @@
 //! sidecar). The link goes in `/usr/local/bin` when that is writable without
 //! admin rights, otherwise in `~/.local/bin`. With `admin`, macOS asks for an
 //! administrator password and the link always goes in `/usr/local/bin`,
-//! which every terminal has on its PATH.
+//! which every terminal has on its PATH. A second link, `zvault`, points at
+//! the same binary for people who look for the app's name.
 
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
 const NAME: &str = "zv";
+/// Also linked, so `zvault --help` works too.
+const ALIAS: &str = "zvault";
 const SYSTEM_DIR: &str = "/usr/local/bin";
 
 #[derive(Serialize)]
@@ -121,9 +124,9 @@ fn sh_quote(s: &str) -> String {
 
 /// What to paste into a terminal to link `target` into `/usr/local/bin`.
 fn terminal_command(target: &Path) -> String {
+    let t = sh_quote(&target.display().to_string());
     format!(
-        "sudo mkdir -p {SYSTEM_DIR} && sudo ln -sf {} {SYSTEM_DIR}/{NAME}",
-        sh_quote(&target.display().to_string())
+        "sudo mkdir -p {SYSTEM_DIR} && sudo ln -sf {t} {SYSTEM_DIR}/{ALIAS} && sudo ln -sf {t} {SYSTEM_DIR}/{NAME}"
     )
 }
 
@@ -131,11 +134,12 @@ fn terminal_command(target: &Path) -> String {
 /// replaces an old link but never a real file someone else put there.
 fn admin_script(target: &Path) -> String {
     let link = format!("{SYSTEM_DIR}/{NAME}");
+    let alias = format!("{SYSTEM_DIR}/{ALIAS}");
+    let t = sh_quote(&target.display().to_string());
     format!(
         "mkdir -p {SYSTEM_DIR} && {{ [ -L {link} ] || [ ! -e {link} ]; }} \
          || {{ echo '{link} is not a link Zvault made; remove it first' >&2; exit 1; }}; \
-         ln -sfn {} {link}",
-        sh_quote(&target.display().to_string())
+         ln -sfn {t} {link} && {{ {{ [ -L {alias} ] || [ ! -e {alias} ]; }} && ln -sfn {t} {alias} || true; }}"
     )
 }
 
@@ -169,6 +173,7 @@ fn install(target: &Path, dirs: &[PathBuf], path: &[PathBuf]) -> Result<CliInsta
     for dir in dirs {
         let link = dir.join(NAME);
         if links_to(&link, target) {
+            link_alias(target, dir);
             return Ok(done(dir, &link, path));
         }
         if !dir.is_dir() {
@@ -193,9 +198,25 @@ fn install(target: &Path, dirs: &[PathBuf], path: &[PathBuf]) -> Result<CliInsta
             Err(_) => {}
         }
         std::os::unix::fs::symlink(target, &link).map_err(|e| e.to_string())?;
+        link_alias(target, dir);
         return Ok(done(dir, &link, path));
     }
     Err("could not find a folder to install zv in".into())
+}
+
+/// Best effort: `zvault` next to `zv`, unless something else has that name.
+fn link_alias(target: &Path, dir: &Path) {
+    let alias = dir.join(ALIAS);
+    match std::fs::symlink_metadata(&alias) {
+        Ok(m) if m.file_type().is_symlink() => {
+            if links_to(&alias, target) || std::fs::remove_file(&alias).is_err() {
+                return;
+            }
+        }
+        Ok(_) => return,
+        Err(_) => {}
+    }
+    let _ = std::os::unix::fs::symlink(target, &alias);
 }
 
 fn done(dir: &Path, link: &Path, path: &[PathBuf]) -> CliInstalled {
@@ -230,6 +251,7 @@ mod tests {
         assert_eq!(out.path, fallback.join(NAME).display().to_string());
         assert!(out.on_path);
         assert!(links_to(&fallback.join(NAME), &target));
+        assert!(links_to(&fallback.join(ALIAS), &target));
         assert_eq!(
             std::fs::read(taken.join(NAME)).unwrap(),
             b"someone else's zv"
@@ -255,6 +277,7 @@ mod tests {
             .unwrap();
         assert_eq!(out.stdout, odd.display().to_string().as_bytes());
         assert!(terminal_command(odd).ends_with("/usr/local/bin/zv"));
+        assert!(terminal_command(odd).contains("/usr/local/bin/zvault"));
         assert!(admin_script(odd).contains(&sh_quote(&odd.display().to_string())));
     }
 }

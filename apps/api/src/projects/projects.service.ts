@@ -15,14 +15,17 @@ import {
   type EntryConflictResponse,
   type ProjectEntry,
   type ProjectRecord,
+  type ProjectTrashResponse,
   type PutEnvironmentRequest,
   type PutFolderRequest,
   type PutSecretRequest,
+  type SecretHistoryResponse,
   type SyncProjectResponse,
   type UpdateProjectRequest,
 } from '@zvault/shared';
 import { ProjectPolicy } from '../access/project-policy.js';
 import type { AuthenticatedUser } from '../vault/current-user.js';
+import { purgeAt, trashCutoff } from '../vault/vault.service.js';
 import {
   ProjectsStore,
   type EntryWrite,
@@ -203,6 +206,37 @@ export class ProjectsService {
     if (type !== 'secret') await this.assertOwner(access, user, projectId);
     else await this.policy.assertSecretWrite(projectId, user.id, []);
     return this.write(user, { projectId, id, type, baseRevision, encryptedMeta: null });
+  }
+
+  async secretHistory(
+    user: AuthenticatedUser,
+    projectId: string,
+    secretId: string,
+  ): Promise<SecretHistoryResponse> {
+    await this.access(user, projectId);
+    return { versions: await this.store.listSecretVersions(projectId, secretId, user.id) };
+  }
+
+  async trash(user: AuthenticatedUser, projectId: string): Promise<ProjectTrashResponse> {
+    await this.access(user, projectId);
+    const trashed = await this.store.listTrash(projectId, trashCutoff(new Date()), user.id);
+    return {
+      secrets: trashed.map((t) => ({
+        id: t.id,
+        revision: t.revision,
+        deletedAt: t.deletedAt.toISOString(),
+        purgeAt: purgeAt(t.deletedAt).toISOString(),
+        lastVersion: t.lastVersion,
+      })),
+    };
+  }
+
+  /** Deletes one trashed secret for good, or empties the trash (`secretId` null). */
+  async purge(user: AuthenticatedUser, projectId: string, secretId: string | null): Promise<void> {
+    await this.access(user, projectId);
+    await this.policy.assertSecretWrite(projectId, user.id, []);
+    const purged = await this.store.purgeTrash(projectId, secretId, new Date());
+    if (secretId !== null && purged === 0) throw new NotFoundException();
   }
 
   private async write(

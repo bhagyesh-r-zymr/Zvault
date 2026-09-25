@@ -15,6 +15,7 @@ import { CopyButton, ErrorLine, LetterTile, SecretText, Sheet } from '../ui/cont
 import { Icon } from '../ui/Icon.js';
 import { ConflictError, type VaultApi } from './api.js';
 import { vaultCore, type ItemFields, type VaultCore } from './core.js';
+import { ItemHistory } from './ItemHistory.js';
 import { PasskeyEditor, PasskeyPanel } from './Passkey.js';
 import { openDefaultVault, VaultSync } from './sync.js';
 import './vault.css';
@@ -319,6 +320,7 @@ function ItemDetail(props: {
   const [revealed, setRevealed] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [payload, setPayload] = useState<SharedItemPayload | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -364,6 +366,9 @@ function ItemDetail(props: {
                 <Icon name="share" size={13} /> Share
               </button>
             )}
+            <button type="button" className="small" onClick={() => setHistoryOpen(true)}>
+              <Icon name="history" size={13} /> History
+            </button>
             <button type="button" className="small" onClick={onEdit}>
               <Icon name="edit" size={13} /> Edit
             </button>
@@ -434,13 +439,13 @@ function ItemDetail(props: {
           {confirmDelete ? (
             <>
               <span className="secondary" style={{ alignSelf: 'center' }}>
-                Delete “{title}” on all your devices?
+                Move “{title}” to Trash? You can restore it for 30 days.
               </span>
               <button type="button" onClick={() => setConfirmDelete(false)}>
                 Cancel
               </button>
               <button type="button" className="danger" onClick={remove}>
-                Delete
+                Move to Trash
               </button>
             </>
           ) : (
@@ -450,6 +455,22 @@ function ItemDetail(props: {
           )}
         </div>
       </article>
+      {historyOpen && (
+        <Sheet
+          title={`History of ${title}`}
+          subtitle="Earlier versions, decrypted on this Mac"
+          icon={<LetterTile name={title} />}
+          width={600}
+          onClose={() => setHistoryOpen(false)}
+        >
+          <ItemHistory
+            sync={sync}
+            id={id}
+            current={fields}
+            onRestored={() => setHistoryOpen(false)}
+          />
+        </Sheet>
+      )}
       {payload && sharingApi && (
         <Sheet
           title={`Share ${title}`}

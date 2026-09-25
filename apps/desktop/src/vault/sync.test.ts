@@ -1,4 +1,11 @@
-import type { EncryptedBlob, ItemRecord, PutItemRequest, SyncItemsResponse } from '@zvault/shared';
+import type {
+  EncryptedBlob,
+  ItemRecord,
+  ItemVersion,
+  PutItemRequest,
+  SyncItemsResponse,
+  TrashedItem,
+} from '@zvault/shared';
 import { describe, expect, it } from 'vitest';
 import { ApiError, ConflictError, VaultApi } from './api.js';
 import type { ItemCipher, ItemFields, VaultCore } from './core.js';
@@ -46,6 +53,7 @@ function decode(item: ItemCipher): ItemFields {
 /** Minimal server with the same revision and sequence rules as the API. */
 class FakeServer {
   items = new Map<string, ItemRecord>();
+  versions = new Map<string, ItemVersion[]>();
   seq = 0;
   pageSize = 2;
 
@@ -69,6 +77,26 @@ class FakeServer {
     return this.write(vaultId, id, baseRevision, null);
   }
 
+  itemHistory(_vaultId: string, id: string): Promise<ItemVersion[]> {
+    return Promise.resolve([...(this.versions.get(id) ?? [])].reverse());
+  }
+
+  trash(): Promise<TrashedItem[]> {
+    const trashed = [...this.items.values()].flatMap((i) => {
+      const last = this.versions.get(i.id)?.at(-1);
+      return i.deleted && last
+        ? [{ id: i.id, revision: i.revision, deletedAt: '', purgeAt: '', lastVersion: last }]
+        : [];
+    });
+    return Promise.resolve(trashed);
+  }
+
+  purgeTrash(_vaultId: string, id: string | null): Promise<void> {
+    for (const i of this.items.values())
+      if (i.deleted && (id ?? i.id) === i.id) this.versions.delete(i.id);
+    return Promise.resolve();
+  }
+
   private write(
     vaultId: string,
     id: string,
@@ -78,6 +106,16 @@ class FakeServer {
     const current = this.items.get(id);
     if ((current?.revision ?? 0) !== baseRevision) {
       return Promise.reject(current ? new ConflictError(current) : new ApiError(404));
+    }
+    if (current && !current.deleted) {
+      const kept = this.versions.get(id) ?? [];
+      kept.push({
+        revision: current.revision,
+        savedAt: current.updatedAt,
+        encryptedKey: current.encryptedKey,
+        encryptedData: current.encryptedData,
+      });
+      this.versions.set(id, kept);
     }
     const base = { id, vaultId, revision: baseRevision + 1, seq: ++this.seq, updatedAt: '' };
     const item: ItemRecord = body
@@ -118,6 +156,41 @@ describe('VaultSync', () => {
 
     await sync.remove(b);
     expect(sync.items().map((i) => i.summary.title)).toEqual(['Amazon']);
+  });
+
+  it('lists earlier versions and restores one', async () => {
+    const sync = device(new FakeServer());
+    const id = await sync.save(null, login('Bank', 'first'));
+    await sync.save(id, login('Bank', 'second'));
+    await sync.save(id, login('Bank', 'third'));
+
+    const history = await sync.history(id);
+    expect(history.map((v) => v.fields.password)).toEqual(['second', 'first']);
+
+    await sync.restoreVersion(id, history[1]!.cipher);
+    expect((await sync.open(id)).password).toBe('first');
+    expect((await sync.history(id)).map((v) => v.fields.password)).toEqual([
+      'third',
+      'second',
+      'first',
+    ]);
+  });
+
+  it('restores a deleted item from the trash, or deletes it forever', async () => {
+    const sync = device(new FakeServer());
+    const bank = await sync.save(null, login('Bank'));
+    const shop = await sync.save(null, login('Shop'));
+    await sync.remove(bank);
+    await sync.remove(shop);
+
+    const trash = await sync.trash();
+    expect(trash.map((t) => t.summary.title).sort()).toEqual(['Bank', 'Shop']);
+
+    await sync.restoreFromTrash(trash.find((t) => t.id === bank)!.trashed);
+    expect(sync.items().map((i) => i.summary.title)).toEqual(['Bank']);
+
+    await sync.purge(shop);
+    expect(await sync.trash()).toEqual([]);
   });
 
   it('finds items for zv by id or title and uploads what Rust sealed', async () => {

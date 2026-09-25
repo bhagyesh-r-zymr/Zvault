@@ -11,6 +11,8 @@ import {
   type MyProjectKeysResponse,
   type ProjectEntry,
   type ProjectRecord,
+  type SecretVersion,
+  type TrashedSecret,
 } from '@zvault/shared';
 import { EntryConflictError, type ProjectsApi } from './api.js';
 import type { ProjectsCore } from './core.js';
@@ -40,6 +42,24 @@ export interface EnvironmentDraft {
   kind?: EnvironmentKind;
   /** Where a secret with no value here takes it from. */
   inheritsFrom?: string | null;
+}
+
+/** An earlier version of a secret, with its metadata decrypted; values stay sealed. */
+export interface SecretVersionView {
+  revision: number;
+  savedAt: string;
+  meta: SecretMeta;
+  version: SecretVersion;
+}
+
+/** A deleted secret as the Trash shows it. */
+export interface TrashedSecretView {
+  id: string;
+  projectId: string;
+  deletedAt: string;
+  purgeAt: string;
+  meta: SecretMeta;
+  trashed: TrashedSecret;
 }
 
 interface Tracked extends ProjectState {
@@ -450,6 +470,114 @@ export class ProjectsSync {
     await this.write(project, () =>
       this.api.deleteEntry(projectId, 'secret', secretId, secret.revision),
     );
+  }
+
+  /** Earlier versions of a secret, newest first. Unreadable ones are skipped. */
+  async secretHistory(projectId: string, secretId: string): Promise<SecretVersionView[]> {
+    const versions = await this.api.secretHistory(projectId, secretId);
+    const views: SecretVersionView[] = [];
+    for (const version of versions) {
+      try {
+        const meta = SecretMeta.parse(
+          await this.core.openEntry(projectId, 'secret', secretId, version.encryptedMeta),
+        );
+        views.push({ revision: version.revision, savedAt: version.savedAt, meta, version });
+      } catch {
+        // Tampered or corrupt; nothing to show or restore.
+      }
+    }
+    return views;
+  }
+
+  /** Decrypts an old value from a secret's history. Never keep or log the result. */
+  openHistoricValue(
+    projectId: string,
+    secretId: string,
+    version: SecretVersion,
+    environmentId: string,
+  ): Promise<string> {
+    const blob = version.values.find((v) => v.environmentId === environmentId)?.encryptedValue;
+    if (!blob) return Promise.reject(new Error('This value is not available.'));
+    return this.core.openValue(projectId, secretId, environmentId, blob);
+  }
+
+  /**
+   * Makes an earlier version of a secret current: its metadata and, in every
+   * environment this account holds a key for, its value (clearing values the
+   * version didn't have). Environments this account can't read keep theirs.
+   */
+  async restoreSecretVersion(
+    projectId: string,
+    secretId: string,
+    version: SecretVersion,
+  ): Promise<void> {
+    await this.pull(projectId);
+    const project = this.project(projectId);
+    const current = project.secrets.get(secretId);
+    if (!current) throw new Error('This secret is no longer available.');
+    const values: Record<string, EncryptedBlob | null> = {};
+    for (const [envId, env] of project.environments) {
+      if (!env.unlocked) continue;
+      const old = version.values.find((v) => v.environmentId === envId)?.encryptedValue;
+      if (old) values[envId] = old;
+      else if (current.values[envId]) values[envId] = null;
+    }
+    await this.write(project, () =>
+      this.api.putSecret(projectId, secretId, {
+        baseRevision: current.revision,
+        encryptedMeta: version.encryptedMeta,
+        values,
+      }),
+    );
+  }
+
+  /** Secrets deleted from every loaded project in the last 30 days, newest first. */
+  async trash(): Promise<TrashedSecretView[]> {
+    const views: TrashedSecretView[] = [];
+    for (const project of this.projects.values()) {
+      for (const t of await this.api.trash(project.id)) {
+        try {
+          const meta = SecretMeta.parse(
+            await this.core.openEntry(project.id, 'secret', t.id, t.lastVersion.encryptedMeta),
+          );
+          views.push({
+            id: t.id,
+            projectId: project.id,
+            deletedAt: t.deletedAt,
+            purgeAt: t.purgeAt,
+            meta,
+            trashed: t,
+          });
+        } catch {
+          this.unreadable += 1;
+        }
+      }
+    }
+    return views.sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));
+  }
+
+  /** Puts a deleted secret back with the values it had in environments that still exist. */
+  async restoreFromTrash(projectId: string, secret: TrashedSecret): Promise<void> {
+    await this.pull(projectId);
+    const project = this.project(projectId);
+    const values: Record<string, EncryptedBlob> = {};
+    for (const v of secret.lastVersion.values) {
+      if (project.environments.get(v.environmentId)?.unlocked) {
+        values[v.environmentId] = v.encryptedValue;
+      }
+    }
+    await this.write(project, () =>
+      this.api.putSecret(projectId, secret.id, {
+        baseRevision: secret.revision,
+        encryptedMeta: secret.lastVersion.encryptedMeta,
+        values,
+      }),
+    );
+  }
+
+  /** Deletes one trashed secret for good, or empties the project's trash (`secretId` null). */
+  purge(projectId: string, secretId: string | null): Promise<void> {
+    return this.api.purgeTrash(projectId, secretId);
   }
 
   /**

@@ -4,13 +4,16 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type {
-  CreateVaultRequest,
-  ItemConflictResponse,
-  ItemRecord,
-  PutItemRequest,
-  SyncItemsResponse,
-  VaultRecord,
+import {
+  TRASH_RETENTION_DAYS,
+  type CreateVaultRequest,
+  type ItemConflictResponse,
+  type ItemHistoryResponse,
+  type ItemRecord,
+  type PutItemRequest,
+  type SyncItemsResponse,
+  type VaultRecord,
+  type VaultTrashResponse,
 } from '@zvault/shared';
 import type { AuthenticatedUser } from './current-user.js';
 import { VaultStore, type ItemWrite, type StoredVault } from './vault.store.js';
@@ -86,6 +89,36 @@ export class VaultService {
     return { items, cursor: items.at(-1)?.seq ?? since, hasMore: changes.length > limit };
   }
 
+  async history(
+    user: AuthenticatedUser,
+    vaultId: string,
+    itemId: string,
+  ): Promise<ItemHistoryResponse> {
+    await this.assertAccess(user, vaultId);
+    return { versions: await this.store.listVersions(vaultId, itemId) };
+  }
+
+  async trash(user: AuthenticatedUser, vaultId: string): Promise<VaultTrashResponse> {
+    await this.assertAccess(user, vaultId);
+    const trashed = await this.store.listTrash(vaultId, trashCutoff(new Date()));
+    return {
+      items: trashed.map((t) => ({
+        id: t.id,
+        revision: t.revision,
+        deletedAt: t.deletedAt.toISOString(),
+        purgeAt: purgeAt(t.deletedAt).toISOString(),
+        lastVersion: t.lastVersion,
+      })),
+    };
+  }
+
+  /** Deletes one trashed item for good, or empties the trash (`itemId` null). */
+  async purge(user: AuthenticatedUser, vaultId: string, itemId: string | null): Promise<void> {
+    await this.assertAccess(user, vaultId);
+    const purged = await this.store.purgeTrash(vaultId, itemId, new Date());
+    if (itemId !== null && purged === 0) throw new NotFoundException();
+  }
+
   private async write(write: ItemWrite): Promise<ItemRecord> {
     const result = await this.store.putItem(write);
     if (result.ok) return result.item;
@@ -99,6 +132,17 @@ export class VaultService {
     const vault = await this.store.getVault(vaultId);
     if (vault?.ownerId !== user.id) throw new NotFoundException();
   }
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Items deleted before this have left the trash. */
+export function trashCutoff(now: Date): Date {
+  return new Date(now.getTime() - TRASH_RETENTION_DAYS * DAY_MS);
+}
+
+export function purgeAt(deletedAt: Date): Date {
+  return new Date(deletedAt.getTime() + TRASH_RETENTION_DAYS * DAY_MS);
 }
 
 function toVaultRecord({ id, encryptedKey, encryptedMeta, createdAt }: StoredVault): VaultRecord {

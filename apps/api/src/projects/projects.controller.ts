@@ -23,6 +23,8 @@ import {
   type ListProjectsResponse,
   type ProjectEntry,
   type ProjectRecord,
+  type ProjectTrashResponse,
+  type SecretHistoryResponse,
   type SyncProjectResponse,
 } from '@zvault/shared';
 import { z } from 'zod';
@@ -146,5 +148,41 @@ export class ProjectsController {
     @Query(DeleteQueryPipe) query: DeleteQuery,
   ): Promise<ProjectEntry> {
     return this.projects.deleteEntry(user, projectId, 'secret', id, query.baseRevision);
+  }
+
+  @Get(':projectId/secrets/:id/history')
+  secretHistory(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('projectId', Id) projectId: string,
+    @Param('id', Id) id: string,
+  ): Promise<SecretHistoryResponse> {
+    return this.projects.secretHistory(user, projectId, id);
+  }
+
+  @Get(':projectId/trash')
+  trash(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('projectId', Id) projectId: string,
+  ): Promise<ProjectTrashResponse> {
+    return this.projects.trash(user, projectId);
+  }
+
+  @Delete(':projectId/trash')
+  @HttpCode(204)
+  emptyTrash(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('projectId', Id) projectId: string,
+  ): Promise<void> {
+    return this.projects.purge(user, projectId, null);
+  }
+
+  @Delete(':projectId/trash/:id')
+  @HttpCode(204)
+  purge(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('projectId', Id) projectId: string,
+    @Param('id', Id) id: string,
+  ): Promise<void> {
+    return this.projects.purge(user, projectId, id);
   }
 }

@@ -62,6 +62,8 @@ pub fn lock(app: &AppHandle, reason: LockReason) {
     app.state::<crate::Keyring>().lock();
     app.state::<crate::agents::AgentHub>().on_lock();
     crate::auth::forget(app);
+    // A locked vault stays locked after a restart.
+    crate::stay_unlocked::forget(app);
     state.clipboard.clear_if_ours(None);
     if was_unlocked {
         let _ = app.emit(LOCKED_EVENT, LockedEvent { reason });

@@ -1,7 +1,8 @@
 import { isTwoFactorRequired, type EncryptedBlob, type TwoFactorProof } from '@zvault/shared';
-import { api } from './api.js';
+import { api, ApiRequestError } from './api.js';
 import { core } from './core.js';
 import { thisDevice } from './device.js';
+import { lock } from './lock.js';
 
 export const MIN_PASSWORD_LENGTH = 10;
 
@@ -109,6 +110,24 @@ async function unlock(
     await api.logout(session.sessionToken).catch(() => undefined);
     throw e;
   }
+}
+
+/**
+ * Reopens the session "Stay unlocked" saved at the last unlock, unless the
+ * server has since ended it. Offline, the vault still opens: the key is local.
+ */
+export async function resumeSession(): Promise<Session | null> {
+  const saved = await lock.restore().catch(() => null);
+  if (!saved) return null;
+  try {
+    await api.session(saved.token);
+  } catch (e) {
+    if (e instanceof ApiRequestError && e.status === 401) {
+      await signOut(saved);
+      return null;
+    }
+  }
+  return saved;
 }
 
 export async function signOut(session: Session): Promise<void> {

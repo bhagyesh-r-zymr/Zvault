@@ -8,18 +8,21 @@ import { useEffect } from 'react';
  */
 
 export type LockReason = 'manual' | 'idle' | 'sleep' | 'screenLocked';
-export type UnlockMethod = 'masterPassword' | 'touchId';
+export type UnlockMethod = 'masterPassword' | 'touchId' | 'restored';
 
 export interface LockSettings {
+  /** 0 never locks on idle. */
   idleTimeoutMins: number;
   lockOnSleep: boolean;
   lockOnScreenLock: boolean;
   clipboardClearSecs: number;
+  /** Open unlocked after a quit or restart, for up to 14 days. */
+  stayUnlocked: boolean;
 }
 
 /** Must match the ranges in `session.rs`. */
 export const LOCK_LIMITS = {
-  idleTimeoutMins: { min: 1, max: 480 },
+  idleTimeoutMins: { min: 0, max: 1440 },
   clipboardClearSecs: { min: 10, max: 300 },
 } as const;
 
@@ -38,6 +41,14 @@ export const lock = {
   enableTouchId: () => invoke<void>('enable_touch_id'),
   disableTouchId: () => invoke<void>('disable_touch_id'),
   unlockWithTouchId: () => invoke<void>('unlock_with_touch_id'),
+  /** Unlocks on this Mac with the master password, keeping the server session. */
+  unlockWithPassword: (password: string) => invoke<void>('unlock_with_password', { password }),
+  /** Saves the unlocked session for the next launch. A no-op unless "Stay unlocked" is on. */
+  saveForRestart: (token: string, expiresAt: string) =>
+    invoke<void>('stay_unlocked_save', { token, expiresAt }),
+  /** Reopens the session saved by "Stay unlocked", or null to sign in. */
+  restore: () =>
+    invoke<{ email: string; token: string; expiresAt: string } | null>('stay_unlocked_restore'),
   /** Copies a secret; resolves to the seconds until it is cleared. */
   copySecret: (text: string) => invoke<number>('copy_secret', { text }),
   onLocked: (handler: (reason: LockReason) => void): Promise<UnlistenFn> =>

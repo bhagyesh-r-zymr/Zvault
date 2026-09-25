@@ -200,3 +200,37 @@ pub mod secret_key {
         }
     }
 }
+
+/// The vault key kept for "Stay unlocked", so Zvault opens unlocked after a
+/// quit or restart. Like the Secret Key it lives in the login keychain, which
+/// works in unsigned builds; it never syncs to iCloud.
+pub mod saved_session {
+    use security_framework::passwords::{
+        delete_generic_password, get_generic_password, set_generic_password,
+    };
+    use zeroize::Zeroizing;
+
+    const SERVICE: &str = "com.zvault.desktop.stay-unlocked";
+    /// One saved session per Mac.
+    const ACCOUNT: &str = "session";
+    const ERR_SEC_ITEM_NOT_FOUND: i32 = -25300;
+
+    pub fn save(record: &[u8]) -> Result<(), String> {
+        set_generic_password(SERVICE, ACCOUNT, record).map_err(|e| e.to_string())
+    }
+
+    /// `None` if nothing is saved or the person denied the keychain prompt.
+    pub fn load() -> Option<Zeroizing<Vec<u8>>> {
+        get_generic_password(SERVICE, ACCOUNT)
+            .ok()
+            .map(Zeroizing::new)
+    }
+
+    pub fn delete() -> Result<(), String> {
+        match delete_generic_password(SERVICE, ACCOUNT) {
+            Ok(()) => Ok(()),
+            Err(e) if e.code() == ERR_SEC_ITEM_NOT_FOUND => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+}

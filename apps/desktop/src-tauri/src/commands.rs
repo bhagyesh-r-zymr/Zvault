@@ -57,14 +57,53 @@ pub fn report_activity(state: State<'_, AppState>) {
     state.session().touch(Instant::now());
 }
 
+/// Applies and saves new lock settings. Turning "Stay unlocked" off removes
+/// the saved key at once.
 #[tauri::command]
 pub fn set_lock_settings(
+    app: AppHandle,
     state: State<'_, AppState>,
     settings: LockSettings,
 ) -> Result<LockSettings, String> {
-    let mut session = state.session();
-    session.set_settings(settings).map_err(str::to_owned)?;
-    Ok(session.settings())
+    let settings = {
+        let mut session = state.session();
+        session.set_settings(settings).map_err(str::to_owned)?;
+        session.settings()
+    };
+    if !settings.stay_unlocked {
+        crate::stay_unlocked::forget(&app);
+    }
+    save_settings(&app, &settings).map_err(|e| format!("Couldn't save your settings: {e}"))?;
+    Ok(settings)
+}
+
+// Lock settings are kept in a plain file so they survive a restart. They hold
+// no secret, and a file that fails to parse or validate falls back to the
+// defaults, which are the stricter choice.
+
+fn settings_path(app: &AppHandle) -> Option<PathBuf> {
+    app.path()
+        .app_data_dir()
+        .ok()
+        .map(|d| d.join("lock-settings.json"))
+}
+
+/// Applies the saved lock settings. Call from `setup`, before anything unlocks.
+pub fn load_settings(app: &AppHandle) {
+    let saved = settings_path(app)
+        .and_then(|path| std::fs::read(path).ok())
+        .and_then(|bytes| serde_json::from_slice::<LockSettings>(&bytes).ok());
+    if let Some(settings) = saved {
+        let _ = app.state::<AppState>().session().set_settings(settings);
+    }
+}
+
+fn save_settings(app: &AppHandle, settings: &LockSettings) -> std::io::Result<()> {
+    let path = settings_path(app).ok_or_else(|| std::io::Error::other("no app data directory"))?;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    std::fs::write(path, serde_json::to_vec(settings)?)
 }
 
 /// Copies a secret and clears it after the configured delay. Returns the
@@ -146,7 +185,7 @@ pub async fn unlock_with_touch_id(app: AppHandle) -> Result<(), String> {
     );
     app.state::<crate::Keyring>()
         .unlock(crate::auth::copy_key(&keyset));
-    crate::auth::restore(&app, account_id, keyset);
+    crate::auth::restore(&app, account_id, keyset, None);
     Ok(())
 }
 

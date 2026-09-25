@@ -28,6 +28,7 @@ mod error;
 mod kdf;
 mod key;
 mod keyset;
+pub mod pairing;
 pub mod project;
 mod random;
 mod secret_key;

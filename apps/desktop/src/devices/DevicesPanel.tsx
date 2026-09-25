@@ -1,21 +1,28 @@
 import type { DeviceSession } from '@zvault/shared';
 import { useCallback, useEffect, useState } from 'react';
+import { AddPhoneSheet } from './AddPhoneSheet.js';
 import { DevicesApiError, type DevicesClient } from './client.js';
+import type { PairingClient } from './pairing.js';
 import { lastActive, platformLabel } from './format.js';
 import { Icon } from '../ui/Icon.js';
 
 export interface DevicesPanelProps {
   client: DevicesClient;
+  /** Adds a phone by QR code. */
+  pairing: PairingClient;
+  /** API origin put in the QR code, so the phone talks to the same server. */
+  apiUrl: string;
   /** Called when the current session turns out to be gone, including when the user revokes it. */
   onSignedOut: () => void;
 }
 
 /** Settings screen listing where the account is signed in, with sign-out controls. */
-export function DevicesPanel({ client, onSignedOut }: DevicesPanelProps) {
+export function DevicesPanel({ client, pairing, apiUrl, onSignedOut }: DevicesPanelProps) {
   const [devices, setDevices] = useState<DeviceSession[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
 
   const fail = useCallback(
     (e: unknown) => {
@@ -100,12 +107,17 @@ export function DevicesPanel({ client, onSignedOut }: DevicesPanelProps) {
         <h2 id="devices-heading" style={{ color: 'var(--text)' }}>
           Signed-in devices
         </h2>
-        {others > 0 &&
-          confirmButtons(
-            'others',
-            `Sign out ${others} other ${others === 1 ? 'device' : 'devices'}`,
-            signOutOthers,
-          )}
+        <span className="actions">
+          {others > 0 &&
+            confirmButtons(
+              'others',
+              `Sign out ${others} other ${others === 1 ? 'device' : 'devices'}`,
+              signOutOthers,
+            )}
+          <button type="button" className="small primary" onClick={() => setAdding(true)}>
+            <Icon name="plus" size={12} /> Add phone
+          </button>
+        </span>
       </div>
       <p className="secondary" style={{ marginBottom: 12 }}>
         Where your account is signed in. Sign out anything you don&apos;t recognise.
@@ -158,6 +170,16 @@ export function DevicesPanel({ client, onSignedOut }: DevicesPanelProps) {
             </li>
           ))}
         </ul>
+      )}
+
+      {adding && (
+        <AddPhoneSheet
+          client={pairing}
+          apiUrl={apiUrl}
+          onClose={() => setAdding(false)}
+          onAdded={() => void refresh()}
+          onSignedOut={onSignedOut}
+        />
       )}
     </section>
   );

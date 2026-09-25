@@ -20,6 +20,7 @@
     <link rel="preload" href="/fonts/geist.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/site.css" />
     <script src="/site.js" defer></script>
+    <script type="module" src="/archive.js"></script>
   </head>
   <body>
     <div class="backdrop" aria-hidden="true">
@@ -50,52 +51,130 @@
     </header>
 
     <main id="top">
-      <section class="hero">
-        <div class="hero-copy">
-          <p class="pill reveal"><span class="dot"></span>Zero-knowledge · End-to-end encrypted</p>
-          <h1 class="reveal">
-            Your passwords and team secrets,
-            <span class="grad">locked before they leave your Mac.</span>
-          </h1>
-          <p class="lede reveal">
-            Zvault is a password manager in the spirit of 1Password. Everything is encrypted on your
-            device with keys only you hold. Share a password with a link, give your team the right
-            environments, and let AI agents use secrets only when you approve.
-          </p>
-          <div class="cta reveal">
+      <!-- Hero: the floating archive (archive.js). Without WebGL it stays the static hero below. -->
+      <section class="archive" id="archive">
+        <div class="hero archive-stage">
+          <canvas class="archive-canvas" aria-hidden="true"></canvas>
+          <div class="archive-shade" aria-hidden="true"></div>
+          <div class="hero-copy">
+            <p class="pill reveal">
+              <span class="dot"></span>Zero-knowledge · End-to-end encrypted
+            </p>
+            <h1 class="reveal">
+              Your passwords and team secrets,
+              <span class="grad">locked before they leave your Mac.</span>
+            </h1>
+            <p class="lede reveal">
+              Zvault is a password manager in the spirit of 1Password. Everything is encrypted on
+              your device with keys only you hold. Share a password with a link, give your team the
+              right environments, and let AI agents use secrets only when you approve.
+            </p>
+            <div class="cta reveal">
+              <a class="btn btn-primary" href="#waitlist"
+                ><svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 6h16v12H4zM4 7l8 6 8-6" /></svg
+                >Join the waitlist</a
+              >
+              <a class="btn" href="#how">How it works</a>
+            </div>
+            <p class="fine reveal">
+              An invite-only demo for macOS. Join and we'll let you in soon.
+            </p>
+          </div>
+
+          <div class="hero-visual reveal">
+            <div class="cipher" aria-hidden="true">
+              <div class="cipher-row">
+                <span class="label">password</span>
+                <span class="plain" data-scramble="correct-horse-battery"
+                  >correct-horse-battery</span
+                >
+              </div>
+              <div class="cipher-arrow">
+                <span>XChaCha20-Poly1305</span>
+              </div>
+              <div class="cipher-row">
+                <span class="label">what the server stores</span>
+                <span class="ct" id="ciphertext">9f2c·a17e·44d0·b3c1·0e9a·7f55</span>
+              </div>
+            </div>
+            <figure class="window float">
+              <div class="window-bar"><i></i><i></i><i></i></div>
+              <img
+                src="/img/vault.webp"
+                alt="The Zvault vault showing saved logins"
+                width="1600"
+                height="1000"
+              />
+            </figure>
+          </div>
+          <ol class="archive-chapters" aria-label="Inside the vault">
+            <li class="chapter">
+              <p class="eyebrow">01 · Zero-knowledge</p>
+              <h2>Encrypted on your Mac, before it goes anywhere.</h2>
+              <p>
+                Argon2id and your Secret Key make the key. XChaCha20-Poly1305 seals every item. The
+                server only ever stores ciphertext.
+              </p>
+              <a href="#how">How it works</a>
+            </li>
+            <li class="chapter">
+              <p class="eyebrow">02 · AI agents</p>
+              <h2>Agents use your keys without holding them.</h2>
+              <p>
+                An agent asks, you approve in Zvault, and <code>zv run</code> hands the secret to
+                the command. Output is masked.
+              </p>
+              <a href="#agents">See the agent flow</a>
+            </li>
+            <li class="chapter">
+              <p class="eyebrow">03 · Projects</p>
+              <h2>Team secrets by project and environment.</h2>
+              <p>
+                Dev, Staging and Prod each have their own key. Give people Manage, Edit, Use or
+                Needs approval.
+              </p>
+              <a href="#features">All features</a>
+            </li>
+            <li class="chapter">
+              <p class="eyebrow">04 · Sharing</p>
+              <h2>Share with anyone. No account needed.</h2>
+              <p>
+                Send a credential to an email. They verify with a one-time code, and it decrypts in
+                their browser.
+              </p>
+              <a href="#email-share">How sharing works</a>
+            </li>
+            <li class="chapter">
+              <p class="eyebrow">05 · CLI</p>
+              <h2>Secrets in your terminal, never in .env files.</h2>
+              <p>
+                <code>zv read</code>, <code>zv env</code> and <code>zv run</code> ask the app on
+                your Mac and get only what the command needs.
+              </p>
+              <a href="#cli">Meet zv</a>
+            </li>
+            <li class="chapter">
+              <p class="eyebrow">06 · Android</p>
+              <h2>Your vault, on your phone.</h2>
+              <p>
+                Pair Android with a QR code from your Mac. Keys stay in the Android Keystore, behind
+                your fingerprint.
+              </p>
+              <a href="#android">Zvault for Android</a>
+            </li>
+          </ol>
+          <div class="archive-end">
+            <p class="eyebrow">Early access</p>
+            <h2>Every drawer opens only with your key.</h2>
+            <p>Zvault is in a private demo for macOS. Join and we'll let you in soon.</p>
             <a class="btn btn-primary" href="#waitlist"
               ><svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M4 6h16v12H4zM4 7l8 6 8-6" /></svg
               >Join the waitlist</a
             >
-            <a class="btn" href="#how">How it works</a>
           </div>
-          <p class="fine reveal">An invite-only demo for macOS. Join and we'll let you in soon.</p>
-        </div>
-
-        <div class="hero-visual reveal">
-          <div class="cipher" aria-hidden="true">
-            <div class="cipher-row">
-              <span class="label">password</span>
-              <span class="plain" data-scramble="correct-horse-battery">correct-horse-battery</span>
-            </div>
-            <div class="cipher-arrow">
-              <span>XChaCha20-Poly1305</span>
-            </div>
-            <div class="cipher-row">
-              <span class="label">what the server stores</span>
-              <span class="ct" id="ciphertext">9f2c·a17e·44d0·b3c1·0e9a·7f55</span>
-            </div>
-          </div>
-          <figure class="window float">
-            <div class="window-bar"><i></i><i></i><i></i></div>
-            <img
-              src="/img/vault.webp"
-              alt="The Zvault vault showing saved logins"
-              width="1600"
-              height="1000"
-            />
-          </figure>
+          <p class="archive-hint" aria-hidden="true"><i></i>Scroll to open the vault</p>
         </div>
       </section>
 

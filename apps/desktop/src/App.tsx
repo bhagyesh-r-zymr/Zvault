@@ -8,6 +8,7 @@ import { LockScreen } from './LockScreen.js';
 import { Login } from './screens/Login.js';
 import { SignupCode, SignupEmail, SignupPassword } from './screens/Signup.js';
 import { AppShell } from './shell/AppShell.js';
+import { UpdateBanner } from './updates/UpdateBanner.js';
 
 type Screen =
   | { name: 'login'; email?: string; secretKey?: string }
@@ -88,6 +89,7 @@ export function App() {
           {coreError}
         </p>
       )}
+      <UpdateBanner />
       {(() => {
         switch (screen.name) {
           case 'login':

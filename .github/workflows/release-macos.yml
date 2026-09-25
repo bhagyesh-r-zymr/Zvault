@@ -11,6 +11,12 @@ name: Release macOS app
 # Signing and notarization turn on when the APPLE_* secrets are set (see
 # docs/macos-release.md). Without them the .dmg is unsigned: it installs, but
 # macOS warns on first open and Touch ID unlock is unavailable.
+#
+# Auto-update turns on when the TAURI_SIGNING_PRIVATE_KEY secret (and
+# TAURI_SIGNING_PRIVATE_KEY_PASSWORD) and the TAURI_UPDATER_PUBKEY variable are
+# set (see docs/auto-update.md). The release then carries a signed
+# Zvault.app.tar.gz and latest.json, which installed apps check, and a signed
+# zv-macos-universal.sig for `zv update`.
 
 on:
   push:
@@ -37,7 +43,8 @@ jobs:
       # Where the shipped app talks to. Set these as repository variables to
       # move off the demo server.
       VITE_API_URL: ${{ vars.ZVAULT_API_URL || 'https://52-66-189-120.sslip.io' }}
-      VITE_SHARE_ORIGIN: ${{ vars.ZVAULT_SHARE_ORIGIN || vars.ZVAULT_API_URL || 'https://52-66-189-120.sslip.io' }}
+      # The share page is served under /share/; the landing page owns the root.
+      VITE_SHARE_ORIGIN: ${{ vars.ZVAULT_SHARE_ORIGIN || format('{0}/share', vars.ZVAULT_API_URL || 'https://52-66-189-120.sslip.io') }}
       # Printed on the Emergency Kit as the address to sign in at.
       ZVAULT_SIGN_IN_URL: ${{ vars.ZVAULT_SIGN_IN_URL || vars.ZVAULT_API_URL || 'https://52-66-189-120.sslip.io' }}
       RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_tag }}
@@ -64,8 +71,26 @@ jobs:
             exit 1
           fi
 
-      # Release-only config: version from the tag, and the API origin added to
-      # the CSP so the app may reach it.
+      # The updater's signing key. Only exported when both halves exist: the
+      # app must not ship a public key whose releases nobody can sign.
+      - name: Load updater key
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+        run: |
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ] && [ -n "$UPDATER_PUBKEY" ]; then
+            {
+              echo "TAURI_SIGNING_PRIVATE_KEY=$TAURI_SIGNING_PRIVATE_KEY"
+              echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$TAURI_SIGNING_PRIVATE_KEY_PASSWORD"
+              echo "UPDATER_PUBKEY=$UPDATER_PUBKEY"
+            } >> "$GITHUB_ENV"
+          else
+            echo "::warning::No TAURI_SIGNING_PRIVATE_KEY secret or TAURI_UPDATER_PUBKEY variable: this build will not update itself."
+          fi
+
+      # Release-only config: version from the tag, the API origin added to
+      # the CSP so the app may reach it, and the updater key when there is one.
       - name: Write release config
         working-directory: apps/desktop
         run: |
@@ -79,15 +104,25 @@ jobs:
             origin=$(node -e 'console.log(new URL(process.argv[1]).origin)' "$VITE_API_URL")
             csp="${csp/connect-src /connect-src $origin }"
           fi
-          jq -n --arg v "$version" --arg csp "$csp" \
-            '{version: $v, app: {security: {csp: $csp}}, bundle: {externalBin: ["binaries/zv"]}}' \
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          jq -n --arg v "$version" --arg csp "$csp" --arg key "${UPDATER_PUBKEY:-}" \
+            '{version: $v, app: {security: {csp: $csp}}, bundle: {externalBin: ["binaries/zv"]}}
+             + if $key == "" then {} else {
+                 bundle: {externalBin: ["binaries/zv"], createUpdaterArtifacts: true},
+                 plugins: {updater: {pubkey: $key}}
+               } end' \
             > src-tauri/tauri.release.conf.json
           cat src-tauri/tauri.release.conf.json
 
       # The zv command-line tool ships inside Zvault.app (Contents/MacOS/zv)
       # as a Tauri sidecar; the app's "Install command-line tool" links it
       # onto the PATH. Tauri wants it named for the target triple.
+      # zv reports the release version and checks `zv update` downloads
+      # against the updater key.
       - name: Build zv
+        env:
+          ZV_VERSION: ${{ env.VERSION }}
+          ZVAULT_UPDATER_PUBKEY: ${{ env.UPDATER_PUBKEY }}
         run: |
           cargo build -p zvault-cli --release --locked --target aarch64-apple-darwin
           cargo build -p zvault-cli --release --locked --target x86_64-apple-darwin
@@ -134,7 +169,8 @@ jobs:
           releaseBody: |
             Zvault for macOS (Apple silicon and Intel). Download the .dmg below, open it and drag Zvault to Applications.
             This build is not notarized yet: the first time, right-click Zvault in Applications and choose Open.
-            The app connects to ${{ env.VITE_API_URL }}. The `zv` command-line tool is inside the app (Settings > Install command-line tool) and attached here on its own.
+            The app connects to ${{ env.VITE_API_URL }}. The `zv` command-line tool is inside the app (Settings > Command line) and attached here on its own.
+            Once installed, Zvault offers new versions itself when it starts (or Settings > Account > Check for updates), and a standalone `zv` updates with `zv update`.
           releaseDraft: false
 
       - uses: actions/upload-artifact@v4
@@ -157,4 +193,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cp apps/desktop/src-tauri/binaries/zv-universal-apple-darwin zv-macos-universal
-          gh release upload "$RELEASE_TAG" zv-macos-universal --clobber
+          files=(zv-macos-universal)
+          # `zv update` checks that the signature names this version's file,
+          # so sign a copy under that name and ship the signature beside zv.
+          if [ -n "${UPDATER_PUBKEY:-}" ]; then
+            signed="zv-${RELEASE_TAG}-macos-universal"
+            cp zv-macos-universal "$signed"
+            pnpm --filter @zvault/desktop exec tauri signer sign "$PWD/$signed"
+            mv "$signed.sig" zv-macos-universal.sig
+            files+=(zv-macos-universal.sig)
+          fi
+          gh release upload "$RELEASE_TAG" "${files[@]}" --clobber

@@ -2,13 +2,13 @@
 
 A cheap single-box demo: no domain, no RDS. For the real AWS setup see `infra/`.
 
-| Piece      | How                                                                                        |
-| ---------- | ------------------------------------------------------------------------------------------ |
-| TLS        | Host nginx + Let's Encrypt for `<ip-with-dashes>.sslip.io` (resolves to the IP, no domain) |
-| API        | `zvault-api:demo` container on `127.0.0.1:3000`, served at `/v1/`                          |
-| Database   | `postgres:17-alpine` container, not exposed outside Docker                                 |
-| Email      | Amazon SES in `ap-south-1` over SMTP (STARTTLS, port 587); see below                       |
-| Share page | Static build of `apps/share-web` at `/`                                                    |
+| Piece    | How                                                                                        |
+| -------- | ------------------------------------------------------------------------------------------ |
+| TLS      | Host nginx + Let's Encrypt for `<ip-with-dashes>.sslip.io` (resolves to the IP, no domain) |
+| API      | `zvault-api:demo` container on `127.0.0.1:3000`, served at `/v1/`                          |
+| Database | `postgres:17-alpine` container, not exposed outside Docker                                 |
+| Email    | Amazon SES in `ap-south-1` over SMTP (STARTTLS, port 587); see below                       |
+| Site     | Landing page `apps/site` at `/`; static build of `apps/share-web` at `/share/`             |
 
 ## Email (SES)
 
@@ -41,7 +41,8 @@ docker build --platform linux/amd64 -f infra/docker/api.Dockerfile -t zvault-api
 (cd apps/share-web && VITE_API_URL=https://$HOST pnpm build)
 
 scp deploy/ec2/{compose.yml,nginx-zvault.conf,setup.sh} demo-ec2:zvault/
-tar -C apps/share-web/dist -cz . | ssh demo-ec2 'sudo mkdir -p /usr/share/nginx/zvault-share && sudo tar -xz -C /usr/share/nginx/zvault-share'
+rm -rf site && cp -r apps/site site && cp -r apps/share-web/dist site/share
+tar -C site -cz . | ssh demo-ec2 'sudo mkdir -p /usr/share/nginx/zvault-share && sudo tar -xz -C /usr/share/nginx/zvault-share'
 docker save zvault-api:demo | gzip | ssh demo-ec2 'gunzip | docker load'
 ssh demo-ec2 "cd zvault && HOST=$HOST ./setup.sh"   # first time; later: docker compose up -d
 ```

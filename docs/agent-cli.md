@@ -12,6 +12,9 @@ command-line tool**: it links `zv` into `/usr/local/bin` when that is writable,
 otherwise `~/.local/bin` (and tells you the `PATH` line to add). The release
 workflow also uploads `zv` on its own as the `zv-macOS` artifact.
 
+The linked copy updates with the app. A standalone `zv` updates itself with
+`zv update` (`--check` to only look); see [auto-update.md](auto-update.md).
+
 ## For you
 
 ```sh

@@ -10,6 +10,7 @@ import { LockSettingsPanel } from '../LockSettingsPanel.js';
 import { API_URL } from '../sharing/api.js';
 import { fetchTransport, twoFactorApi, TwoFactorSettings } from '../two-factor/index.js';
 import { Icon } from '../ui/Icon.js';
+import { UpdatePanel } from '../updates/UpdatePanel.js';
 
 export type SettingsSection = 'security' | 'devices' | 'cli' | 'account';
 
@@ -92,37 +93,43 @@ export function SettingsView(props: {
         )}
 
         {props.section === 'account' && (
-          <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <h2>Account</h2>
-            <div className="panel rows">
-              <div className="row">
-                <span className="avatar large">{session.email[0]?.toUpperCase()}</span>
-                <div className="row-main">
-                  <span className="row-title">{session.email}</span>
-                  <span className="row-sub">
-                    Session ends {new Date(session.expiresAt).toLocaleString()}
-                  </span>
+          <>
+            <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <h2>Account</h2>
+              <div className="panel rows">
+                <div className="row">
+                  <span className="avatar large">{session.email[0]?.toUpperCase()}</span>
+                  <div className="row-main">
+                    <span className="row-title">{session.email}</span>
+                    <span className="row-sub">
+                      Session ends {new Date(session.expiresAt).toLocaleString()}
+                    </span>
+                  </div>
+                  <button type="button" onClick={props.onSignOut}>
+                    <Icon name="logout" size={13} /> Sign out
+                  </button>
                 </div>
-                <button type="button" onClick={props.onSignOut}>
-                  <Icon name="logout" size={13} /> Sign out
-                </button>
-              </div>
-              <SavedSecretKeyRow
-                saved={props.remembered?.email === session.email ? props.remembered : null}
-                onForget={props.onForgetSecretKey}
-              />
-              <div className="row">
-                <Icon name="shield" size={18} className="secondary" />
-                <div className="row-main">
-                  <span className="row-title">Zero-knowledge encryption</span>
-                  <span className="row-sub">
-                    Your master password and Secret Key never leave this Mac. Keep your Emergency
-                    Kit somewhere safe: Zvault can&apos;t reset them for you.
-                  </span>
+                <SavedSecretKeyRow
+                  saved={props.remembered?.email === session.email ? props.remembered : null}
+                  onForget={props.onForgetSecretKey}
+                />
+                <div className="row">
+                  <Icon name="shield" size={18} className="secondary" />
+                  <div className="row-main">
+                    <span className="row-title">Zero-knowledge encryption</span>
+                    <span className="row-sub">
+                      Your master password and Secret Key never leave this Mac. Keep your Emergency
+                      Kit somewhere safe: Zvault can&apos;t reset them for you.
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          </section>
+            </section>
+            <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <h2>Updates</h2>
+              <UpdatePanel />
+            </section>
+          </>
         )}
       </div>
     </div>

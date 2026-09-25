@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0b0d12" />
+    <title>Zvault</title>
+    <meta
+      name="description"
+      content="Zvault is a zero-knowledge password manager for macOS: end-to-end encrypted vaults, secure share links, team projects and a CLI for developers and AI agents."
+    />
+    <link rel="icon" href="/favicon.png" />
+    <!-- Before first paint: forwards old share links to /share/ and enables the reveal animations. -->
+    <script src="/head.js"></script>
+    <link rel="preload" href="/fonts/geist.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="/site.css" />
+    <script src="/site.js" defer></script>
+  </head>
+  <body>
+    <div class="backdrop" aria-hidden="true">
+      <div class="orb orb-a"></div>
+      <div class="orb orb-b"></div>
+      <div class="grid"></div>
+    </div>
+
+    <header class="nav">
+      <a class="brand" href="#top"><span class="logo">Z</span>Zvault</a>
+      <nav>
+        <a href="#how">How it works</a>
+        <a href="#features">Features</a>
+        <a href="#tour">Tour</a>
+        <a href="#cli">CLI</a>
+        <a href="#install" class="btn btn-small">Download</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="pill reveal"><span class="dot"></span>Zero-knowledge · End-to-end encrypted</p>
+          <h1 class="reveal">
+            Your passwords and team secrets,
+            <span class="grad">locked before they leave your Mac.</span>
+          </h1>
+          <p class="lede reveal">
+            Zvault is a password manager in the spirit of 1Password. Everything is encrypted on your
+            device with keys only you hold. Share a password with a link, give your team the right
+            environments, and let AI agents use secrets only when you approve.
+          </p>
+          <div class="cta reveal">
+            <a
+              class="btn btn-primary"
+              href="https://github.com/bhagyesh-r-zymr/Zvault/releases/latest"
+              ><svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3v12m0 0-5-5m5 5 5-5M5 21h14" /></svg
+              >Download for macOS</a
+            >
+            <a class="btn" href="#install">Install guide</a>
+          </div>
+          <p class="fine reveal">Universal build for Apple silicon and Intel Macs</p>
+        </div>
+
+        <div class="hero-visual reveal">
+          <div class="cipher" aria-hidden="true">
+            <div class="cipher-row">
+              <span class="label">password</span>
+              <span class="plain" data-scramble="correct-horse-battery">correct-horse-battery</span>
+            </div>
+            <div class="cipher-arrow">
+              <span>XChaCha20-Poly1305</span>
+            </div>
+            <div class="cipher-row">
+              <span class="label">what the server stores</span>
+              <span class="ct" id="ciphertext">9f2c·a17e·44d0·b3c1·0e9a·7f55</span>
+            </div>
+          </div>
+          <figure class="window float">
+            <div class="window-bar"><i></i><i></i><i></i></div>
+            <img
+              src="/img/vault.webp"
+              alt="The Zvault vault showing saved logins"
+              width="1600"
+              height="1000"
+            />
+          </figure>
+        </div>
+      </section>
+
+      <section id="how" class="section">
+        <div class="section-head reveal">
+          <p class="eyebrow">How it works</p>
+          <h2>Zvault can't read your data. Not even if it wanted to.</h2>
+          <p>
+            Your master password and a random Secret Key are stretched into your account key on your
+            Mac. Items are sealed before they are synced, so the server only ever holds ciphertext.
+          </p>
+        </div>
+
+        <ol class="flow reveal">
+          <li>
+            <span class="flow-icon">🔑</span>
+            <h3>Master password + Secret Key</h3>
+            <p>The Secret Key is made on your Mac and printed in your Emergency Kit PDF.</p>
+          </li>
+          <li class="flow-link" aria-hidden="true"><span></span></li>
+          <li>
+            <span class="flow-icon">⚙️</span>
+            <h3>Argon2id</h3>
+            <p>A memory-hard key derivation that makes guessing slow and expensive.</p>
+          </li>
+          <li class="flow-link" aria-hidden="true"><span></span></li>
+          <li>
+            <span class="flow-icon">🔒</span>
+            <h3>XChaCha20-Poly1305</h3>
+            <p>Every item is encrypted and authenticated on your device in a Rust core.</p>
+          </li>
+          <li class="flow-link" aria-hidden="true"><span></span></li>
+          <li>
+            <span class="flow-icon">☁️</span>
+            <h3>Server sees ciphertext</h3>
+            <p>Sign-in uses SRP, so your password is never sent, not even in hashed form.</p>
+          </li>
+        </ol>
+      </section>
+
+      <section id="features" class="section">
+        <div class="section-head reveal">
+          <p class="eyebrow">Features</p>
+          <h2>Everything a password manager should do, and a few things for developers.</h2>
+        </div>
+        <div class="features">
+          <article class="card reveal">
+            <span class="ico">🛡️</span>
+            <h3>Zero-knowledge encryption</h3>
+            <p>Argon2id, a 128-bit Secret Key and XChaCha20-Poly1305. Keys never leave your Mac.</p>
+          </article>
+          <article class="card reveal">
+            <span class="ico">📄</span>
+            <h3>Emergency Kit</h3>
+            <p>
+              A PDF with your Secret Key to print or store safely, needed to sign in on a new
+              device.
+            </p>
+          </article>
+          <article class="card reveal">
+            <span class="ico">🔢</span>
+            <h3>Two-step sign-in</h3>
+            <p>
+              Set up TOTP by scanning a QR code, with recovery codes. Store one-time codes for other
+              sites too.
+            </p>
+          </article>
+          <article class="card reveal">
+            <span class="ico">🗝️</span>
+            <h3>Vault</h3>
+            <p>
+              Logins, notes and websites with search, copy and reveal, synced across your devices.
+              See every signed-in device and sign any of them out.
+            </p>
+          </article>
+          <article class="card reveal">
+            <span class="ico">✨</span>
+            <h3>Password generator</h3>
+            <p>
+              Random passwords or passphrases, plus a strength check that estimates cracking time.
+            </p>
+          </article>
+          <article class="card reveal">
+            <span class="ico">👆</span>
+            <h3>Auto-lock and Touch ID</h3>
+            <p>
+              Locks when idle, on sleep or screen lock. Unlock with Touch ID. Copied secrets clear
+              themselves.
+            </p>
+          </article>
+          <article class="card reveal">
+            <span class="ico">🔗</span>
+            <h3>Secure share links</h3>
+            <p>
+              Share an item with a link that expires and allows a set number of views. It's
+              decrypted in the recipient's browser.
+            </p>
+          </article>
+          <article class="card reveal">
+            <span class="ico">👥</span>
+            <h3>Share with people</h3>
+            <p>Send items to other Zvault users, encrypted to their key, and by email.</p>
+          </article>
+          <article class="card reveal">
+            <span class="ico">🗂️</span>
+            <h3>Projects and environments</h3>
+            <p>
+              Group team secrets by project, environment and folder. Each environment has its own
+              key.
+            </p>
+          </article>
+          <article class="card reveal">
+            <span class="ico">🎛️</span>
+            <h3>Teams and access roles</h3>
+            <p>
+              Manage, Edit, Use or Needs approval, per environment. Production stays with the people
+              who need it.
+            </p>
+          </article>
+          <article class="card reveal">
+            <span class="ico">⌨️</span>
+            <h3>The zv CLI</h3>
+            <p>
+              Read secrets, load an environment, or run a command with secrets injected and masked.
+            </p>
+          </article>
+          <article class="card reveal">
+            <span class="ico">🤖</span>
+            <h3>AI agent access</h3>
+            <p>
+              Pair tools like Claude Code. They ask, you approve in the app, and every use is
+              logged.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="tour" class="section">
+        <div class="section-head reveal">
+          <p class="eyebrow">Take a tour</p>
+          <h2>Built for the Mac, in dark graphite.</h2>
+        </div>
+        <div class="tour reveal">
+          <div class="tabs" role="tablist" aria-label="Screens">
+            <button
+              role="tab"
+              aria-selected="true"
+              data-img="vault"
+              data-cap="Your personal vault. Reveal or copy a field, then share it."
+            >
+              Vault
+            </button>
+            <button
+              role="tab"
+              aria-selected="false"
+              data-img="share"
+              data-cap="Share with a secure link that expires, or with another Zvault user."
+            >
+              Sharing
+            </button>
+            <button
+              role="tab"
+              aria-selected="false"
+              data-img="projects"
+              data-cap="Team secrets per project, environment and folder, with the zv command to use them."
+            >
+              Projects
+            </button>
+            <button
+              role="tab"
+              aria-selected="false"
+              data-img="access"
+              data-cap="Pick who can manage, edit, use or ask for each environment."
+            >
+              Access
+            </button>
+            <button
+              role="tab"
+              aria-selected="false"
+              data-img="agents"
+              data-cap="AI agents get only the secrets you allow, and ask each time if you want."
+            >
+              Agents
+            </button>
+            <button
+              role="tab"
+              aria-selected="false"
+              data-img="generator"
+              data-cap="Generate strong passwords and check how strong yours are."
+            >
+              Generator
+            </button>
+            <button
+              role="tab"
+              aria-selected="false"
+              data-img="security"
+              data-cap="Two-step sign-in, Touch ID, auto-lock and clipboard clearing."
+            >
+              Security
+            </button>
+            <button
+              role="tab"
+              aria-selected="false"
+              data-img="kit"
+              data-cap="Your Emergency Kit holds the Secret Key. Zvault never sees it."
+            >
+              Emergency Kit
+            </button>
+          </div>
+          <figure class="window">
+            <div class="window-bar"><i></i><i></i><i></i></div>
+            <img id="tour-img" src="/img/vault.webp" alt="" width="1600" height="1000" />
+          </figure>
+          <p id="tour-cap" class="caption">
+            Your personal vault. Reveal or copy a field, then share it.
+          </p>
+        </div>
+      </section>
+
+      <section id="cli" class="section split">
+        <div class="reveal">
+          <p class="eyebrow">For developers</p>
+          <h2>Secrets in your terminal, never in your .env files.</h2>
+          <p>
+            <code>zv</code> talks to the Zvault app on your Mac. The app asks you to approve, then
+            hands over only what the command needs. Output from <code>zv run</code> is masked.
+          </p>
+          <ul class="ticks">
+            <li><code>zv read</code> one secret, or <code>zv copy</code> it to the clipboard</li>
+            <li><code>zv env</code> prints an environment as dotenv or shell variables</li>
+            <li><code>zv run</code> starts a command with secrets in its environment</li>
+            <li><code>zv agent pair</code> connects an AI agent that you approve in the app</li>
+          </ul>
+        </div>
+        <div class="terminal reveal" aria-label="Example zv session">
+          <div class="window-bar"><i></i><i></i><i></i><span>zsh</span></div>
+          <pre id="term"></pre>
+        </div>
+      </section>
+
+      <section id="install" class="section">
+        <div class="section-head reveal">
+          <p class="eyebrow">Get started</p>
+          <h2>Install Zvault in a few minutes.</h2>
+        </div>
+        <div class="install">
+          <div class="card steps reveal">
+            <h3>The Mac app</h3>
+            <ol>
+              <li>
+                Download the Zvault <strong>.dmg</strong> from the
+                <a href="https://github.com/bhagyesh-r-zymr/Zvault/releases/latest"
+                  >latest release</a
+                >.
+              </li>
+              <li>Open it and drag Zvault into Applications.</li>
+              <li>
+                This demo build isn't signed yet, so the first time,
+                <strong>right-click Zvault and choose Open</strong>, then Open again. After that it
+                opens normally.
+              </li>
+              <li>Create an account with your email. We send you a code to confirm it.</li>
+              <li>Choose a master password and save your Emergency Kit PDF somewhere safe.</li>
+            </ol>
+            <a
+              class="btn btn-primary"
+              href="https://github.com/bhagyesh-r-zymr/Zvault/releases/latest"
+              >Download for macOS</a
+            >
+          </div>
+          <div class="card steps reveal">
+            <h3>The zv command line</h3>
+            <p>Easiest: in the app, open <strong>Settings → Command line → Install CLI</strong>.</p>
+            <p>Or install it yourself:</p>
+            <div class="copy">
+              <pre><code id="curl">mkdir -p ~/.local/bin && curl -fsSL https://github.com/bhagyesh-r-zymr/Zvault/releases/latest/download/zv-macos-universal -o ~/.local/bin/zv && chmod +x ~/.local/bin/zv</code></pre>
+              <button type="button" class="btn btn-small" data-copy="curl">Copy</button>
+            </div>
+            <p>Then check it can reach the app:</p>
+            <div class="copy">
+              <pre><code>zv status</code></pre>
+            </div>
+            <p class="fine">
+              Using Claude Code? Open <strong>Agents → Install CLI</strong> in the app and copy the
+              setup guide for it.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span class="brand"><span class="logo">Z</span>Zvault</span>
+      <span
+        >A demo build. Open source on
+        <a href="https://github.com/bhagyesh-r-zymr/Zvault">GitHub</a>.</span
+      >
+    </footer>
+  </body>
+</html>

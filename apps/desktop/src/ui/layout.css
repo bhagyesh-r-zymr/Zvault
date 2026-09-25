@@ -803,3 +803,33 @@
   transform: translateX(-50%);
   z-index: 100;
 }
+
+.update-banner {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 90;
+  max-width: 440px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--raised);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.update-banner > svg {
+  flex-shrink: 0;
+  color: var(--secure);
+}
+
+.update-banner > span {
+  flex-grow: 1;
+}
+
+.update-banner button {
+  flex-shrink: 0;
+}

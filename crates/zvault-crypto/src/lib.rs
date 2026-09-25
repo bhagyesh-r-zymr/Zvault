@@ -19,6 +19,9 @@
 //! master password and the 128-bit Secret Key, which never leaves the device
 //! except on the printed Emergency Kit.
 //!
+//! A recovery code (see [`RecoveryCode`]) seals a second copy of the keyset,
+//! so a person who forgets the master password can still get back in.
+//!
 //! Vault and item encryption (per-item keys, padding, record binding) lives in
 //! [`vault`]; projects, environments and secrets in [`project`].
 
@@ -31,6 +34,7 @@ mod keyset;
 pub mod pairing;
 pub mod project;
 mod random;
+mod recovery;
 mod secret_key;
 mod share;
 pub mod srp;
@@ -45,6 +49,9 @@ pub use error::{Error, Result};
 pub use kdf::{AccountKeys, KdfParams, SALT_LEN, derive_account_keys, normalize_account_id};
 pub use key::{KEY_LEN, SymmetricKey};
 pub use keyset::{KEYSET_KID, open_keyset, seal_keyset};
+pub use recovery::{
+    RECOVERY_KID, RecoveryCode, RecoveryKeys, open_recovery_keyset, seal_recovery_keyset,
+};
 pub use secret_key::SecretKey;
 pub use share::{
     BoxedShare, LinkShare, PUBLIC_KEY_LEN, SHARE_ID_LEN, SharingKeyPair, fingerprint, open_from,

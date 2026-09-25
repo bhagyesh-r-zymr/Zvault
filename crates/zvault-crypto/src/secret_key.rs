@@ -7,7 +7,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use crate::{Error, KEY_LEN, Result, random};
 
 /// Crockford base32: no I, L, O or U, so the printed kit is easy to retype.
-const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+pub(crate) const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const VERSION: &str = "Z1";
 const ID_CHARS: usize = 6;
 const SECRET_GROUPS: usize = 5;
@@ -105,7 +105,7 @@ impl fmt::Debug for SecretKey {
 
 /// Fills `out` with uniformly random alphabet characters (32 divides 256, so
 /// masking the low five bits has no modulo bias).
-fn fill_alphabet(out: &mut [u8]) -> Result<()> {
+pub(crate) fn fill_alphabet(out: &mut [u8]) -> Result<()> {
     random::fill(out)?;
     for b in out.iter_mut() {
         *b = ALPHABET[usize::from(*b & 0x1f)];

@@ -91,6 +91,13 @@ SRP is SRP-6a over the RFC 5054 3072-bit group with SHA-256; the exact spec is i
 
 **Email:** `MAIL_TRANSPORT=log` prints messages to the API log for development. Set `MAIL_TRANSPORT=smtp` and the `SMTP_*` variables in `apps/api/.env` (see `.env.example`) to send real mail through any provider, or `MAIL_TRANSPORT=ses` to use the Amazon SES API with the IAM role on AWS. Production refuses the log transport and plaintext SMTP.
 
+## Master password change and recovery
+
+- **Change the master password** (Settings > Security). The app starts a login for its own account and proves the current password with SRP, then uploads a new KDF salt, SRP verifier and the same keyset sealed under the new password (`POST /v1/auth/password`). The Secret Key and every item stay as they are. Other sessions are signed out and the account gets an email notice.
+- **Recovery code.** Settings > Security > Set up makes a recovery code on the Mac (`R1-` plus 30 Crockford base32 characters, 150 bits). HKDF turns it into a wrap key, which seals a second copy of the keyset, and an auth token. The server stores the sealed copy and `SHA-256(auth token)` (`PUT /v1/auth/recovery`, which also needs a fresh SRP proof). The code is shown once and saved as a separate Recovery Kit PDF, kept apart from the Emergency Kit.
+- **Recovering** (sign-in screen > Forgot master password?). `recover/start` emails a 6-digit code. `recover/verify` checks that code and the auth token together (5 tries) and releases the sealed copy. The app opens it and makes a new master password, a new Secret Key and a new recovery code for the same keyset. `recover/complete` also needs a 2FA code when 2FA is on, replaces everything, signs out every session and opens a new one. The app then saves the new Emergency Kit and Recovery Kit.
+- The server never sees the recovery code or the wrap key, so it can check a code but can't open the vault. Without a recovery code, a forgotten master password still means the data can't be recovered.
+
 ## Locking, Touch ID and the clipboard (desktop)
 
 The unlock key lives only in Rust (`apps/desktop/src-tauri/src/session.rs`) and is wiped when the vault locks. The UI never receives it.

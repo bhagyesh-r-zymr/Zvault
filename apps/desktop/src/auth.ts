@@ -1,6 +1,6 @@
 import { isTwoFactorRequired, type EncryptedBlob, type TwoFactorProof } from '@zvault/shared';
 import { api, ApiRequestError } from './api.js';
-import { core } from './core.js';
+import { core, type RecoveredAccount } from './core.js';
 import { thisDevice } from './device.js';
 import { lock } from './lock.js';
 
@@ -133,6 +133,82 @@ export async function resumeSession(): Promise<Session | null> {
 export async function signOut(session: Session): Promise<void> {
   await core.lock();
   await api.logout(session.token).catch(() => undefined);
+}
+
+/**
+ * Changes the master password. The Secret Key and everything in the vault stay
+ * as they are: the same keyset is sealed under the new password. The server
+ * signs out every other device.
+ */
+export async function changeMasterPassword(
+  session: Session,
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const start = await api.loginStart(session.email);
+  const change = await core.passwordChangeProve({
+    currentPassword,
+    newPassword,
+    kdf: start.kdf,
+    srpB: start.srpB,
+  });
+  const { srpM2 } = await api.changePassword(session.token, { loginId: start.loginId, ...change });
+  await core.passwordChangeFinish(srpM2);
+  // "Stay unlocked" keeps what the lock screen needs; refresh it for the new password.
+  await lock.saveForRestart(session.token, session.expiresAt).catch(() => undefined);
+}
+
+/** Sets up or replaces the recovery code. Returns the new code, to show once. */
+export async function setUpRecovery(session: Session, password: string): Promise<string> {
+  const start = await api.loginStart(session.email);
+  const setup = await core.recoverySetupProve({ password, kdf: start.kdf, srpB: start.srpB });
+  const { srpM2 } = await api.setUpRecovery(session.token, { loginId: start.loginId, ...setup });
+  return core.recoverySetupFinish(srpM2);
+}
+
+/** A recovery whose email code and recovery code checked out. */
+export interface VerifiedRecovery {
+  email: string;
+  recoveryToken: string;
+  recoveryKeyset: EncryptedBlob;
+  twoFactorRequired: boolean;
+}
+
+/** Checks the emailed code and the recovery code with the server. */
+export async function verifyRecovery(
+  email: string,
+  emailCode: string,
+  recoveryCode: string,
+): Promise<VerifiedRecovery> {
+  const recoveryAuth = await core.recoverBegin(email, recoveryCode);
+  const res = await api.recoverVerify({ email, code: emailCode, recoveryAuth });
+  return { email, ...res };
+}
+
+/** Makes the new keys on this Mac. The result can be retried with `finishRecovery`. */
+export const prepareRecovery = (verified: VerifiedRecovery, newPassword: string) =>
+  core.recoverReset(newPassword, verified.recoveryKeyset);
+
+/**
+ * Uploads the new keys, then unlocks. Returns the new session and the new
+ * recovery code, which the person must save along with the new Emergency Kit.
+ */
+export async function finishRecovery(
+  verified: VerifiedRecovery,
+  account: RecoveredAccount,
+  twoFactor: TwoFactorProof | undefined,
+): Promise<{ session: Session; recoveryCode: string }> {
+  const done = await api.recoverComplete({
+    recoveryToken: verified.recoveryToken,
+    ...(twoFactor ? { twoFactor } : {}),
+    ...account,
+    device: await thisDevice(),
+  });
+  const finished = await core.recoverFinish();
+  return {
+    session: { email: finished.email, token: done.sessionToken, expiresAt: done.expiresAt },
+    recoveryCode: finished.recoveryCode,
+  };
 }
 
 export const errorMessage = (e: unknown): string =>

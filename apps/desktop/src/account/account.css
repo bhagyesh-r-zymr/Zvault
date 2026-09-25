@@ -1,0 +1,43 @@
+.account-security {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sheet-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.recovery-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  border-radius: var(--radius-l);
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+}
+
+.recovery-code {
+  font-family: var(--mono);
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text);
+  white-space: nowrap;
+  user-select: all;
+}
+
+.recovery-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.recover-codes {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}

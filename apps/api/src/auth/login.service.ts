@@ -1,4 +1,4 @@
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import {
   KDF_DEFAULTS,
   SRP_GROUP_BYTES,
@@ -8,6 +8,8 @@ import {
   type LoginStartResponse,
   type LoginTwoFactorRequiredResponse,
   type LoginTwoFactorResponse,
+  type Reauthentication,
+  type ReauthenticatedResponse,
   type TwoFactorProof,
 } from '@zvault/shared';
 import { and, eq, gt, lt, sql } from 'drizzle-orm';
@@ -32,6 +34,8 @@ const TWO_FACTOR_EXPIRED = 'Your sign-in expired. Sign in again.';
 
 /** One message for every failure, so it can't tell an attacker which part was wrong. */
 const LOGIN_FAILED = 'Incorrect email, master password or Secret Key.';
+
+const WRONG_PASSWORD = 'Incorrect master password.';
 
 @Injectable()
 export class LoginService {
@@ -135,6 +139,44 @@ export class LoginService {
     }
 
     return { srpM2, ...(await this.openSession(account, req.device)) };
+  }
+
+  /**
+   * Checks a fresh proof of the master password from a signed-in account,
+   * before a change that must not rest on the session token alone. The proof
+   * answers a `start` challenge for the account's own email, is spent like a
+   * login's, and opens no session. Returns the server proof for the client.
+   */
+  async reauthenticate(
+    accountId: string,
+    req: z.output<typeof Reauthentication>,
+  ): Promise<ReauthenticatedResponse> {
+    const [challenge] = await this.db
+      .delete(srpChallenges)
+      .where(eq(srpChallenges.id, req.loginId))
+      .returning();
+    if (!challenge || challenge.expiresAt <= new Date() || challenge.accountId !== accountId) {
+      throw new ForbiddenException(WRONG_PASSWORD);
+    }
+    const [account] = await this.db
+      .select({ kdf: accounts.kdf, srpVerifier: accounts.srpVerifier })
+      .from(accounts)
+      .where(eq(accounts.id, accountId))
+      .limit(1);
+    const verified =
+      account &&
+      verifyClient({
+        identity: challenge.email,
+        salt: Buffer.from(account.kdf.salt, 'base64url'),
+        verifier: account.srpVerifier,
+        challenge,
+        publicA: Buffer.from(req.srpA, 'base64url'),
+        clientProof: Buffer.from(req.srpM1, 'base64url'),
+      });
+    if (!verified) throw new ForbiddenException(WRONG_PASSWORD);
+    return {
+      srpM2: verified.serverProof.toString('base64url') as ReauthenticatedResponse['srpM2'],
+    };
   }
 
   /**

@@ -1,11 +1,12 @@
 import { CRYPTO_VERSION } from '@zvault/shared';
 import { useCallback, useEffect, useState } from 'react';
-import { resumeSession, signOut, type Session } from './auth.js';
+import { resumeSession, signOut, type Session, type VerifiedRecovery } from './auth.js';
 import { core, type RememberedAccount } from './core.js';
 import { EmergencyKitStep } from './EmergencyKitStep.js';
 import { lock, useActivityReporter, type LockReason, type LockStatus } from './lock.js';
 import { LockScreen } from './LockScreen.js';
 import { Login } from './screens/Login.js';
+import { RecoverCodes, RecoveredKits, RecoverEmail, RecoverPassword } from './screens/Recover.js';
 import { SignupCode, SignupEmail, SignupPassword } from './screens/Signup.js';
 import { AppShell } from './shell/AppShell.js';
 import { UpdateBanner } from './updates/UpdateBanner.js';
@@ -17,6 +18,10 @@ type Screen =
   | { name: 'signup-code'; email: string }
   | { name: 'signup-password'; email: string; signupToken: string }
   | { name: 'emergency-kit'; email: string; secretKey: string }
+  | { name: 'recover-email'; email?: string }
+  | { name: 'recover-codes'; email: string }
+  | { name: 'recover-password'; verified: VerifiedRecovery }
+  | { name: 'recovered'; session: Session; recoveryCode: string }
   | { name: 'unlocked'; session: Session }
   | { name: 'locked'; session: Session; reason: LockReason; status: LockStatus };
 
@@ -124,6 +129,50 @@ export function App() {
                   setScreen({ name: 'unlocked', session });
                 }}
                 onCreateAccount={() => setScreen({ name: 'signup-email' })}
+                onForgotPassword={(email) =>
+                  setScreen({ name: 'recover-email', ...(email ? { email } : {}) })
+                }
+              />
+            );
+          case 'recover-email':
+            return (
+              <RecoverEmail
+                {...(screen.email ? { email: screen.email } : {})}
+                onSent={(email) => setScreen({ name: 'recover-codes', email })}
+                onBack={() => setScreen({ name: 'login' })}
+              />
+            );
+          case 'recover-codes':
+            return (
+              <RecoverCodes
+                email={screen.email}
+                onVerified={(verified) => setScreen({ name: 'recover-password', verified })}
+                onBack={() => {
+                  void core.recoverCancel();
+                  setScreen({ name: 'login' });
+                }}
+              />
+            );
+          case 'recover-password':
+            return (
+              <RecoverPassword
+                verified={screen.verified}
+                onRecovered={({ session, recoveryCode }) => {
+                  refreshRemembered();
+                  setScreen({ name: 'recovered', session, recoveryCode });
+                }}
+                onBack={() => {
+                  void core.recoverCancel();
+                  setScreen({ name: 'login' });
+                }}
+              />
+            );
+          case 'recovered':
+            return (
+              <RecoveredKits
+                email={screen.session.email}
+                recoveryCode={screen.recoveryCode}
+                onDone={() => setScreen({ name: 'unlocked', session: screen.session })}
               />
             );
           case 'signup-email':

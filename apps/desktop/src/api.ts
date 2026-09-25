@@ -1,13 +1,21 @@
 import {
+  AccountRecoveryStatus,
   ApiError,
   LoginFinishResponse,
   LoginStartResponse,
   LoginTwoFactorResponse,
+  ReauthenticatedResponse,
+  RecoverCompleteResponse,
+  RecoverVerifyResponse,
   SessionResponse,
   SignupCompleteResponse,
   SignupVerifyResponse,
   type LoginFinishRequest,
+  type AccountRecoverySetupRequest,
   type LoginTwoFactorRequest,
+  type PasswordChangeRequest,
+  type RecoverCompleteRequest,
+  type RecoverVerifyRequest,
   type SignupCompleteRequest,
 } from '@zvault/shared';
 import type { z } from 'zod';
@@ -80,4 +88,14 @@ export const api = {
     call('auth/login/two-factor', { body }, LoginTwoFactorResponse),
   session: (token: string) => call('auth/session', { token }, SessionResponse),
   logout: (token: string) => call('auth/logout', { token, method: 'POST' }, null),
+  changePassword: (token: string, body: PasswordChangeRequest) =>
+    call('auth/password', { token, body }, ReauthenticatedResponse),
+  recoveryStatus: (token: string) => call('auth/recovery', { token }, AccountRecoveryStatus),
+  setUpRecovery: (token: string, body: AccountRecoverySetupRequest) =>
+    call('auth/recovery', { token, body, method: 'PUT' }, ReauthenticatedResponse),
+  recoverStart: (email: string) => call('auth/recover/start', { body: { email } }, null),
+  recoverVerify: (body: RecoverVerifyRequest) =>
+    call('auth/recover/verify', { body }, RecoverVerifyResponse),
+  recoverComplete: (body: RecoverCompleteRequest) =>
+    call('auth/recover/complete', { body }, RecoverCompleteResponse),
 };

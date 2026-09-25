@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { AccountSecurity } from '../account/AccountSecurity.js';
 import { CliInstall, ClaudeSetup } from '../agents/CliSetup.js';
 import '../agents/agents.css';
 import type { Session } from '../auth.js';
@@ -71,6 +72,7 @@ export function SettingsView(props: {
 
         {props.section === 'security' && (
           <>
+            <AccountSecurity session={session} />
             <TwoFactorSettings api={tfa} account={session.email} />
             {props.lockStatus ? (
               <LockSettingsPanel status={props.lockStatus} onChanged={props.onLockChanged} />
@@ -129,7 +131,7 @@ export function SettingsView(props: {
                     <span className="row-title">Zero-knowledge encryption</span>
                     <span className="row-sub">
                       Your master password and Secret Key never leave this Mac. Keep your Emergency
-                      Kit somewhere safe: Zvault can&apos;t reset them for you.
+                      Kit and recovery code somewhere safe: Zvault can&apos;t reset them for you.
                     </span>
                   </div>
                 </div>

@@ -22,6 +22,7 @@ export function Login(props: {
   remembered?: RememberedAccount | null;
   onSignedIn: (session: Session) => void;
   onCreateAccount: () => void;
+  onForgotPassword: (email: string) => void;
 }) {
   const [email, setEmail] = useState(props.email ?? '');
   const [password, setPassword] = useState('');
@@ -121,9 +122,18 @@ export function Login(props: {
         else props.onSignedIn(result);
       }}
       footer={
-        <button type="button" className="link" onClick={props.onCreateAccount}>
-          Create an account
-        </button>
+        <>
+          <button
+            type="button"
+            className="link"
+            onClick={() => props.onForgotPassword(normalize(email))}
+          >
+            Forgot master password?
+          </button>
+          <button type="button" className="link" onClick={props.onCreateAccount}>
+            Create an account
+          </button>
+        </>
       }
     >
       <Field

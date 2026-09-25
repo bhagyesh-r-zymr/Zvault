@@ -440,3 +440,13 @@ if (pair && phoneImgs.length) {
     }, 2600);
   }
 }
+
+// Android screens marquee: duplicate the set once so the loop is seamless.
+const track = document.querySelector('.strip-track');
+if (track && !reduced) {
+  [...track.children].forEach((f) => {
+    const copy = f.cloneNode(true);
+    copy.setAttribute('aria-hidden', 'true');
+    track.append(copy);
+  });
+}

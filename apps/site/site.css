@@ -1231,6 +1231,59 @@ main {
   transform: translateX(-24px) scale(0.98);
 }
 
+/* Android screens: a slow marquee of phone frames */
+.phone-strip {
+  /* Full-bleed: runs edge to edge past the content column. */
+  width: 100vw;
+  margin: 56px 0 0 calc(50% - 50vw);
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+.strip-track {
+  display: flex;
+  gap: 22px;
+  width: max-content;
+  padding: 10px 0 6px;
+  animation: marquee 48s linear infinite;
+}
+.phone-strip:hover .strip-track {
+  animation-play-state: paused;
+}
+@keyframes marquee {
+  to {
+    transform: translateX(calc(-50% - 11px));
+  }
+}
+.strip-track figure {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin: 0;
+}
+.mini-phone {
+  display: block;
+  width: 170px;
+  padding: 6px;
+  border: 1px solid #2e3440;
+  border-radius: 28px;
+  background: linear-gradient(160deg, #262b36, #11141b);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+  transition: transform 0.3s;
+}
+.mini-phone img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 22px;
+}
+.strip-track figure:hover .mini-phone {
+  transform: translateY(-8px) scale(1.04);
+}
+.strip-track figcaption {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 /* New tiles */
 .v-phone {
   display: grid;

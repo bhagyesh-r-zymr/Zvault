@@ -112,10 +112,7 @@ export function SecretHistory(props: {
                   const shown = revealed[`${v.revision}:${env.id}`];
                   return (
                     <div key={env.id} style={{ display: 'contents' }}>
-                      <dt>
-                        <span className="dot" style={{ background: env.color, marginRight: 6 }} />
-                        {env.name}
-                      </dt>
+                      <dt style={{ color: env.color }}>{env.name}</dt>
                       <dd className={changed ? 'changed' : undefined}>
                         {old ? (
                           <>

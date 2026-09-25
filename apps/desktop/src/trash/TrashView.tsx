@@ -155,13 +155,20 @@ export function TrashView({ api, core = vaultCore }: { api: VaultApi; core?: Vau
         {byProject.map(({ project, secrets }) => (
           <section key={project.id}>
             <div className="section-label">
-              <span>{project.name}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <ProjectTile project={project} />
+                {project.name}
+              </span>
             </div>
             <ul className="panel rows">
               {secrets.map((s) => (
                 <TrashRow
                   key={s.id}
-                  tile={<ProjectTile project={project} />}
+                  tile={
+                    <span className="tile">
+                      <Icon name="key" size={16} />
+                    </span>
+                  }
                   title={s.meta.name}
                   sub={s.meta.key}
                   mono

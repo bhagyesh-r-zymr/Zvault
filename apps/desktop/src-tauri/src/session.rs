@@ -26,6 +26,8 @@ pub enum LockReason {
 pub enum UnlockMethod {
     MasterPassword,
     TouchId,
+    /// Reopened at launch from the key kept by "Stay unlocked".
+    Restored,
 }
 
 /// User-adjustable lock behaviour. Every field is bounded so a bad value from
@@ -33,21 +35,27 @@ pub enum UnlockMethod {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LockSettings {
-    /// Lock after this many minutes without interacting with Zvault.
+    /// Lock after this many minutes without interacting with Zvault. 0 never
+    /// locks on idle.
     pub idle_timeout_mins: u32,
     pub lock_on_sleep: bool,
     pub lock_on_screen_lock: bool,
     /// Clear a copied secret from the clipboard after this many seconds.
     pub clipboard_clear_secs: u32,
+    /// Keep the vault key in the login Keychain so Zvault opens unlocked
+    /// after a quit or restart, for up to `STAY_UNLOCKED_MAX_AGE`.
+    #[serde(default)]
+    pub stay_unlocked: bool,
 }
 
 impl LockSettings {
-    pub const IDLE_TIMEOUT_MINS: std::ops::RangeInclusive<u32> = 1..=480;
+    /// 0 (never) or 1 minute to 24 hours.
+    pub const IDLE_TIMEOUT_MINS: std::ops::RangeInclusive<u32> = 0..=1440;
     pub const CLIPBOARD_CLEAR_SECS: std::ops::RangeInclusive<u32> = 10..=300;
 
     pub fn validate(&self) -> Result<(), &'static str> {
         if !Self::IDLE_TIMEOUT_MINS.contains(&self.idle_timeout_mins) {
-            return Err("idle timeout must be between 1 and 480 minutes");
+            return Err("idle timeout must be between 0 (never) and 1440 minutes");
         }
         if !Self::CLIPBOARD_CLEAR_SECS.contains(&self.clipboard_clear_secs) {
             return Err("clipboard clear delay must be between 10 and 300 seconds");
@@ -55,8 +63,10 @@ impl LockSettings {
         Ok(())
     }
 
-    pub fn idle_timeout(&self) -> Duration {
-        Duration::from_secs(u64::from(self.idle_timeout_mins) * 60)
+    /// None when idle locking is off.
+    pub fn idle_timeout(&self) -> Option<Duration> {
+        (self.idle_timeout_mins > 0)
+            .then(|| Duration::from_secs(u64::from(self.idle_timeout_mins) * 60))
     }
 
     pub fn clipboard_clear_after(&self) -> Duration {
@@ -67,10 +77,11 @@ impl LockSettings {
 impl Default for LockSettings {
     fn default() -> Self {
         Self {
-            idle_timeout_mins: 10,
+            idle_timeout_mins: 60,
             lock_on_sleep: true,
             lock_on_screen_lock: true,
             clipboard_clear_secs: 90,
+            stay_unlocked: false,
         }
     }
 }
@@ -152,9 +163,11 @@ impl Session {
     }
 
     pub fn idle_expired(&self, now: Instant) -> bool {
+        let Some(timeout) = self.settings.idle_timeout() else {
+            return false;
+        };
         self.unlocked.as_ref().is_some_and(|u| {
-            now.saturating_duration_since(u.last_activity) + u.suspended
-                >= self.settings.idle_timeout()
+            now.saturating_duration_since(u.last_activity) + u.suspended >= timeout
         })
     }
 
@@ -175,7 +188,8 @@ impl Session {
         self.unlocked.as_ref().map(|u| u.method)
     }
 
-    /// The key and password-proof time, for enrolling Touch ID.
+    /// The key and password-proof time, for enrolling Touch ID and for
+    /// "Stay unlocked".
     pub fn key_for_enrollment(&self) -> Option<(&str, &SymmetricKey, SystemTime)> {
         self.unlocked
             .as_ref()
@@ -215,7 +229,7 @@ mod tests {
     fn idle_timeout_counts_from_last_activity() {
         let t0 = Instant::now();
         let mut s = unlocked(t0);
-        let timeout = s.settings().idle_timeout();
+        let timeout = s.settings().idle_timeout().unwrap();
         assert!(!s.idle_expired(t0 + timeout - Duration::from_secs(1)));
         assert!(s.idle_expired(t0 + timeout));
 
@@ -227,11 +241,32 @@ mod tests {
     fn sleep_time_counts_towards_idle_until_next_activity() {
         let t0 = Instant::now();
         let mut s = unlocked(t0);
-        let timeout = s.settings().idle_timeout();
+        let timeout = s.settings().idle_timeout().unwrap();
         s.note_suspended(timeout);
         assert!(s.idle_expired(t0));
         s.touch(t0);
         assert!(!s.idle_expired(t0));
+    }
+
+    #[test]
+    fn zero_turns_idle_locking_off() {
+        let t0 = Instant::now();
+        let mut s = unlocked(t0);
+        s.set_settings(LockSettings {
+            idle_timeout_mins: 0,
+            ..LockSettings::default()
+        })
+        .unwrap();
+        s.note_suspended(Duration::from_secs(1 << 20));
+        assert!(!s.idle_expired(t0 + Duration::from_secs(1 << 20)));
+    }
+
+    #[test]
+    fn settings_saved_before_stay_unlocked_still_load() {
+        let old = r#"{"idleTimeoutMins":5,"lockOnSleep":false,"lockOnScreenLock":true,"clipboardClearSecs":30}"#;
+        let s: LockSettings = serde_json::from_str(old).unwrap();
+        assert_eq!(s.idle_timeout_mins, 5);
+        assert!(!s.stay_unlocked);
     }
 
     #[test]
@@ -260,11 +295,7 @@ mod tests {
         let mut s = Session::default();
         for bad in [
             LockSettings {
-                idle_timeout_mins: 0,
-                ..LockSettings::default()
-            },
-            LockSettings {
-                idle_timeout_mins: 481,
+                idle_timeout_mins: 1441,
                 ..LockSettings::default()
             },
             LockSettings {

@@ -19,7 +19,7 @@ use zvault_crypto::{
 pub const CRYPTO_VERSION: u32 = 1;
 
 /// Mirrors `KdfParams` in `@zvault/shared`.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct KdfDto {
     alg: String,
@@ -30,7 +30,7 @@ pub struct KdfDto {
 }
 
 /// Mirrors `EncryptedBlob` in `@zvault/shared`.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct BlobDto {
     v: u32,
     alg: String,
@@ -66,6 +66,7 @@ pub struct Unlocked {
 
 struct PendingLogin {
     email: String,
+    kdf: KdfDto,
     srp: ClientSession,
     unlock_key: SymmetricKey,
     /// Saved to the Keychain once the login succeeds.
@@ -78,11 +79,24 @@ struct Account {
     keyset: SymmetricKey,
 }
 
+/// What unlocking again on this Mac needs besides the master password and
+/// the saved Secret Key. None of it is secret: the server hands it to anyone
+/// who starts a login. Kept while locked so the lock screen can unlock
+/// without a new sign-in.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LocalUnlock {
+    email: String,
+    kdf: KdfDto,
+    encrypted_keyset: BlobDto,
+}
+
 /// Key material held by the app between commands. Dropping it zeroizes it.
 #[derive(Default)]
 pub struct AuthState {
     pending: Option<PendingLogin>,
     account: Option<Account>,
+    local: Option<LocalUnlock>,
 }
 
 type AppState<'a> = State<'a, Mutex<AuthState>>;
@@ -90,6 +104,9 @@ type AppState<'a> = State<'a, Mutex<AuthState>>;
 /// The one message shown for any login failure, so it can't tell an attacker
 /// which input was wrong.
 const LOGIN_FAILED: &str = "Incorrect email, master password or Secret Key.";
+
+const WRONG_PASSWORD: &str = "Incorrect master password.";
+const SIGN_IN_AGAIN: &str = "Sign out and sign in again to unlock.";
 
 /// Creates a new account's keys: a Secret Key, KDF salt, SRP verifier and a
 /// sealed keyset. Runs Argon2id, so it takes about a second.
@@ -165,6 +182,7 @@ pub async fn login_prove(
             .map_err(|_| LOGIN_FAILED.to_string())?;
         Ok(PendingLogin {
             email,
+            kdf,
             srp,
             unlock_key: keys.unlock_key,
             secret_key,
@@ -213,18 +231,63 @@ pub fn login_finish(
     let email = pending.email.clone();
     // The key just proved itself, so this Mac can remember it.
     crate::remembered::remember(&app, &email, &pending.secret_key);
+    auth.local = Some(LocalUnlock {
+        email: email.clone(),
+        kdf: pending.kdf.clone(),
+        encrypted_keyset,
+    });
+    unlocked_with_password(&app, &mut auth, email.clone(), keyset);
+    Ok(Unlocked { email })
+}
+
+/// Unlocks a locked vault on this Mac with the master password: no new
+/// sign-in, and the server session stays as it was. Uses the Secret Key saved
+/// in the Keychain and the sealed keyset kept from the last sign-in.
+#[tauri::command]
+pub async fn unlock_with_password(app: AppHandle, password: String) -> Result<Unlocked, String> {
+    let password = Zeroizing::new(password);
+    let local = {
+        let state = app.state::<Mutex<AuthState>>();
+        lock_state(&state)?.local.clone().ok_or(SIGN_IN_AGAIN)?
+    };
+    let params = kdf_params(&local.kdf).map_err(|_| SIGN_IN_AGAIN)?;
+    let sealed = sealed(&local.encrypted_keyset).ok_or(SIGN_IN_AGAIN)?;
+    let email = local.email.clone();
+    let lookup = app.clone();
+    let keyset = blocking(move || {
+        let secret_key = crate::remembered::key_for(&lookup, &email).ok_or(SIGN_IN_AGAIN)?;
+        let keys = derive_account_keys(&password, &secret_key, &email, &params).map_err(err)?;
+        open_keyset(&keys.unlock_key, &sealed, &email).map_err(|_| WRONG_PASSWORD.to_string())
+    })
+    .await?;
+
+    let state = app.state::<Mutex<AuthState>>();
+    let mut auth = lock_state(&state)?;
+    // A sign-out while Argon2 ran wins: stay locked.
+    if auth.local.as_ref().map(|l| l.email.as_str()) != Some(local.email.as_str()) {
+        return Err(SIGN_IN_AGAIN.into());
+    }
+    unlocked_with_password(&app, &mut auth, local.email.clone(), keyset);
+    Ok(Unlocked { email: local.email })
+}
+
+/// Opens every part of the app that holds a key, after the master password
+/// was just proven.
+fn unlocked_with_password(
+    app: &AppHandle,
+    auth: &mut AuthState,
+    email: String,
+    keyset: SymmetricKey,
+) {
     app.state::<crate::Keyring>().unlock(copy_key(&keyset));
     crate::commands::unlocked_with_password(
-        &app,
+        app,
         &app.state::<crate::autolock::AppState>(),
         email.clone(),
         copy_key(&keyset),
     );
-    auth.account = Some(Account {
-        email: email.clone(),
-        keyset,
-    });
-    Ok(Unlocked { email })
+    auth.pending = None;
+    auth.account = Some(Account { email, keyset });
 }
 
 /// Locks the vault and forgets all key material.
@@ -235,23 +298,47 @@ pub fn lock(app: AppHandle, state: AppState<'_>) -> Result<(), String> {
     Ok(())
 }
 
-/// Drops the unlocked account. The auto-lock path calls this.
+/// Drops the unlocked account and any login in progress. The auto-lock path
+/// calls this. What the lock screen needs to unlock again is kept.
 pub(crate) fn forget(app: &AppHandle) {
     let state = app.state::<Mutex<AuthState>>();
     let mut auth = state
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    *auth = AuthState::default();
+    let local = auth.local.take();
+    *auth = AuthState {
+        local,
+        ..AuthState::default()
+    };
 }
 
-/// Reopens the account after a quick unlock (Touch ID) handed back its keyset.
-pub(crate) fn restore(app: &AppHandle, email: String, keyset: SymmetricKey) {
+/// Reopens the account after a quick unlock (Touch ID) or a restart with
+/// "Stay unlocked" handed back its keyset. `local` replaces the kept lock
+/// screen state when given.
+pub(crate) fn restore(
+    app: &AppHandle,
+    email: String,
+    keyset: SymmetricKey,
+    local: Option<LocalUnlock>,
+) {
     let state = app.state::<Mutex<AuthState>>();
     let mut auth = state
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     auth.pending = None;
     auth.account = Some(Account { email, keyset });
+    if local.is_some() {
+        auth.local = local;
+    }
+}
+
+/// What the lock screen needs to unlock again, for "Stay unlocked" to save.
+pub(crate) fn local_unlock(app: &AppHandle) -> Option<LocalUnlock> {
+    let state = app.state::<Mutex<AuthState>>();
+    let auth = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    auth.local.clone()
 }
 
 /// Runs `f` on the unlocked account's keyset, or returns None while locked.

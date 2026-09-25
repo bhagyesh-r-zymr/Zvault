@@ -2,18 +2,24 @@ import { useState } from 'react';
 import { lock, type LockSettings, type LockStatus } from './lock.js';
 import { ErrorLine, Segmented, SwitchRow } from './ui/controls.js';
 
+const NEVER = 0;
+
 interface Props {
   status: LockStatus;
   onChanged: () => void;
 }
 
-const IDLE_MINUTES = [1, 5, 10, 30, 60];
+const IDLE_MINUTES = [5, 15, 60, 240, 480, NEVER];
 const CLIPBOARD_SECONDS = [30, 90, 300];
 
 const withCurrent = (options: number[], current: number) =>
-  options.includes(current) ? options : [...options, current].sort((a, b) => a - b);
+  options.includes(current) ? options : [...options, current].sort(byDuration);
 
-const minutes = (m: number) => (m >= 60 && m % 60 === 0 ? `${m / 60} h` : `${m} min`);
+/** Sorts durations with "never" (0) last. */
+const byDuration = (a: number, b: number) => (a || Infinity) - (b || Infinity);
+
+const minutes = (m: number) =>
+  m === NEVER ? 'Never' : m >= 60 && m % 60 === 0 ? `${m / 60} h` : `${m} min`;
 const seconds = (s: number) => (s >= 60 && s % 60 === 0 ? `${s / 60} min` : `${s} s`);
 
 export function LockSettingsPanel({ status, onChanged }: Props) {
@@ -65,6 +71,12 @@ export function LockSettingsPanel({ status, onChanged }: Props) {
             }))}
           />
         </div>
+        <SwitchRow
+          title="Stay unlocked after quitting"
+          detail="Opens without your master password for up to 14 days, until Zvault locks. Anyone using your Mac account could open it."
+          checked={draft.stayUnlocked}
+          onChange={(v) => save({ ...draft, stayUnlocked: v })}
+        />
         <SwitchRow
           title="Lock when the Mac sleeps"
           checked={draft.lockOnSleep}

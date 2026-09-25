@@ -18,6 +18,7 @@ mod projects;
 mod remembered;
 mod session;
 mod sharing;
+mod stay_unlocked;
 mod team;
 mod updater;
 mod vault;
@@ -61,6 +62,7 @@ pub fn run() {
         .manage(updater::PendingUpdate::default())
         .manage(pairing::PendingPairing::default())
         .setup(|app| {
+            commands::load_settings(app.handle());
             autolock::start(app.handle());
             agents::start(app.handle());
             Ok(())
@@ -72,6 +74,7 @@ pub fn run() {
             auth::login_verify_server,
             auth::login_finish,
             auth::lock,
+            auth::unlock_with_password,
             auth::unlocked,
             emergency_kit::emergency_kit_pending,
             emergency_kit::save_emergency_kit,
@@ -115,6 +118,8 @@ pub fn run() {
             commands::enable_touch_id,
             commands::disable_touch_id,
             commands::unlock_with_touch_id,
+            stay_unlocked::stay_unlocked_save,
+            stay_unlocked::stay_unlocked_restore,
             sharing::share_link_create,
             sharing::sharing_identity,
             sharing::sharing_fingerprint,

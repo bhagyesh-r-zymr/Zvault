@@ -1,6 +1,6 @@
 import { CRYPTO_VERSION } from '@zvault/shared';
 import { useCallback, useEffect, useState } from 'react';
-import { signOut, type Session } from './auth.js';
+import { resumeSession, signOut, type Session } from './auth.js';
 import { core, type RememberedAccount } from './core.js';
 import { EmergencyKitStep } from './EmergencyKitStep.js';
 import { lock, useActivityReporter, type LockReason, type LockStatus } from './lock.js';
@@ -11,6 +11,7 @@ import { AppShell } from './shell/AppShell.js';
 import { UpdateBanner } from './updates/UpdateBanner.js';
 
 type Screen =
+  | { name: 'starting' }
   | { name: 'login'; email?: string; secretKey?: string }
   | { name: 'signup-email' }
   | { name: 'signup-code'; email: string }
@@ -20,7 +21,7 @@ type Screen =
   | { name: 'locked'; session: Session; reason: LockReason; status: LockStatus };
 
 export function App() {
-  const [screen, setScreen] = useState<Screen>({ name: 'login' });
+  const [screen, setScreen] = useState<Screen>({ name: 'starting' });
   const [coreError, setCoreError] = useState<string | null>(null);
   const [lockStatus, setLockStatus] = useState<LockStatus | null>(null);
   const [remembered, setRemembered] = useState<RememberedAccount | null>(null);
@@ -40,7 +41,14 @@ export function App() {
       () => setRemembered(null),
     );
   }, []);
-  useEffect(refreshRemembered, [refreshRemembered]);
+
+  // With "Stay unlocked" on, open straight into the vault; otherwise sign in.
+  useEffect(() => {
+    void resumeSession().then((session) => {
+      setScreen(session ? { name: 'unlocked', session } : { name: 'login' });
+      refreshRemembered();
+    });
+  }, [refreshRemembered]);
 
   useEffect(() => {
     core.info().then(
@@ -82,6 +90,15 @@ export function App() {
     if (unlocked) refreshLockStatus();
   }, [unlocked, refreshLockStatus]);
 
+  // Every unlock refreshes what "Stay unlocked" keeps for the next launch.
+  const liveSession = screen.name === 'unlocked' ? screen.session : null;
+  const stayUnlocked = lockStatus?.settings.stayUnlocked ?? false;
+  useEffect(() => {
+    if (liveSession && stayUnlocked) {
+      lock.saveForRestart(liveSession.token, liveSession.expiresAt).catch(() => undefined);
+    }
+  }, [liveSession, stayUnlocked]);
+
   return (
     <>
       {coreError && (
@@ -92,6 +109,8 @@ export function App() {
       <UpdateBanner />
       {(() => {
         switch (screen.name) {
+          case 'starting':
+            return null;
           case 'login':
             return (
               <Login
@@ -150,7 +169,7 @@ export function App() {
                 status={screen.status}
                 reason={screen.reason}
                 onUnlocked={() => setScreen({ name: 'unlocked', session: screen.session })}
-                onUsePassword={() => {
+                onSignOut={() => {
                   void signOut(screen.session).then(() =>
                     setScreen({ name: 'login', email: screen.session.email }),
                   );

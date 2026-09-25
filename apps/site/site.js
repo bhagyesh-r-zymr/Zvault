@@ -217,11 +217,8 @@ const say = (text, kind = '') => {
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const data = Object.fromEntries(new FormData(form));
-  const name = form.elements.name;
   const email = form.elements.email;
-  name.setAttribute('aria-invalid', String(!data.name.trim()));
   email.setAttribute('aria-invalid', String(!email.checkValidity() || !data.email.trim()));
-  if (!data.name.trim()) return (say('Please enter your name.', 'error'), name.focus());
   if (email.getAttribute('aria-invalid') === 'true') {
     return (say('Please enter a valid email address.', 'error'), email.focus());
   }
@@ -236,14 +233,14 @@ form.addEventListener('submit', async (e) => {
     });
     if (res.ok) {
       form.classList.add('done');
-      say(`You're on the list, ${data.name.trim().split(' ')[0]}. We'll be in touch.`, 'ok');
+      say("You're on the list. We'll be in touch.", 'ok');
       return;
     }
     say(
       res.status === 429
         ? 'Too many tries from your network. Try again in an hour.'
         : res.status === 400
-          ? 'Please check your name and email.'
+          ? 'Please check your email address.'
           : 'Something went wrong. Try again in a moment.',
       'error',
     );

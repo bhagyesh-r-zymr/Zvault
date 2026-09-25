@@ -28,10 +28,9 @@ psql_box() {
   ssh "$host" 'cd ~/zvault && docker compose exec -T postgres psql -U zvault -d zvault -v ON_ERROR_STOP=1 -q -At -F "$(printf "\t")"'
 }
 
-# Tab-separated: email, status, name, joined, note. The note (which may be
-# empty) is last because read collapses adjacent tabs.
+# Tab-separated: email, status, joined. The form only asks for an email.
 rows=$(psql_box <<'SQL'
-select email, status, name, to_char(created_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI'), note
+select email, status, to_char(created_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI')
 from waitlist order by created_at;
 SQL
 )
@@ -52,9 +51,9 @@ set_status() {
   updates+="update waitlist set status = '$2', updated_at = now() where email = $(sql_str "$1");"$'\n'
 }
 
-printf '%-17s  %-32s  %-24s  %-18s  %s\n' 'JOINED (UTC)' 'EMAIL' 'NAME' 'STATUS' 'TEAM OR REASON'
+printf '%-17s  %-40s  %s\n' 'JOINED (UTC)' 'EMAIL' 'STATUS'
 total=0 sent=0 pending=0
-while IFS=$'\t' read -r email status name joined note; do
+while IFS=$'\t' read -r email status joined; do
   total=$((total + 1))
   if [ "$status" != 'verified' ]; then
     ses=$(ses_status "$email")
@@ -73,7 +72,7 @@ while IFS=$'\t' read -r email status name joined note; do
     fi
   fi
   [ "$status" = 'pending' ] && pending=$((pending + 1))
-  printf '%-17s  %-32s  %-24s  %-18s  %s\n' "$joined" "$email" "$name" "$status" "$note"
+  printf '%-17s  %-40s  %s\n' "$joined" "$email" "$status"
 done <<<"$rows"
 
 [ -n "$updates" ] && psql_box <<<"$updates"

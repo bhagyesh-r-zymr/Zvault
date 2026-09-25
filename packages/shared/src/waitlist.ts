@@ -15,7 +15,8 @@ const cleanText = (max: number) =>
 
 /** POST /v1/waitlist, sent by the landing page form. */
 export const JoinWaitlistRequest = z.object({
-  name: cleanText(100).pipe(z.string().min(1, { message: 'is required' })),
+  /** No longer asked for by the form; kept optional for older pages. */
+  name: cleanText(100).optional().default(''),
   email: Email,
   /** Optional: their team or why they want to try Zvault. */
   note: cleanText(500).optional().default(''),

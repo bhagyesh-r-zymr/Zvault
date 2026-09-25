@@ -342,6 +342,7 @@ export function AppShell(props: {
                     setRoute({ name: 'project', projectId, envId })
                   }
                   onOpenAccess={() => setRoute({ name: 'access', projectId: route.projectId })}
+                  sharing={sharing}
                 />
               </TeamContext.Provider>
             )}

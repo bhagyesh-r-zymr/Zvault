@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../app_state.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'share_item.dart';
 
 class ProjectDetailScreen extends StatefulWidget {
   const ProjectDetailScreen({
@@ -75,6 +76,18 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     if (v == null) return;
     await SecureClipboard.copy(v);
     if (mounted) showToast(context, '${s.key} copied. Clears in a minute.');
+  }
+
+  /// Only a member holding this environment's key (Use or higher) sees Share;
+  /// the value is opened and encrypted in Rust.
+  void _share(Secret s) {
+    final env = _current;
+    if (env == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ShareItemScreen(subject: SecretShareSubject(widget.project, s, env)),
+      ),
+    );
   }
 
   @override
@@ -161,6 +174,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                         readable: env?.unlocked == true && s.values.containsKey(env!.id),
                         onToggle: () => _toggle(s),
                         onCopy: () => _copy(s),
+                        onShare: () => _share(s),
                       ),
                     ],
                   ],
@@ -182,6 +196,7 @@ class _SecretRow extends StatelessWidget {
     required this.readable,
     required this.onToggle,
     required this.onCopy,
+    required this.onShare,
   });
 
   final Secret secret;
@@ -189,6 +204,7 @@ class _SecretRow extends StatelessWidget {
   final bool readable;
   final VoidCallback onToggle;
   final VoidCallback onCopy;
+  final VoidCallback onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -227,6 +243,12 @@ class _SecretRow extends StatelessWidget {
               tooltip: 'Copy',
               onPressed: onCopy,
               icon: const Icon(Icons.copy_rounded, size: 19),
+            ),
+            IconButton(
+              key: Key('share-secret-${secret.key}'),
+              tooltip: 'Share',
+              onPressed: onShare,
+              icon: const Icon(Icons.ios_share_rounded, size: 19),
             ),
           ],
         ],

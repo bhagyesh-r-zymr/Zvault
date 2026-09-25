@@ -4,7 +4,7 @@ import 'rust/api/sharing.dart' as sharing;
 import 'rust/api/vault.dart' as vault;
 
 export 'rust/api/pairing.dart' show PairedAccount, ScannedCode;
-export 'rust/api/sharing.dart' show NewShareLink, NewUserShare, SharingIdentity;
+export 'rust/api/sharing.dart' show NewShareLink, NewUserShare, SecretShare, SharingIdentity;
 export 'rust/api/vault.dart'
     show EnvironmentView, ItemDetail, ItemSummary, OneTimeCode, VaultSummary;
 
@@ -74,6 +74,12 @@ class Core {
     String shareOrigin,
   ) => sharing.shareLinkCreate(vaultId: vaultId, recordJson: recordJson, shareOrigin: shareOrigin);
 
+  /// Opens one project secret's value and encrypts it under a fresh link key.
+  Future<sharing.NewShareLink> createSecretShareLink(
+    sharing.SecretShare secret,
+    String shareOrigin,
+  ) => sharing.secretShareLinkCreate(secret: secret, shareOrigin: shareOrigin);
+
   Future<sharing.SharingIdentity> sharingIdentity() => sharing.sharingIdentity();
 
   Future<String> sharingFingerprint(String publicKey) =>
@@ -88,4 +94,9 @@ class Core {
     recordJson: recordJson,
     recipientPublicKey: recipientPublicKey,
   );
+
+  Future<sharing.NewUserShare> sealSecretShareTo(
+    sharing.SecretShare secret,
+    String recipientPublicKey,
+  ) => sharing.secretShareSealTo(secret: secret, recipientPublicKey: recipientPublicKey);
 }

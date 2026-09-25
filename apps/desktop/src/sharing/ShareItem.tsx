@@ -17,7 +17,14 @@ const EXPIRY_OPTIONS = [
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-/** Share one item by link or with another Zvault user. */
+/** "item" or, for a project secret, "secret", for the sheet's wording. */
+const noun = (item: SharedItemPayload) => (item.secret ? 'secret' : 'item');
+
+/** What the recipient sees it called, such as `DATABASE_URL (Staging)`. */
+const label = (item: SharedItemPayload) =>
+  item.secret ? `${item.secret.key} (${item.secret.environment})` : item.title;
+
+/** Share one item or project secret by link or with another Zvault user. */
 export function ShareItem({ item, api }: { item: SharedItemPayload; api: SharingApi }) {
   const [mode, setMode] = useState<'link' | 'person'>('link');
   return (
@@ -88,9 +95,9 @@ function ShareByLink({ item, api }: { item: SharedItemPayload; api: SharingApi }
     try {
       await sharingCore.composeEmail(
         to,
-        `I shared "${item.title}" with you`,
+        `I shared "${label(item)}" with you`,
         [
-          `I shared "${item.title}" with you using Zvault.`,
+          `I shared "${label(item)}" with you using Zvault.`,
           '',
           `Open this link: ${link}`,
           '',
@@ -108,7 +115,7 @@ function ShareByLink({ item, api }: { item: SharedItemPayload; api: SharingApi }
         <p className="secondary">
           {allowed
             ? `Only ${allowed.join(', ')} can open this link, after confirming their email with a one-time code. It is shown only now.`
-            : 'Anyone with this link can view the item. It is shown only now.'}
+            : `Anyone with this link can view the ${noun(item)}. It is shown only now.`}
         </p>
         <div className="link-box">
           <input
@@ -326,8 +333,8 @@ function ShareWithPerson({ item, api }: { item: SharedItemPayload; api: SharingA
             </p>
           )}
           <p className="hint">
-            For sensitive items, ask them to read out the code in their Zvault settings. If it
-            differs, do not send.
+            For sensitive {noun(item)}s, ask them to read out the code in their Zvault settings. If
+            it differs, do not send.
           </p>
           <button
             type="button"

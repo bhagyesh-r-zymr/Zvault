@@ -412,3 +412,31 @@ if (af) {
     }, 5200);
   }
 }
+
+// Android: pairing steps and the phone's screens move together.
+const pair = document.getElementById('pair');
+const phoneImgs = [...document.querySelectorAll('.phone-screen img')];
+if (pair && phoneImgs.length) {
+  const stepFor = [0, 1, 2, 2, 2, 2, 2, 2];
+  const pairSteps = [...pair.querySelectorAll('.pair-steps li')];
+  let shot = 0;
+  let phoneVisible = false;
+  const paint = () => {
+    phoneImgs.forEach((img, i) => {
+      img.classList.toggle('show', i === shot);
+      img.classList.toggle('gone', i < shot);
+    });
+    const at = stepFor[shot];
+    pair.dataset.at = String(at);
+    pairSteps.forEach((li, i) => li.classList.toggle('on', i === at));
+  };
+  paint();
+  new IntersectionObserver(([e]) => (phoneVisible = e.isIntersecting)).observe(pair.parentElement);
+  if (!reduced) {
+    setInterval(() => {
+      if (!phoneVisible) return;
+      shot = (shot + 1) % phoneImgs.length;
+      paint();
+    }, 2600);
+  }
+}

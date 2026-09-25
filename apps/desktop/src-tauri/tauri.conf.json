@@ -40,5 +40,13 @@
       "minimumSystemVersion": "13.0",
       "hardenedRuntime": true
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://github.com/bhagyesh-r-zymr/Zvault/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

@@ -17,6 +17,7 @@ mod projects;
 mod session;
 mod sharing;
 mod team;
+mod updater;
 mod vault;
 
 use std::sync::Mutex;
@@ -48,11 +49,13 @@ fn core_info() -> CoreInfo {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Mutex::new(auth::AuthState::default()))
         .manage(emergency_kit::PendingKit::default())
         .manage(Keyring::default())
         .manage(autolock::AppState::new())
         .manage(agents::AgentHub::default())
+        .manage(updater::PendingUpdate::default())
         .setup(|app| {
             autolock::start(app.handle());
             agents::start(app.handle());
@@ -121,6 +124,8 @@ pub fn run() {
             agents::agent_write_respond,
             cli_install::cli_status,
             cli_install::cli_install,
+            updater::update_check,
+            updater::update_install,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Zvault");

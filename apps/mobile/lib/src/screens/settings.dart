@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../app_state.dart';
+import '../storage.dart';
 import '../theme.dart';
 import '../widgets.dart';
 
@@ -16,10 +17,17 @@ class SettingsTab extends StatelessWidget {
     letterSpacing: 0,
   );
 
-  static const _autoLock = {1: '1 minute', 5: '5 minutes', 15: '15 minutes', 60: '1 hour'};
+  static const _autoLock = {
+    1: '1 minute',
+    5: '5 minutes',
+    15: '15 minutes',
+    60: '1 hour',
+    240: '4 hours',
+    0: 'Never',
+  };
 
   Future<void> _pickAutoLock(BuildContext context, AppState app) async {
-    final current = app.account?.autoLockMinutes ?? 1;
+    final current = app.account?.autoLockMinutes ?? defaultAutoLockMinutes;
     final picked = await showModalBottomSheet<int>(
       context: context,
       builder: (context) => SafeArea(
@@ -76,7 +84,7 @@ class SettingsTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
     final a = app.account;
-    final minutes = a?.autoLockMinutes ?? 1;
+    final minutes = a?.autoLockMinutes ?? defaultAutoLockMinutes;
     final c = context.zv;
     final email = a?.email ?? '';
     return SafeArea(

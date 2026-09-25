@@ -1,0 +1,128 @@
+/* History sheets (items and secrets) and the Trash page. */
+
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.history-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.history-note svg {
+  color: var(--secure);
+  flex: none;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+}
+
+.history-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.history-head .row-title::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--iris);
+  margin-right: 8px;
+  vertical-align: 1px;
+}
+
+.history-fields {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 6px 12px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.history-fields dt {
+  color: var(--muted);
+  font-size: 11.5px;
+  align-self: center;
+}
+
+.history-fields dd {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-fields dd.changed {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.history-fields dd.changed::after {
+  content: 'changed';
+  font: 600 10px var(--font);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--symbol);
+  background: var(--danger-bg);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+
+.trash-row .row-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.trash-row .soon {
+  color: var(--danger);
+}
+
+.trash-row .tile {
+  opacity: 0.85;
+}
+
+.trash-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius-l);
+  background: var(--accent-soft);
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+
+.trash-banner svg {
+  color: var(--iris-text);
+  flex: none;
+}

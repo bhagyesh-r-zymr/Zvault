@@ -15,6 +15,7 @@ import {
 } from './model.js';
 import { EnvironmentSheet } from './EnvironmentsView.js';
 import { NewSecretSheet } from './NewSecretSheet.js';
+import { SecretHistory } from './SecretHistory.js';
 import type { ProjectTeam } from './team.js';
 import { LEVEL_LABELS, buildMatrix, canEditEnv, isOrgAdmin, whoCanUse } from './teamModel.js';
 import './projects.css';
@@ -306,6 +307,7 @@ function SecretDetail(props: {
   const [revealed, setRevealed] = useState<string | null>(null);
   const [sharePayload, setSharePayload] = useState<SharedItemPayload | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const source = env.locked ? null : valueSource(project, secret, env.id);
@@ -499,7 +501,7 @@ function SecretDetail(props: {
           {confirmDelete ? (
             <>
               <span className="secondary" style={{ alignSelf: 'center' }}>
-                Delete “{secret.name}” from every environment?
+                Move “{secret.name}” to Trash? You can restore it for 30 days.
               </span>
               <button type="button" disabled={busy} onClick={() => setConfirmDelete(false)}>
                 Cancel
@@ -510,15 +512,20 @@ function SecretDetail(props: {
                 disabled={busy}
                 onClick={() => void remove()}
               >
-                {busy ? 'Deleting…' : 'Delete'}
+                {busy ? 'Moving…' : 'Move to Trash'}
               </button>
             </>
           ) : (
-            props.canEdit && (
-              <button type="button" className="ghost" onClick={() => setConfirmDelete(true)}>
-                <Icon name="trash" size={13} /> Delete
+            <>
+              <button type="button" className="ghost" onClick={() => setHistoryOpen(true)}>
+                <Icon name="history" size={13} /> History
               </button>
-            )
+              {props.canEdit && (
+                <button type="button" className="ghost" onClick={() => setConfirmDelete(true)}>
+                  <Icon name="trash" size={13} /> Delete
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -534,6 +541,27 @@ function SecretDetail(props: {
           onClose={() => setSharePayload(null)}
         >
           <ShareItem api={sharing} item={sharePayload} />
+        </Sheet>
+      )}
+      {historyOpen && (
+        <Sheet
+          title={`History of ${secret.name}`}
+          subtitle={`${project.name} · earlier versions, decrypted on this Mac`}
+          icon={
+            <span className="tile">
+              <Icon name="key" size={16} />
+            </span>
+          }
+          width={620}
+          onClose={() => setHistoryOpen(false)}
+        >
+          <SecretHistory
+            key={secret.revision}
+            project={project}
+            secret={secret}
+            canEdit={props.canEdit}
+            onRestored={() => setHistoryOpen(false)}
+          />
         </Sheet>
       )}
     </>

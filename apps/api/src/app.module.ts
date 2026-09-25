@@ -8,6 +8,7 @@ import { ConfigModule } from './config/config.module.js';
 import { DatabaseModule } from './db/database.module.js';
 import { DevicesModule } from './devices/devices.module.js';
 import { HealthController } from './health/health.controller.js';
+import { HistoryModule } from './history/trash-sweeper.js';
 import { MailModule } from './mail/mail.module.js';
 import { MetaController } from './meta/meta.controller.js';
 import { PairingModule } from './pairing/pairing.module.js';
@@ -33,6 +34,7 @@ import { WaitlistModule } from './waitlist/waitlist.module.js';
     }),
     VaultModule,
     ProjectsModule,
+    HistoryModule,
     SharingModule,
     AccessModule,
     PairingModule,

@@ -1,11 +1,15 @@
 import {
   API_VERSION,
   ItemConflictResponse,
+  ItemHistoryResponse,
   ItemRecord,
   ListVaultsResponse,
   SyncItemsResponse,
   VaultRecord,
+  VaultTrashResponse,
   type CreateVaultRequest,
+  type ItemVersion,
+  type TrashedItem,
   type PutItemRequest,
 } from '@zvault/shared';
 
@@ -56,6 +60,22 @@ export class VaultApi {
   async deleteItem(vaultId: string, itemId: string, baseRevision: number): Promise<ItemRecord> {
     const path = `/vaults/${vaultId}/items/${itemId}?baseRevision=${baseRevision}`;
     return ItemRecord.parse(await this.request('DELETE', path));
+  }
+
+  /** Earlier versions of an item, newest first. */
+  async itemHistory(vaultId: string, itemId: string): Promise<ItemVersion[]> {
+    const path = `/vaults/${vaultId}/items/${itemId}/history`;
+    return ItemHistoryResponse.parse(await this.request('GET', path)).versions;
+  }
+
+  /** Items deleted in the last 30 days, newest first. */
+  async trash(vaultId: string): Promise<TrashedItem[]> {
+    return VaultTrashResponse.parse(await this.request('GET', `/vaults/${vaultId}/trash`)).items;
+  }
+
+  /** Deletes one trashed item for good, or empties the trash (`itemId` null). */
+  async purgeTrash(vaultId: string, itemId: string | null): Promise<void> {
+    await this.request('DELETE', `/vaults/${vaultId}/trash${itemId ? `/${itemId}` : ''}`);
   }
 
   private async request(method: string, path: string, body?: unknown): Promise<unknown> {

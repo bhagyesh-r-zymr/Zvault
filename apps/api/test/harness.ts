@@ -16,6 +16,7 @@ import { MIGRATIONS_FOLDER } from '../src/db/migrations.js';
 import { SessionStore } from '../src/devices/session.store.js';
 import * as schema from '../src/db/schema.js';
 import { Mailer } from '../src/mail/mailer.js';
+import { SHARE_CLOCK } from '../src/sharing/clock.js';
 import { MemoryMailer } from '../src/mail/memory.mailer.js';
 
 export interface Harness {
@@ -26,15 +27,24 @@ export interface Harness {
   close: () => Promise<void>;
 }
 
+export interface HarnessOptions {
+  /** Replaces the sharing clock, so tests can move time forward. */
+  clock?: () => Date;
+  /** Keep the real rate limits, keyed on `X-Forwarded-For`. */
+  rateLimits?: boolean;
+  /** Extra environment variables. */
+  env?: Record<string, string>;
+}
+
 /** Boots the real app on an in-process PGlite Postgres with the migrations applied. */
-export async function createHarness(): Promise<Harness> {
+export async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
   const pglite = new PGlite();
   const db = drizzle(pglite, { schema });
   await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
   const mailer = new MemoryMailer();
-  const env = loadEnv({ NODE_ENV: 'test', CORS_ORIGINS: 'http://localhost:1420' });
+  const env = loadEnv({ NODE_ENV: 'test', CORS_ORIGINS: 'http://localhost:1420', ...options.env });
 
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+  let builder = Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(ENV)
     .useValue(env)
     .overrideProvider(PG_POOL)
@@ -42,16 +52,26 @@ export async function createHarness(): Promise<Harness> {
     .overrideProvider(DATABASE)
     .useValue(db)
     .overrideProvider(Mailer)
-    .useValue(mailer)
+    .useValue(mailer);
+  if (options.clock) builder = builder.overrideProvider(SHARE_CLOCK).useValue(options.clock);
+  if (!options.rateLimits) {
     // Tests share one client IP; rate limits are covered separately.
-    .overrideProvider(ThrottlerStorage)
-    .useValue({
+    builder = builder.overrideProvider(ThrottlerStorage).useValue({
       increment: () =>
         Promise.resolve({ totalHits: 1, timeToExpire: 60, isBlocked: false, timeToBlockExpire: 0 }),
-    })
-    .compile();
+    });
+  }
+  const moduleRef = await builder.compile();
 
-  const app = configureApp(moduleRef.createNestApplication(), env);
+  const nest = moduleRef.createNestApplication();
+  if (options.rateLimits) {
+    // Lets each test pick its client IP, so limits apply per test.
+    (nest.getHttpAdapter().getInstance() as { set: (k: string, v: unknown) => void }).set(
+      'trust proxy',
+      true,
+    );
+  }
+  const app = configureApp(nest, env);
   await app.init();
   return {
     app,
@@ -70,11 +90,12 @@ let accountCount = 0;
 /** A bare account row with a live session; returns headers that authenticate as it. */
 export async function signedInAccount(
   h: Harness,
+  email = `account-${++accountCount}-${Date.now()}@example.com`,
 ): Promise<{ id: string; headers: { Authorization: string } }> {
   const [row] = await h.db
     .insert(schema.accounts)
     .values({
-      email: `account-${++accountCount}-${Date.now()}@example.com`,
+      email,
       secretKeyId: 'TESTKEY',
       kdf: { alg: 'argon2id', memoryKib: 65536, iterations: 3, parallelism: 1, salt: 'AAAA' },
       srpVerifier: Buffer.alloc(384, 1),

@@ -183,9 +183,91 @@ pub fn share_open(app: AppHandle, share: IncomingShare) -> Result<String, String
     String::from_utf8(plaintext).map_err(|_| "malformed share".into())
 }
 
+/// Percent-encodes everything but RFC 3986 unreserved characters.
+fn percent_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
+}
+
+/// A `mailto:` URL for the user's own mail app. Addresses must be plain
+/// `local@domain` so nothing can smuggle extra headers into the URL.
+fn mailto_url(to: &[String], subject: &str, body: &str) -> Result<String, String> {
+    if to.is_empty() || to.len() > 20 {
+        return Err("Add between 1 and 20 email addresses.".into());
+    }
+    let plain = |a: &String| {
+        let mut parts = a.split('@');
+        let ok = |p: Option<&str>| p.is_some_and(|p| !p.is_empty());
+        ok(parts.next())
+            && ok(parts.next())
+            && parts.next().is_none()
+            && a.len() <= 254
+            && a.chars()
+                .all(|c| c.is_ascii_alphanumeric() || "@.-_+'".contains(c))
+    };
+    if let Some(bad) = to.iter().find(|a| !plain(a)) {
+        return Err(format!("{bad} is not an email address."));
+    }
+    let to: Vec<String> = to.iter().map(|a| percent_encode(a)).collect();
+    Ok(format!(
+        "mailto:{}?subject={}&body={}",
+        to.join(","),
+        percent_encode(subject),
+        percent_encode(body)
+    ))
+}
+
+/// Opens a new message in the user's own mail app. The share link (and its
+/// key) goes from their mailbox; it never passes through Zvault's servers.
+#[tauri::command]
+pub fn share_compose_email(to: Vec<String>, subject: String, body: String) -> Result<(), String> {
+    let url = mailto_url(&to, &subject, &body)?;
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
+    std::process::Command::new(opener)
+        .arg(url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Could not open your mail app: {e}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mailto_encodes_everything_and_refuses_odd_addresses() {
+        let url = mailto_url(
+            &["a@x.com".into(), "b+c@y.org".into()],
+            "Hi & bye",
+            "Open https://h/share/#id.key\nThanks",
+        )
+        .unwrap();
+        assert_eq!(
+            url,
+            "mailto:a%40x.com,b%2Bc%40y.org?subject=Hi%20%26%20bye&body=Open%20https%3A%2F%2Fh%2Fshare%2F%23id.key%0AThanks"
+        );
+        for bad in [
+            "a@b.com?cc=evil@x.com",
+            "nobody",
+            "a@b@c",
+            "a b@c.com",
+            "@b.com",
+        ] {
+            assert!(mailto_url(&[bad.into()], "s", "b").is_err(), "{bad}");
+        }
+        assert!(mailto_url(&[], "s", "b").is_err());
+    }
 
     #[test]
     fn link_url_carries_id_and_key_in_the_fragment() {

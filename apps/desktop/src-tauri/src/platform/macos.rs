@@ -166,3 +166,37 @@ pub mod keychain {
         }
     }
 }
+
+/// The Secret Key saved after the first sign-in on this Mac, so the person
+/// doesn't retype it. It lives in the login keychain, which works in unsigned
+/// builds (the data-protection keychain needs an entitlement).
+pub mod secret_key {
+    use security_framework::passwords::{
+        delete_generic_password, get_generic_password, set_generic_password,
+    };
+    use zeroize::Zeroizing;
+
+    const SERVICE: &str = "com.zvault.desktop.secret-key";
+    const ERR_SEC_ITEM_NOT_FOUND: i32 = -25300;
+
+    pub fn save(account_id: &str, key: &str) -> Result<(), String> {
+        set_generic_password(SERVICE, account_id, key.as_bytes()).map_err(|e| e.to_string())
+    }
+
+    /// `None` if nothing is saved or the person denied the keychain prompt
+    /// (unsigned builds see one after each update).
+    pub fn load(account_id: &str) -> Option<Zeroizing<String>> {
+        let bytes = Zeroizing::new(get_generic_password(SERVICE, account_id).ok()?);
+        core::str::from_utf8(&bytes)
+            .ok()
+            .map(|s| Zeroizing::new(s.to_owned()))
+    }
+
+    pub fn delete(account_id: &str) -> Result<(), String> {
+        match delete_generic_password(SERVICE, account_id) {
+            Ok(()) => Ok(()),
+            Err(e) if e.code() == ERR_SEC_ITEM_NOT_FOUND => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+}

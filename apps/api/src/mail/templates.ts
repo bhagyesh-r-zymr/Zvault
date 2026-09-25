@@ -68,6 +68,34 @@ export function shareReceivedEmail(to: string, senderEmail: string): MailMessage
   };
 }
 
+/** A one-time code for opening an email-restricted share link. Carries no item data. */
+export function shareCodeEmail(
+  to: string,
+  senderEmail: string | null,
+  code: string,
+  minutes: number,
+): MailMessage {
+  const who = senderEmail ?? 'Someone';
+  return {
+    to,
+    subject: `${code} is your code to view what ${who} shared`,
+    text: [
+      `${who} shared an item with you using Zvault.`,
+      '',
+      `Your code is ${code}. Enter it on the share page to view the item. It expires in ${minutes} minutes and works once.`,
+      '',
+      "If you didn't ask for this code, you can ignore this email. Nobody can open the item without it.",
+    ].join('\n'),
+    html: layout(
+      'Your code to view a shared item',
+      `<p><strong>${escape(who)}</strong> shared an item with you using Zvault.</p>
+<p>Enter this code on the share page. It expires in ${minutes} minutes and works once.</p>
+<p style="font-size:32px;letter-spacing:8px;font-weight:600">${escape(code)}</p>
+<p>If you didn't ask for this code, you can ignore this email. Nobody can open the item without it.</p>`,
+    ),
+  };
+}
+
 /** Tells a Zvault user they were invited to an organization. */
 export function orgInviteEmail(to: string, orgName: string, inviterEmail: string): MailMessage {
   return {
@@ -86,5 +114,24 @@ export function orgInviteEmail(to: string, orgName: string, inviterEmail: string
 <p>Open the Zvault app, go to a project's <strong>Access</strong> page and choose <strong>Accept invite</strong>. Nothing is shared with you until a manager gives you access.</p>
 <p>If you don't know the sender, you can ignore this email.</p>`,
     ),
+  };
+}
+
+/** Tells the owner someone joined the waitlist. The email is whatever the visitor typed. */
+export function waitlistJoinedEmail(to: string, joinerEmail: string, total: number): MailMessage {
+  return {
+    to,
+    subject: `Zvault waitlist: ${joinerEmail} joined (${total} total)`,
+    text: [
+      `${joinerEmail} joined the Zvault waitlist from the landing page.`,
+      '',
+      `There are ${total} people on the waitlist. Run deploy/ec2/waitlist.sh from your Mac to see them and let them receive Zvault email.`,
+    ].join('\n'),
+    html: `<!doctype html>
+<html><body style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#111;max-width:480px;margin:auto;padding:24px">
+<h2 style="margin-top:0">New waitlist sign-up</h2>
+<p><strong>${escape(joinerEmail)}</strong> joined the Zvault waitlist from the landing page.</p>
+<p>There are ${total} people on the waitlist. Run deploy/ec2/waitlist.sh from your Mac to see them and let them receive Zvault email.</p>
+</body></html>`,
   };
 }

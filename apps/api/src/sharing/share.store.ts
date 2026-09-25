@@ -1,5 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { timingSafeEqual } from 'node:crypto';
+import { Inject, Injectable } from '@nestjs/common';
 import type { EncryptedBlob, ShareId, SharingPublicKey } from '@zvault/shared';
+import { and, count, desc, eq, gt, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import { DATABASE, type Database } from '../db/database.js';
+import {
+  accounts,
+  shareLinkCodes,
+  shareLinks,
+  sharingKeys,
+  userShares,
+  waitlist,
+} from '../db/schema.js';
 
 export interface LinkRecord {
   id: ShareId;
@@ -7,6 +18,8 @@ export interface LinkRecord {
   /** Dropped as soon as the link can no longer be opened. */
   blob: EncryptedBlob | null;
   verifier: Buffer;
+  /** Keyed hashes of the emails allowed to open it; null means anyone with the link. */
+  allowedEmails: string[] | null;
   createdAt: Date;
   expiresAt: Date;
   maxViews: number;
@@ -34,27 +47,58 @@ export interface UserShareRecord {
   expiresAt: Date | null;
 }
 
-/**
- * Persistence for sharing. The in-memory implementation below backs local
- * development and tests; the DynamoDB one must keep the same atomicity, in
- * particular `consumeLinkView` as a single conditional update.
- */
+/** A one-time code presented for an email-restricted link, as keyed hashes. */
+export interface PresentedCode {
+  emailHash: Buffer;
+  codeHash: Buffer;
+}
+
+export type ConsumeResult =
+  | { ok: true; link: LinkRecord }
+  | { ok: false; reason: 'not_found' | 'email_required' | 'invalid_code' };
+
+export interface NewLinkCode extends PresentedCode {
+  linkId: ShareId;
+  now: Date;
+  expiresAt: Date;
+}
+
+/** Limits on emailing codes, per link and email. */
+export const CODE_LIMITS = {
+  cooldownMs: 30_000,
+  perHour: 5,
+  /** Wrong guesses before a code stops working. */
+  maxAttempts: 5,
+} as const;
+
+/** Persistence for sharing. */
 export interface ShareStore {
   insertLink(link: LinkRecord): Promise<boolean>;
-  getLink(id: string): Promise<LinkRecord | null>;
+  /** The link if it can still be opened at `now`. */
+  getOpenLink(id: ShareId, now: Date): Promise<LinkRecord | null>;
   listLinks(ownerId: string): Promise<LinkRecord[]>;
   countActiveLinks(ownerId: string, now: Date): Promise<number>;
   /**
-   * Atomically: if the link is open at `now` and `check` accepts it, count one
-   * view (dropping the ciphertext if that was the last one) and return the
-   * record as it was before the view was counted. Otherwise return null.
+   * Atomically: if the link is open at `now`, `check` accepts it and (for an
+   * email-restricted link) `code` matches a live code, spend the code, count
+   * one view (dropping the ciphertext if that was the last one) and return
+   * the record as it was before the view was counted.
    */
   consumeLinkView(
-    id: string,
+    id: ShareId,
     now: Date,
     check: (link: LinkRecord) => boolean,
-  ): Promise<LinkRecord | null>;
-  revokeLink(id: string, ownerId: string, now: Date): Promise<boolean>;
+    code?: PresentedCode,
+  ): Promise<ConsumeResult>;
+  revokeLink(id: ShareId, ownerId: string, now: Date): Promise<boolean>;
+  /**
+   * Stores a new code for a link and email, replacing any earlier one. Returns
+   * false, storing nothing, when that pair is over its sending limits.
+   */
+  issueLinkCode(code: NewLinkCode): Promise<boolean>;
+  accountEmail(userId: string): Promise<string | null>;
+  /** Which of `emails` belong to an account or a verified waitlist joiner. */
+  knownReachableEmails(emails: string[]): Promise<Set<string>>;
 
   putSharingKey(key: SharingKeyRecord): Promise<void>;
   getSharingKeyByUser(userId: string): Promise<SharingKeyRecord | null>;
@@ -64,7 +108,7 @@ export interface ShareStore {
   listIncoming(recipientId: string, now: Date): Promise<UserShareRecord[]>;
   listOutgoing(senderId: string, now: Date): Promise<UserShareRecord[]>;
   /** Deletes a share if `userId` is its sender or recipient. */
-  deleteUserShare(id: string, userId: string): Promise<boolean>;
+  deleteUserShare(id: ShareId, userId: string): Promise<boolean>;
 }
 
 export const SHARE_STORE = Symbol('SHARE_STORE');
@@ -72,111 +116,260 @@ export const SHARE_STORE = Symbol('SHARE_STORE');
 export const isLinkOpen = (link: LinkRecord, now: Date): boolean =>
   link.revokedAt === null && link.expiresAt > now && link.viewCount < link.maxViews;
 
-const isLive = (share: UserShareRecord, now: Date): boolean =>
-  share.expiresAt === null || share.expiresAt > now;
+type LinkRow = typeof shareLinks.$inferSelect;
+type UserShareRow = typeof userShares.$inferSelect;
 
+const toLink = (r: LinkRow): LinkRecord => ({
+  id: r.id,
+  ownerId: r.ownerId,
+  blob: r.blob,
+  verifier: r.verifier,
+  allowedEmails: r.allowedEmails,
+  createdAt: r.createdAt,
+  expiresAt: r.expiresAt,
+  maxViews: r.maxViews,
+  viewCount: r.viewCount,
+  revokedAt: r.revokedAt,
+});
+
+const toUserShare = (r: UserShareRow): UserShareRecord => ({ ...r });
+
+const liveAt = (now: Date) => or(isNull(userShares.expiresAt), gt(userShares.expiresAt, now));
+
+/** Postgres store. Links survive restarts and deploys. */
 @Injectable()
-export class InMemoryShareStore implements ShareStore {
-  private readonly links = new Map<string, LinkRecord>();
-  private readonly keys = new Map<string, SharingKeyRecord>();
-  private readonly userShares = new Map<string, UserShareRecord>();
+export class PostgresShareStore implements ShareStore {
+  constructor(@Inject(DATABASE) private readonly db: Database) {}
 
-  insertLink(link: LinkRecord): Promise<boolean> {
-    if (this.links.has(link.id) || this.userShares.has(link.id)) return Promise.resolve(false);
-    this.links.set(link.id, { ...link });
-    return Promise.resolve(true);
+  async insertLink(link: LinkRecord): Promise<boolean> {
+    const inserted = await this.db
+      .insert(shareLinks)
+      .values(link)
+      .onConflictDoNothing({ target: shareLinks.id })
+      .returning({ id: shareLinks.id });
+    return inserted.length > 0;
   }
 
-  getLink(id: string): Promise<LinkRecord | null> {
-    const link = this.links.get(id);
-    return Promise.resolve(link ? { ...link } : null);
+  async getOpenLink(id: ShareId, now: Date): Promise<LinkRecord | null> {
+    const [row] = await this.db.select().from(shareLinks).where(eq(shareLinks.id, id)).limit(1);
+    const link = row ? toLink(row) : null;
+    return link && isLinkOpen(link, now) ? link : null;
   }
 
-  listLinks(ownerId: string): Promise<LinkRecord[]> {
-    return Promise.resolve(
-      [...this.links.values()]
-        .filter((l) => l.ownerId === ownerId)
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-        .map((l) => ({ ...l })),
-    );
+  async listLinks(ownerId: string): Promise<LinkRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(shareLinks)
+      .where(eq(shareLinks.ownerId, ownerId))
+      .orderBy(desc(shareLinks.createdAt));
+    return rows.map(toLink);
   }
 
-  countActiveLinks(ownerId: string, now: Date): Promise<number> {
-    let n = 0;
-    for (const l of this.links.values()) if (l.ownerId === ownerId && isLinkOpen(l, now)) n++;
-    return Promise.resolve(n);
+  async countActiveLinks(ownerId: string, now: Date): Promise<number> {
+    const [row] = await this.db
+      .select({ n: count() })
+      .from(shareLinks)
+      .where(
+        and(
+          eq(shareLinks.ownerId, ownerId),
+          isNull(shareLinks.revokedAt),
+          gt(shareLinks.expiresAt, now),
+          lt(shareLinks.viewCount, shareLinks.maxViews),
+        ),
+      );
+    return row?.n ?? 0;
   }
 
   consumeLinkView(
-    id: string,
+    id: ShareId,
     now: Date,
     check: (link: LinkRecord) => boolean,
-  ): Promise<LinkRecord | null> {
-    const link = this.links.get(id);
-    if (!link) return Promise.resolve(null);
-    if (!isLinkOpen(link, now)) {
-      link.blob = null;
-      return Promise.resolve(null);
-    }
-    if (!check(link)) return Promise.resolve(null);
-    const before = { ...link };
-    link.viewCount += 1;
-    if (link.viewCount >= link.maxViews) link.blob = null;
-    return Promise.resolve(before);
+    code?: PresentedCode,
+  ): Promise<ConsumeResult> {
+    const notFound = { ok: false, reason: 'not_found' } as const;
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx.select().from(shareLinks).where(eq(shareLinks.id, id)).for('update');
+      if (!row) return notFound;
+      const link = toLink(row);
+      if (!isLinkOpen(link, now)) {
+        if (row.blob) await tx.update(shareLinks).set({ blob: null }).where(eq(shareLinks.id, id));
+        return notFound;
+      }
+      if (!check(link)) return notFound;
+
+      if (link.allowedEmails) {
+        if (!code) return { ok: false, reason: 'email_required' } as const;
+        const [pending] = await tx
+          .select()
+          .from(shareLinkCodes)
+          .where(
+            and(
+              eq(shareLinkCodes.linkId, id),
+              eq(shareLinkCodes.emailHash, code.emailHash),
+              isNull(shareLinkCodes.closedAt),
+              gt(shareLinkCodes.expiresAt, now),
+            ),
+          )
+          .orderBy(desc(shareLinkCodes.createdAt))
+          .limit(1)
+          .for('update');
+        if (!pending) return { ok: false, reason: 'invalid_code' } as const;
+        const matches = timingSafeEqual(pending.codeHash, code.codeHash);
+        const attempts = pending.attempts + (matches ? 0 : 1);
+        await tx
+          .update(shareLinkCodes)
+          .set({
+            attempts,
+            closedAt: matches || attempts >= CODE_LIMITS.maxAttempts ? now : null,
+          })
+          .where(eq(shareLinkCodes.id, pending.id));
+        if (!matches) return { ok: false, reason: 'invalid_code' } as const;
+      }
+
+      const viewCount = row.viewCount + 1;
+      await tx
+        .update(shareLinks)
+        .set({ viewCount, blob: viewCount >= row.maxViews ? null : row.blob })
+        .where(eq(shareLinks.id, id));
+      return { ok: true, link } as const;
+    });
   }
 
-  revokeLink(id: string, ownerId: string, now: Date): Promise<boolean> {
-    const link = this.links.get(id);
-    if (!link || link.ownerId !== ownerId) return Promise.resolve(false);
-    link.revokedAt ??= now;
-    link.blob = null;
-    return Promise.resolve(true);
+  async revokeLink(id: ShareId, ownerId: string, now: Date): Promise<boolean> {
+    const updated = await this.db
+      .update(shareLinks)
+      .set({ revokedAt: sql`coalesce(${shareLinks.revokedAt}, ${now})`, blob: null })
+      .where(and(eq(shareLinks.id, id), eq(shareLinks.ownerId, ownerId)))
+      .returning({ id: shareLinks.id });
+    return updated.length > 0;
   }
 
-  putSharingKey(key: SharingKeyRecord): Promise<void> {
-    this.keys.set(key.userId, { ...key, email: key.email.toLowerCase() });
-    return Promise.resolve();
+  issueLinkCode(code: NewLinkCode): Promise<boolean> {
+    const { linkId, emailHash, codeHash, now, expiresAt } = code;
+    return this.db.transaction(async (tx) => {
+      // Serializes code requests for one link, so the limits can't be raced.
+      await tx
+        .select({ id: shareLinks.id })
+        .from(shareLinks)
+        .where(eq(shareLinks.id, linkId))
+        .for('update');
+      const forEmail = and(
+        eq(shareLinkCodes.linkId, linkId),
+        eq(shareLinkCodes.emailHash, emailHash),
+      );
+      const recent = await tx
+        .select({ createdAt: shareLinkCodes.createdAt })
+        .from(shareLinkCodes)
+        .where(and(forEmail, gt(shareLinkCodes.createdAt, new Date(now.getTime() - 3_600_000))))
+        .orderBy(desc(shareLinkCodes.createdAt));
+      const last = recent[0]?.createdAt;
+      if (
+        recent.length >= CODE_LIMITS.perHour ||
+        (last && now.getTime() - last.getTime() < CODE_LIMITS.cooldownMs)
+      ) {
+        return false;
+      }
+      await tx
+        .update(shareLinkCodes)
+        .set({ closedAt: now })
+        .where(and(forEmail, isNull(shareLinkCodes.closedAt)));
+      await tx
+        .insert(shareLinkCodes)
+        .values({ linkId, emailHash, codeHash, expiresAt, createdAt: now });
+      return true;
+    });
   }
 
-  getSharingKeyByUser(userId: string): Promise<SharingKeyRecord | null> {
-    const key = this.keys.get(userId);
-    return Promise.resolve(key ? { ...key } : null);
+  async accountEmail(userId: string): Promise<string | null> {
+    const [row] = await this.db
+      .select({ email: accounts.email })
+      .from(accounts)
+      .where(eq(accounts.id, userId))
+      .limit(1);
+    return row?.email ?? null;
   }
 
-  getSharingKeyByEmail(email: string): Promise<SharingKeyRecord | null> {
-    const wanted = email.toLowerCase();
-    const key = [...this.keys.values()].find((k) => k.email === wanted);
-    return Promise.resolve(key ? { ...key } : null);
+  async knownReachableEmails(emails: string[]): Promise<Set<string>> {
+    if (emails.length === 0) return new Set();
+    const [owners, joiners] = await Promise.all([
+      this.db
+        .select({ email: accounts.email })
+        .from(accounts)
+        .where(inArray(accounts.email, emails)),
+      this.db
+        .select({ email: waitlist.email })
+        .from(waitlist)
+        .where(and(inArray(waitlist.email, emails), eq(waitlist.status, 'verified'))),
+    ]);
+    return new Set([...owners, ...joiners].map((r) => r.email));
   }
 
-  insertUserShare(share: UserShareRecord): Promise<boolean> {
-    if (this.userShares.has(share.id) || this.links.has(share.id)) return Promise.resolve(false);
-    this.userShares.set(share.id, { ...share });
-    return Promise.resolve(true);
+  async putSharingKey(key: SharingKeyRecord): Promise<void> {
+    const record = { ...key, email: key.email.toLowerCase() };
+    await this.db
+      .insert(sharingKeys)
+      .values(record)
+      .onConflictDoUpdate({
+        target: sharingKeys.userId,
+        set: { email: record.email, publicKey: record.publicKey, updatedAt: record.updatedAt },
+      });
   }
 
-  listIncoming(recipientId: string, now: Date): Promise<UserShareRecord[]> {
-    return Promise.resolve(this.userSharesWhere((s) => s.recipientId === recipientId, now));
+  async getSharingKeyByUser(userId: string): Promise<SharingKeyRecord | null> {
+    const [row] = await this.db
+      .select()
+      .from(sharingKeys)
+      .where(eq(sharingKeys.userId, userId))
+      .limit(1);
+    return row ?? null;
   }
 
-  listOutgoing(senderId: string, now: Date): Promise<UserShareRecord[]> {
-    return Promise.resolve(this.userSharesWhere((s) => s.senderId === senderId, now));
+  async getSharingKeyByEmail(email: string): Promise<SharingKeyRecord | null> {
+    const [row] = await this.db
+      .select()
+      .from(sharingKeys)
+      .where(eq(sharingKeys.email, email.toLowerCase()))
+      .limit(1);
+    return row ?? null;
   }
 
-  deleteUserShare(id: string, userId: string): Promise<boolean> {
-    const share = this.userShares.get(id);
-    if (!share || (share.senderId !== userId && share.recipientId !== userId)) {
-      return Promise.resolve(false);
-    }
-    this.userShares.delete(id);
-    return Promise.resolve(true);
+  async insertUserShare(share: UserShareRecord): Promise<boolean> {
+    const inserted = await this.db
+      .insert(userShares)
+      .values(share)
+      .onConflictDoNothing({ target: userShares.id })
+      .returning({ id: userShares.id });
+    return inserted.length > 0;
   }
 
-  private userSharesWhere(pred: (s: UserShareRecord) => boolean, now: Date): UserShareRecord[] {
-    for (const [id, s] of this.userShares) if (!isLive(s, now)) this.userShares.delete(id);
-    return [...this.userShares.values()]
-      .filter(pred)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .map((s) => ({ ...s }));
+  async listIncoming(recipientId: string, now: Date): Promise<UserShareRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(userShares)
+      .where(and(eq(userShares.recipientId, recipientId), liveAt(now)))
+      .orderBy(desc(userShares.createdAt));
+    return rows.map(toUserShare);
+  }
+
+  async listOutgoing(senderId: string, now: Date): Promise<UserShareRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(userShares)
+      .where(and(eq(userShares.senderId, senderId), liveAt(now)))
+      .orderBy(desc(userShares.createdAt));
+    return rows.map(toUserShare);
+  }
+
+  async deleteUserShare(id: ShareId, userId: string): Promise<boolean> {
+    const deleted = await this.db
+      .delete(userShares)
+      .where(
+        and(
+          eq(userShares.id, id),
+          or(eq(userShares.senderId, userId), eq(userShares.recipientId, userId)),
+        ),
+      )
+      .returning({ id: userShares.id });
+    return deleted.length > 0;
   }
 }

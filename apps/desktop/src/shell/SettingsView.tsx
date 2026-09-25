@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { CliInstall, ClaudeSetup } from '../agents/CliSetup.js';
 import '../agents/agents.css';
 import type { Session } from '../auth.js';
+import { maskedSecretKey, type RememberedAccount } from '../core.js';
 import { createDevicesClient } from '../devices/client.js';
 import { DevicesPanel } from '../devices/DevicesPanel.js';
 import { createPairingClient } from '../devices/pairing.js';
@@ -27,6 +28,8 @@ export function SettingsView(props: {
   onSection: (s: SettingsSection) => void;
   lockStatus: LockStatus | null;
   onLockChanged: () => void;
+  remembered: RememberedAccount | null;
+  onForgetSecretKey: () => Promise<void>;
   onSignOut: () => void;
 }) {
   const { session } = props;
@@ -116,6 +119,10 @@ export function SettingsView(props: {
                     <Icon name="logout" size={13} /> Sign out
                   </button>
                 </div>
+                <SavedSecretKeyRow
+                  saved={props.remembered?.email === session.email ? props.remembered : null}
+                  onForget={props.onForgetSecretKey}
+                />
                 <div className="row">
                   <Icon name="shield" size={18} className="secondary" />
                   <div className="row-main">
@@ -135,6 +142,54 @@ export function SettingsView(props: {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Whether this Mac remembers the Secret Key, with a way to make it forget. */
+function SavedSecretKeyRow(props: {
+  saved: RememberedAccount | null;
+  onForget: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="row">
+      <Icon name="key" size={18} className="secondary" />
+      <div className="row-main">
+        <span className="row-title">Secret Key on this Mac</span>
+        <span className="row-sub">
+          {props.saved ? (
+            <>
+              <span className="mono">{maskedSecretKey(props.saved.secretKeyId)}</span> is saved in
+              this Mac&apos;s Keychain, so signing in here asks only for your master password.
+            </>
+          ) : (
+            'Not saved on this Mac. Zvault saves it the next time you sign in here.'
+          )}
+        </span>
+        {error && <span className="row-sub error">{error}</span>}
+      </div>
+      {props.saved && (
+        <button
+          type="button"
+          className="danger"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            setError(null);
+            props.onForget().then(
+              () => setBusy(false),
+              (e: unknown) => {
+                setBusy(false);
+                setError(String(e));
+              },
+            );
+          }}
+        >
+          <Icon name="trash" size={13} /> Forget
+        </button>
+      )}
     </div>
   );
 }

@@ -16,6 +16,7 @@ import { SharingModule } from './sharing/sharing.module.js';
 import { DrizzleTwoFactorRepository } from './two-factor/drizzle-two-factor.repository.js';
 import { TwoFactorModule } from './two-factor/two-factor.module.js';
 import { VaultModule } from './vault/vault.module.js';
+import { WaitlistModule } from './waitlist/waitlist.module.js';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { VaultModule } from './vault/vault.module.js';
     SharingModule,
     AccessModule,
     PairingModule,
+    WaitlistModule,
   ],
   controllers: [HealthController, MetaController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

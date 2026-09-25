@@ -9,3 +9,4 @@ export * from './two-factor.js';
 export * from './vault.js';
 export * from './projects.js';
 export * from './pairing.js';
+export * from './waitlist.js';

@@ -13,15 +13,18 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import {
+  CheckShareLinkRequest,
   CreateShareLinkRequest,
   CreateUserShareRequest,
   OpenShareLinkRequest,
   PublishSharingKeyRequest,
+  RequestShareCodeRequest,
   ShareId,
+  type CheckShareLinkResponse,
+  type CreateShareLinkResponse,
   type OpenShareLinkResponse,
   type OutgoingUserShare,
   type ShareLinkList,
-  type ShareLinkSummary,
   type SharingKeyResponse,
   type UserShareList,
 } from '@zvault/shared';
@@ -34,10 +37,33 @@ import { ZodPipe } from './zod.pipe.js';
 const IdParam = new ZodPipe(ShareId);
 const EmailQuery = new ZodPipe(z.email().max(254));
 
-/** Anonymous endpoint the recipient page calls with the token from the link. */
+/** Anonymous endpoints the recipient page calls with the token from the link. */
 @Controller('shares/links')
 export class PublicShareLinksController {
   constructor(private readonly links: ShareLinksService) {}
+
+  @Post(':id/check')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  check(
+    @Param('id', IdParam) id: ShareId,
+    @Body(new ZodPipe(CheckShareLinkRequest)) body: CheckShareLinkRequest,
+  ): Promise<CheckShareLinkResponse> {
+    return this.links.check(id, body.accessToken);
+  }
+
+  @Post(':id/code')
+  @HttpCode(202)
+  @Header('Cache-Control', 'no-store')
+  // Each call can send an email; per-link limits apply on top of this.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  requestCode(
+    @Param('id', IdParam) id: ShareId,
+    @Body(new ZodPipe(RequestShareCodeRequest)) body: RequestShareCodeRequest,
+  ): Promise<void> {
+    return this.links.requestCode(id, body);
+  }
 
   @Post(':id/open')
   @HttpCode(200)
@@ -64,7 +90,7 @@ export class SharingController {
   createLink(
     @CurrentUser() user: SharingUser,
     @Body(new ZodPipe(CreateShareLinkRequest)) body: CreateShareLinkRequest,
-  ): Promise<ShareLinkSummary> {
+  ): Promise<CreateShareLinkResponse> {
     return this.links.create(user.id, body);
   }
 

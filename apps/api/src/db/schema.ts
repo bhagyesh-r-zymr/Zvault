@@ -1,4 +1,4 @@
-import type { DeviceInfo, EncryptedBlob } from '@zvault/shared';
+import type { DeviceInfo, EncryptedBlob, ShareId, SharingPublicKey } from '@zvault/shared';
 import { sql } from 'drizzle-orm';
 import {
   bigint,
@@ -485,4 +485,130 @@ export const accessRequests = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('access_requests_env_idx').on(t.environmentId, t.status)],
+);
+
+/**
+ * Where a waitlist joiner is in getting Zvault email while SES is in sandbox
+ * mode. Moved along by deploy/ec2/waitlist.sh, which the owner runs.
+ */
+export const waitlistStatus = pgEnum('waitlist_status', [
+  /** Joined; not yet added to SES. */
+  'pending',
+  /** SES sent them a confirmation link. */
+  'verification_sent',
+  /** They clicked it; Zvault email reaches them. */
+  'verified',
+]);
+
+/**
+ * People who asked to try Zvault from the landing page. One row per email;
+ * joining again changes nothing.
+ */
+export const waitlist = pgTable(
+  'waitlist',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** Normalized (trimmed, lowercased). */
+    email: text('email').notNull().unique(),
+    name: text('name').notNull(),
+    note: text('note').notNull().default(''),
+    status: waitlistStatus('status').notNull().default('pending'),
+    createdAt: createdAt(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [index('waitlist_status_idx').on(t.status, t.createdAt)],
+);
+
+// ---------------------------------------------------------------- sharing
+
+/**
+ * Share links. The link key lives only in the URL fragment; the server keeps
+ * the ciphertext and a SHA-256 of the access token derived from the key.
+ */
+export const shareLinks = pgTable(
+  'share_links',
+  {
+    /** 16 random bytes, base64url, chosen by the sender's device. */
+    id: text('id').$type<ShareId>().primaryKey(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    /** Dropped as soon as the link can no longer be opened. */
+    blob: jsonb('blob').$type<EncryptedBlob>(),
+    verifier: bytea('verifier').notNull(),
+    /**
+     * Keyed hashes (base64url) of the only emails that may open the link, or
+     * null when anyone with the link may. Addresses are never stored.
+     */
+    allowedEmails: jsonb('allowed_emails').$type<string[]>(),
+    maxViews: integer('max_views').notNull(),
+    viewCount: integer('view_count').notNull().default(0),
+    expiresAt: ts('expires_at').notNull(),
+    revokedAt: ts('revoked_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('share_links_owner_idx').on(t.ownerId, t.createdAt)],
+);
+
+/**
+ * One-time codes emailed to a recipient of an email-restricted link. The
+ * email and the code are stored only as keyed hashes.
+ */
+export const shareLinkCodes = pgTable(
+  'share_link_codes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    linkId: text('link_id')
+      .$type<ShareId>()
+      .notNull()
+      .references(() => shareLinks.id, { onDelete: 'cascade' }),
+    emailHash: bytea('email_hash').notNull(),
+    codeHash: bytea('code_hash').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    expiresAt: ts('expires_at').notNull(),
+    /** Spent (a view was counted) or closed (superseded, too many wrong tries). */
+    closedAt: ts('closed_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('share_link_codes_link_idx').on(t.linkId, t.emailHash, t.createdAt)],
+);
+
+/** Each account's published X25519 sharing key. */
+export const sharingKeys = pgTable(
+  'sharing_keys',
+  {
+    userId: uuid('user_id')
+      .primaryKey()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    /** Normalized (lowercased) copy of the account email, for lookups. */
+    email: text('email').notNull(),
+    publicKey: text('public_key').$type<SharingPublicKey>().notNull(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [index('sharing_keys_email_idx').on(t.email)],
+);
+
+/** Items sealed by one account to another's sharing key. */
+export const userShares = pgTable(
+  'user_shares',
+  {
+    id: text('id').$type<ShareId>().primaryKey(),
+    senderId: uuid('sender_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    senderEmail: text('sender_email').notNull(),
+    senderPublicKey: text('sender_public_key').$type<SharingPublicKey>().notNull(),
+    recipientId: uuid('recipient_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    recipientEmail: text('recipient_email').notNull(),
+    ephemeralPublicKey: text('ephemeral_public_key').$type<SharingPublicKey>().notNull(),
+    blob: jsonb('blob').$type<EncryptedBlob>().notNull(),
+    expiresAt: ts('expires_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('user_shares_recipient_idx').on(t.recipientId, t.createdAt),
+    index('user_shares_sender_idx').on(t.senderId, t.createdAt),
+  ],
 );

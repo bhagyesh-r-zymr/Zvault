@@ -55,6 +55,12 @@ describe('signIn', () => {
     vi.mocked(api.logout).mockResolvedValue(undefined);
   });
 
+  it('lets Rust use the saved Secret Key when none is typed', async () => {
+    vi.mocked(core.loginFinish).mockResolvedValue({ email: 'a@b.co' });
+    await signIn('a@b.co', 'pw', null);
+    expect(core.loginProve).toHaveBeenCalledWith(expect.objectContaining({ secretKey: null }));
+  });
+
   it('runs both SRP steps and returns the session', async () => {
     vi.mocked(core.loginFinish).mockResolvedValue({ email: 'a@b.co' });
     const session = await signIn('a@b.co', 'pw', 'Z1-...');

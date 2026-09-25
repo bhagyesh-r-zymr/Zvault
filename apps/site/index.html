@@ -31,9 +31,9 @@
     <header class="nav">
       <a class="brand" href="#top"><span class="logo">Z</span>Zvault</a>
       <nav>
-        <a href="#how">How it works</a>
-        <a href="#features">Features</a>
         <a href="#tour">Tour</a>
+        <a href="#features">Features</a>
+        <a href="#how">How it works</a>
         <a href="#cli">CLI</a>
         <a href="#waitlist" class="btn btn-small">Join the waitlist</a>
       </nav>
@@ -89,220 +89,304 @@
         </div>
       </section>
 
+      <section id="tour" class="section">
+        <div class="section-head reveal">
+          <p class="eyebrow">Take a tour</p>
+          <h2>Built for the Mac, in dark graphite.</h2>
+        </div>
+        <div
+          class="carousel reveal"
+          id="carousel"
+          aria-roledescription="carousel"
+          aria-label="App screens"
+          tabindex="0"
+        >
+          <div class="stage">
+            <figure
+              class="slide"
+              data-label="Vault"
+              data-cap="Your personal vault. Reveal, copy, share."
+            >
+              <img src="/img/vault.webp" alt="Vault" width="1600" height="1000" draggable="false" />
+            </figure>
+            <figure
+              class="slide"
+              data-label="Sharing"
+              data-cap="Secure links that expire, or share with a teammate."
+            >
+              <img
+                src="/img/share.webp"
+                alt="Share sheet"
+                width="1600"
+                height="1000"
+                draggable="false"
+                loading="lazy"
+              />
+            </figure>
+            <figure
+              class="slide"
+              data-label="Projects"
+              data-cap="Team secrets by project, environment and folder."
+            >
+              <img
+                src="/img/projects.webp"
+                alt="Projects"
+                width="1600"
+                height="1000"
+                draggable="false"
+                loading="lazy"
+              />
+            </figure>
+            <figure
+              class="slide"
+              data-label="Access"
+              data-cap="Who can manage, edit, use or ask, per environment."
+            >
+              <img
+                src="/img/access.webp"
+                alt="Access roles"
+                width="1600"
+                height="1000"
+                draggable="false"
+                loading="lazy"
+              />
+            </figure>
+            <figure
+              class="slide"
+              data-label="Agents"
+              data-cap="AI agents get only what you approve."
+            >
+              <img
+                src="/img/agents.webp"
+                alt="Agents"
+                width="1600"
+                height="1000"
+                draggable="false"
+                loading="lazy"
+              />
+            </figure>
+            <figure
+              class="slide"
+              data-label="Generator"
+              data-cap="Strong passwords, and a strength check."
+            >
+              <img
+                src="/img/generator.webp"
+                alt="Password generator"
+                width="1600"
+                height="1000"
+                draggable="false"
+                loading="lazy"
+              />
+            </figure>
+            <figure
+              class="slide"
+              data-label="Security"
+              data-cap="Two-step sign-in, Touch ID and auto-lock."
+            >
+              <img
+                src="/img/security.webp"
+                alt="Security settings"
+                width="1600"
+                height="1000"
+                draggable="false"
+                loading="lazy"
+              />
+            </figure>
+            <figure
+              class="slide"
+              data-label="Emergency Kit"
+              data-cap="Your Secret Key, on paper. Zvault never sees it."
+            >
+              <img
+                src="/img/kit.webp"
+                alt="Emergency Kit"
+                width="1600"
+                height="1000"
+                draggable="false"
+                loading="lazy"
+              />
+            </figure>
+            <figure
+              class="slide"
+              data-label="Locked"
+              data-cap="Locks itself. Unlock with Touch ID."
+            >
+              <img
+                src="/img/locked.webp"
+                alt="Locked screen"
+                width="1600"
+                height="1000"
+                draggable="false"
+                loading="lazy"
+              />
+            </figure>
+          </div>
+          <button type="button" class="nav-btn prev" aria-label="Previous screen">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg>
+          </button>
+          <button type="button" class="nav-btn next" aria-label="Next screen">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg>
+          </button>
+          <div class="car-foot">
+            <p class="caption" aria-live="polite">
+              <strong id="car-label">Vault</strong
+              ><span id="car-cap">Your personal vault. Reveal, copy, share.</span>
+            </p>
+            <div class="dots" role="tablist" aria-label="Choose a screen"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="section">
+        <div class="section-head reveal">
+          <p class="eyebrow">Features</p>
+          <h2>Everything a password manager should do.</h2>
+        </div>
+        <div class="tiles">
+          <article class="tile reveal t-cipher">
+            <div class="viz" aria-hidden="true">
+              <span class="v-plain">hunter2</span>
+              <span class="v-arrow"></span>
+              <span class="v-ct" data-cipher>a7f3·09c1·e2b4</span>
+            </div>
+            <h3>Zero-knowledge</h3>
+            <p>Encrypted on your Mac, always.</p>
+          </article>
+          <article class="tile reveal t-kit">
+            <div class="viz" aria-hidden="true">
+              <div class="v-paper"><b>Emergency Kit</b><i></i><i></i><em>A3-7KQ9-…</em></div>
+            </div>
+            <h3>Emergency Kit</h3>
+            <p>Your Secret Key as a PDF.</p>
+          </article>
+          <article class="tile reveal t-otp">
+            <div class="viz" aria-hidden="true">
+              <span class="v-ring"></span>
+              <span class="v-code" data-otp>481 902</span>
+            </div>
+            <h3>Two-step sign-in</h3>
+            <p>Scan a QR code, done.</p>
+          </article>
+          <article class="tile reveal t-vault">
+            <div class="viz" aria-hidden="true">
+              <div class="v-rows">
+                <span><b class="c1">G</b>GitHub</span><span><b class="c2">A</b>AWS</span
+                ><span><b class="c3">S</b>Slack</span><span><b class="c1">G</b>GitHub</span>
+              </div>
+            </div>
+            <h3>Vault</h3>
+            <p>Logins and notes on every device.</p>
+          </article>
+          <article class="tile reveal t-gen">
+            <div class="viz" aria-hidden="true">
+              <span class="v-pass" data-gen>tQ7#vm42Lx!Rp9</span>
+              <span class="v-meter"><i></i></span>
+            </div>
+            <h3>Generator</h3>
+            <p>Strong passwords in one click.</p>
+          </article>
+          <article class="tile reveal t-touch">
+            <div class="viz" aria-hidden="true">
+              <svg class="v-finger" viewBox="0 0 48 48">
+                <path d="M14 30c0-8 4-14 10-14s10 6 10 14" />
+                <path d="M18 34c0-10 2-14 6-14s6 4 6 14" />
+                <path d="M24 24v14" />
+                <path d="M10 24c1-9 7-15 14-15s13 6 14 15" />
+              </svg>
+              <span class="v-scan"></span>
+            </div>
+            <h3>Touch ID and auto-lock</h3>
+            <p>Locks itself, opens with a touch.</p>
+          </article>
+          <article class="tile reveal t-link">
+            <div class="viz" aria-hidden="true">
+              <span class="v-chip">🔗 zvault/#k9Q…</span>
+              <span class="v-views"><i></i><i></i><i></i></span>
+            </div>
+            <h3>Share links</h3>
+            <p>They expire. They run out.</p>
+          </article>
+          <article class="tile reveal t-people">
+            <div class="viz" aria-hidden="true">
+              <span class="v-av a1">B</span>
+              <span class="v-wire"><i></i></span>
+              <span class="v-av a2">M</span>
+            </div>
+            <h3>Share with people</h3>
+            <p>Encrypted to their key.</p>
+          </article>
+          <article class="tile reveal t-env">
+            <div class="viz" aria-hidden="true">
+              <span class="v-env e1">Dev</span>
+              <span class="v-env e2">Staging</span>
+              <span class="v-env e3">Prod 🔒</span>
+            </div>
+            <h3>Projects and environments</h3>
+            <p>Each environment, its own key.</p>
+          </article>
+          <article class="tile reveal t-roles">
+            <div class="viz" aria-hidden="true">
+              <span class="v-role r1">Manage</span>
+              <span class="v-role r2">Edit</span>
+              <span class="v-role r3">Use</span>
+              <span class="v-role r4">Needs approval</span>
+            </div>
+            <h3>Teams and roles</h3>
+            <p>Right access, right people.</p>
+          </article>
+          <article class="tile reveal t-cli">
+            <div class="viz" aria-hidden="true">
+              <span class="v-line"><b>$</b> zv run -- npm test</span>
+              <span class="v-line v-out">key ********</span>
+            </div>
+            <h3>The zv CLI</h3>
+            <p>Secrets in, masked out.</p>
+          </article>
+          <article class="tile reveal t-agent">
+            <div class="viz" aria-hidden="true">
+              <span class="v-bot">🤖</span>
+              <span class="v-ask">Use STRIPE_KEY?</span>
+              <span class="v-ok">✓</span>
+            </div>
+            <h3>AI agents</h3>
+            <p>They ask. You approve.</p>
+          </article>
+        </div>
+      </section>
+
       <section id="how" class="section">
         <div class="section-head reveal">
           <p class="eyebrow">How it works</p>
           <h2>Zvault can't read your data. Not even if it wanted to.</h2>
-          <p>
-            Your master password and a random Secret Key are stretched into your account key on your
-            Mac. Items are sealed before they are synced, so the server only ever holds ciphertext.
-          </p>
+          <p>Keys are made on your Mac. The server only ever sees ciphertext.</p>
         </div>
 
         <ol class="flow reveal">
           <li>
             <span class="flow-icon">🔑</span>
             <h3>Master password + Secret Key</h3>
-            <p>The Secret Key is made on your Mac and printed in your Emergency Kit PDF.</p>
+            <p>Only you have both.</p>
           </li>
           <li class="flow-link" aria-hidden="true"><span></span></li>
           <li>
             <span class="flow-icon">⚙️</span>
             <h3>Argon2id</h3>
-            <p>A memory-hard key derivation that makes guessing slow and expensive.</p>
+            <p>Makes guessing painfully slow.</p>
           </li>
           <li class="flow-link" aria-hidden="true"><span></span></li>
           <li>
             <span class="flow-icon">🔒</span>
             <h3>XChaCha20-Poly1305</h3>
-            <p>Every item is encrypted and authenticated on your device in a Rust core.</p>
+            <p>Every item sealed on your Mac.</p>
           </li>
           <li class="flow-link" aria-hidden="true"><span></span></li>
           <li>
             <span class="flow-icon">☁️</span>
             <h3>Server sees ciphertext</h3>
-            <p>Sign-in uses SRP, so your password is never sent, not even in hashed form.</p>
+            <p>Your password is never sent (SRP).</p>
           </li>
         </ol>
-      </section>
-
-      <section id="features" class="section">
-        <div class="section-head reveal">
-          <p class="eyebrow">Features</p>
-          <h2>Everything a password manager should do, and a few things for developers.</h2>
-        </div>
-        <div class="features">
-          <article class="card reveal">
-            <span class="ico">🛡️</span>
-            <h3>Zero-knowledge encryption</h3>
-            <p>Argon2id, a 128-bit Secret Key and XChaCha20-Poly1305. Keys never leave your Mac.</p>
-          </article>
-          <article class="card reveal">
-            <span class="ico">📄</span>
-            <h3>Emergency Kit</h3>
-            <p>
-              A PDF with your Secret Key to print or store safely, needed to sign in on a new
-              device.
-            </p>
-          </article>
-          <article class="card reveal">
-            <span class="ico">🔢</span>
-            <h3>Two-step sign-in</h3>
-            <p>
-              Set up TOTP by scanning a QR code, with recovery codes. Store one-time codes for other
-              sites too.
-            </p>
-          </article>
-          <article class="card reveal">
-            <span class="ico">🗝️</span>
-            <h3>Vault</h3>
-            <p>
-              Logins, notes and websites with search, copy and reveal, synced across your devices.
-              See every signed-in device and sign any of them out.
-            </p>
-          </article>
-          <article class="card reveal">
-            <span class="ico">✨</span>
-            <h3>Password generator</h3>
-            <p>
-              Random passwords or passphrases, plus a strength check that estimates cracking time.
-            </p>
-          </article>
-          <article class="card reveal">
-            <span class="ico">👆</span>
-            <h3>Auto-lock and Touch ID</h3>
-            <p>
-              Locks when idle, on sleep or screen lock. Unlock with Touch ID. Copied secrets clear
-              themselves.
-            </p>
-          </article>
-          <article class="card reveal">
-            <span class="ico">🔗</span>
-            <h3>Secure share links</h3>
-            <p>
-              Share an item with a link that expires and allows a set number of views. It's
-              decrypted in the recipient's browser.
-            </p>
-          </article>
-          <article class="card reveal">
-            <span class="ico">👥</span>
-            <h3>Share with people</h3>
-            <p>Send items to other Zvault users, encrypted to their key, and by email.</p>
-          </article>
-          <article class="card reveal">
-            <span class="ico">🗂️</span>
-            <h3>Projects and environments</h3>
-            <p>
-              Group team secrets by project, environment and folder. Each environment has its own
-              key.
-            </p>
-          </article>
-          <article class="card reveal">
-            <span class="ico">🎛️</span>
-            <h3>Teams and access roles</h3>
-            <p>
-              Manage, Edit, Use or Needs approval, per environment. Production stays with the people
-              who need it.
-            </p>
-          </article>
-          <article class="card reveal">
-            <span class="ico">⌨️</span>
-            <h3>The zv CLI</h3>
-            <p>
-              Read secrets, load an environment, or run a command with secrets injected and masked.
-            </p>
-          </article>
-          <article class="card reveal">
-            <span class="ico">🤖</span>
-            <h3>AI agent access</h3>
-            <p>
-              Pair tools like Claude Code. They ask, you approve in the app, and every use is
-              logged.
-            </p>
-          </article>
-        </div>
-      </section>
-
-      <section id="tour" class="section">
-        <div class="section-head reveal">
-          <p class="eyebrow">Take a tour</p>
-          <h2>Built for the Mac, in dark graphite.</h2>
-        </div>
-        <div class="tour reveal">
-          <div class="tabs" role="tablist" aria-label="Screens">
-            <button
-              role="tab"
-              aria-selected="true"
-              data-img="vault"
-              data-cap="Your personal vault. Reveal or copy a field, then share it."
-            >
-              Vault
-            </button>
-            <button
-              role="tab"
-              aria-selected="false"
-              data-img="share"
-              data-cap="Share with a secure link that expires, or with another Zvault user."
-            >
-              Sharing
-            </button>
-            <button
-              role="tab"
-              aria-selected="false"
-              data-img="projects"
-              data-cap="Team secrets per project, environment and folder, with the zv command to use them."
-            >
-              Projects
-            </button>
-            <button
-              role="tab"
-              aria-selected="false"
-              data-img="access"
-              data-cap="Pick who can manage, edit, use or ask for each environment."
-            >
-              Access
-            </button>
-            <button
-              role="tab"
-              aria-selected="false"
-              data-img="agents"
-              data-cap="AI agents get only the secrets you allow, and ask each time if you want."
-            >
-              Agents
-            </button>
-            <button
-              role="tab"
-              aria-selected="false"
-              data-img="generator"
-              data-cap="Generate strong passwords and check how strong yours are."
-            >
-              Generator
-            </button>
-            <button
-              role="tab"
-              aria-selected="false"
-              data-img="security"
-              data-cap="Two-step sign-in, Touch ID, auto-lock and clipboard clearing."
-            >
-              Security
-            </button>
-            <button
-              role="tab"
-              aria-selected="false"
-              data-img="kit"
-              data-cap="Your Emergency Kit holds the Secret Key. Zvault never sees it."
-            >
-              Emergency Kit
-            </button>
-          </div>
-          <figure class="window">
-            <div class="window-bar"><i></i><i></i><i></i></div>
-            <img id="tour-img" src="/img/vault.webp" alt="" width="1600" height="1000" />
-          </figure>
-          <p id="tour-cap" class="caption">
-            Your personal vault. Reveal or copy a field, then share it.
-          </p>
-        </div>
       </section>
 
       <section id="cli" class="section split">

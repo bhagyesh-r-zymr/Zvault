@@ -35,24 +35,167 @@ if (ct && !reduced) {
   }, 2600);
 }
 
-// Screenshot tour.
-const img = document.getElementById('tour-img');
-const cap = document.getElementById('tour-cap');
-const tabs = document.querySelectorAll('.tabs [role="tab"]');
-tabs.forEach((tab) =>
-  tab.addEventListener('click', () => {
-    tabs.forEach((t) => t.setAttribute('aria-selected', String(t === tab)));
-    img.classList.add('swap');
-    setTimeout(() => {
-      img.src = `/img/${tab.dataset.img}.webp`;
-      img.alt = tab.dataset.cap;
-      cap.textContent = tab.dataset.cap;
-      img.onload = () => img.classList.remove('swap');
-    }, 180);
+// Tour carousel: coverflow slides with buttons, dots, arrow keys, swipe and autoplay.
+const carousel = document.getElementById('carousel');
+const slides = [...carousel.querySelectorAll('.slide')];
+const dotsEl = carousel.querySelector('.dots');
+const label = document.getElementById('car-label');
+const capText = document.getElementById('car-cap');
+const caption = label.parentElement;
+const AUTOPLAY_MS = 5000;
+carousel.style.setProperty('--autoplay', `${AUTOPLAY_MS}ms`);
+let current = 0;
+
+const dots = slides.map((s, i) => {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.setAttribute('role', 'tab');
+  b.setAttribute('aria-label', s.dataset.label);
+  b.addEventListener('click', () => go(i));
+  dotsEl.append(b);
+  return b;
+});
+
+function layout(dragShift = 0) {
+  const n = slides.length;
+  slides.forEach((s, i) => {
+    // Shortest signed distance around the loop, so it wraps both ways.
+    let o = (((i - current) % n) + n) % n;
+    if (o > n / 2) o -= n;
+    const d = o + dragShift;
+    const a = Math.abs(d);
+    s.style.setProperty('--o', d.toFixed(3));
+    s.style.setProperty('--d', Math.min(a, 3).toFixed(3));
+    s.style.setProperty('--op', a > 2.2 ? '0' : String(Math.max(0, 1 - a * 0.35)));
+    s.style.setProperty('--br', String(Math.max(0.35, 1 - a * 0.45)));
+    s.style.setProperty('--z', String(100 - Math.round(a * 10)));
+    s.classList.toggle('current', o === 0);
+    s.setAttribute('aria-hidden', String(o !== 0));
+  });
+}
+
+function go(i) {
+  const n = slides.length;
+  current = ((i % n) + n) % n;
+  layout();
+  dots.forEach((d, j) => {
+    d.setAttribute('aria-selected', String(j === current));
+  });
+  label.textContent = slides[current].dataset.label;
+  capText.textContent = slides[current].dataset.cap;
+  caption.classList.remove('swap');
+  void caption.offsetWidth;
+  caption.classList.add('swap');
+  restart();
+}
+
+// Autoplay: pauses on hover, focus, drag, or while the carousel is off screen.
+let timer = 0;
+let visible = false;
+const holds = new Set();
+function restart() {
+  clearTimeout(timer);
+  const paused = reduced || holds.size > 0 || !visible;
+  carousel.classList.toggle('paused', paused);
+  if (!paused) timer = setTimeout(() => go(current + 1), AUTOPLAY_MS);
+}
+const hold = (why, on) => {
+  if (on) holds.add(why);
+  else holds.delete(why);
+  if (on) {
+    clearTimeout(timer);
+    carousel.classList.add('paused');
+  } else restart();
+};
+carousel.addEventListener('mouseenter', () => hold('hover', true));
+carousel.addEventListener('mouseleave', () => hold('hover', false));
+carousel.addEventListener('focusin', () => hold('focus', true));
+carousel.addEventListener('focusout', () => hold('focus', false));
+new IntersectionObserver(([e]) => {
+  visible = e.isIntersecting;
+  restart();
+}).observe(carousel);
+
+carousel.querySelector('.prev').addEventListener('click', () => go(current - 1));
+carousel.querySelector('.next').addEventListener('click', () => go(current + 1));
+carousel.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft') go(current - 1);
+  else if (e.key === 'ArrowRight') go(current + 1);
+  else return;
+  e.preventDefault();
+});
+slides.forEach((s, i) => s.addEventListener('click', () => moved || go(i)));
+
+// Swipe or drag: the deck follows the pointer, then settles on the nearest slide.
+let startX = 0;
+let dx = 0;
+let dragging = false;
+let moved = false;
+const stage = carousel.querySelector('.stage');
+stage.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  dragging = true;
+  moved = false;
+  startX = e.clientX;
+  dx = 0;
+  hold('drag', true);
+});
+window.addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  dx = e.clientX - startX;
+  if (Math.abs(dx) > 6 && !moved) {
+    moved = true;
+    carousel.classList.add('dragging');
+    stage.setPointerCapture?.(e.pointerId);
+  }
+  if (moved) layout(dx / (stage.offsetWidth * 0.68));
+});
+const endDrag = () => {
+  if (!dragging) return;
+  dragging = false;
+  carousel.classList.remove('dragging');
+  hold('drag', false);
+  if (!moved) return;
+  const steps = Math.round(-dx / (stage.offsetWidth * 0.68));
+  const nudge = Math.abs(dx) > 50 ? -Math.sign(dx) : 0;
+  go(current + (steps || nudge));
+  setTimeout(() => (moved = false), 0);
+};
+window.addEventListener('pointerup', endDrag);
+window.addEventListener('pointercancel', endDrag);
+
+go(0);
+
+// Feature tiles: a glow that follows the pointer.
+document.querySelectorAll('.tile').forEach((t) =>
+  t.addEventListener('pointermove', (e) => {
+    const r = t.getBoundingClientRect();
+    t.style.setProperty('--mx', `${e.clientX - r.left}px`);
+    t.style.setProperty('--my', `${e.clientY - r.top}px`);
   }),
 );
-// Warm the cache so switching tabs is instant.
-tabs.forEach((t) => (new Image().src = `/img/${t.dataset.img}.webp`));
+
+// Feature tiles: live text in the little visuals.
+const pick = (chars, n) =>
+  Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+const tileCipher = document.querySelector('[data-cipher]');
+const otp = document.querySelector('[data-otp]');
+const gen = document.querySelector('[data-gen]');
+if (!reduced) {
+  setInterval(() => {
+    tileCipher.textContent = [4, 4, 4].map((n) => pick(hex, n)).join('·');
+  }, 1400);
+  // Matches the 6 s countdown ring.
+  setInterval(() => (otp.textContent = `${pick('0123456789', 3)} ${pick('0123456789', 3)}`), 6000);
+  const pool = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!#$%&*';
+  setInterval(() => {
+    let f = 0;
+    const t = setInterval(() => {
+      gen.textContent = pick(pool, 14);
+      if (++f > 10) clearInterval(t);
+    }, 40);
+  }, 2600);
+}
 
 // Waitlist form. Same-origin POST to the API; it answers 204 for every valid form.
 const form = document.getElementById('waitlist-form');

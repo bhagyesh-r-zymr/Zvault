@@ -2,15 +2,31 @@ import { useEffect } from 'react';
 import { Icon } from '../ui/Icon.js';
 import { progressText, updateStore, useUpdates } from './store.js';
 
+/** How stale the last check may get before coming back to Zvault checks again. */
+const RECHECK_MS = 30 * 60 * 1000;
+
 /**
- * Checks for a new Zvault once at launch and, when there is one, offers to
- * install it. Nothing installs until the person says so.
+ * Checks for a new Zvault at launch, and again when the person comes back to
+ * a Zvault left open, and when there is one, offers to install it. Nothing
+ * installs until the person says so.
  */
 export function UpdateBanner() {
   const u = useUpdates();
 
   useEffect(() => {
+    let last = Date.now();
     void updateStore.checkNow();
+    const recheck = () => {
+      if (Date.now() - last < RECHECK_MS) return;
+      last = Date.now();
+      void updateStore.checkNow();
+    };
+    window.addEventListener('focus', recheck);
+    const timer = window.setInterval(recheck, RECHECK_MS);
+    return () => {
+      window.removeEventListener('focus', recheck);
+      window.clearInterval(timer);
+    };
   }, []);
 
   const next = u.check?.available;

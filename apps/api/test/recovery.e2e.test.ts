@@ -334,7 +334,7 @@ describe('Master password change and account recovery (e2e)', () => {
       expect(verified.twoFactorRequired).toBe(true);
       const body = completeBody(verified.recoveryToken, randomBytes(32));
       const missing = await post('auth/recover/complete', body).expect(401);
-      expect(missing.body.error).toBe('two_factor_required');
+      expect((missing.body as { error?: string }).error).toBe('two_factor_required');
       await post('auth/recover/complete', { ...body, twoFactor: { code: '000000' } }).expect(403);
       await post('auth/recover/complete', {
         ...body,

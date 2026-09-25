@@ -146,10 +146,7 @@ pub fn open_recovery_keyset(
     account_id: &str,
 ) -> Result<SymmetricKey> {
     let bytes = Zeroizing::new(open(&keys.wrap_key, sealed, &aad(account_id))?);
-    let key: [u8; KEY_LEN] = bytes
-        .as_slice()
-        .try_into()
-        .map_err(|_| Error::Decrypt)?;
+    let key: [u8; KEY_LEN] = bytes.as_slice().try_into().map_err(|_| Error::Decrypt)?;
     Ok(SymmetricKey::from_bytes(key))
 }
 

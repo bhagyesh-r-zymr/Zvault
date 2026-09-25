@@ -88,7 +88,7 @@ pub fn discard_emergency_kit(state: State<'_, PendingKit>) {
 }
 
 /// Writes `bytes` readable only by the current user.
-fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+pub(crate) fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create(true).truncate(true);
     #[cfg(unix)]

@@ -15,6 +15,7 @@ mod otp;
 mod pairing;
 mod platform;
 mod projects;
+mod recovery;
 mod remembered;
 mod session;
 mod sharing;
@@ -61,6 +62,7 @@ pub fn run() {
         .manage(agents::AgentHub::default())
         .manage(updater::PendingUpdate::default())
         .manage(pairing::PendingPairing::default())
+        .manage(recovery::RecoveryState::default())
         .setup(|app| {
             commands::load_settings(app.handle());
             autolock::start(app.handle());
@@ -79,6 +81,16 @@ pub fn run() {
             emergency_kit::emergency_kit_pending,
             emergency_kit::save_emergency_kit,
             emergency_kit::discard_emergency_kit,
+            recovery::password_change_prove,
+            recovery::password_change_finish,
+            recovery::recovery_setup_prove,
+            recovery::recovery_setup_finish,
+            recovery::save_recovery_kit,
+            recovery::discard_recovery_code,
+            recovery::recover_begin,
+            recovery::recover_reset,
+            recovery::recover_finish,
+            recovery::recover_cancel,
             remembered::remembered_account,
             remembered::import_emergency_kit,
             remembered::clear_emergency_kit_import,

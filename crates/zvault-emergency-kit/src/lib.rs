@@ -18,13 +18,15 @@ mod read;
 use core::fmt::Write as _;
 
 use zeroize::Zeroizing;
-use zvault_crypto::SecretKey;
+use zvault_crypto::{RecoveryCode, SecretKey};
 
 pub use date::Date;
 pub use read::{MAX_KIT_BYTES, ReadKit, read};
 
 /// Suggested file name for the save dialog.
 pub const FILE_NAME: &str = "Zvault Emergency Kit.pdf";
+/// Suggested file name for the Recovery Kit.
+pub const RECOVERY_FILE_NAME: &str = "Zvault Recovery Kit.pdf";
 
 const MAX_EMAIL_LEN: usize = 254;
 const MAX_URL_LEN: usize = 200;
@@ -53,6 +55,26 @@ impl Kit<'_> {
         validate_url(self.sign_in_url)?;
         let key = self.secret_key.to_display_string();
         Ok(pdf::document(&page(self, &key)))
+    }
+}
+
+/// A one-page Recovery Kit: the account's recovery code, for getting back in
+/// after forgetting the master password or losing the Secret Key. It is a
+/// separate page from the Emergency Kit so the two can be kept apart: either
+/// one alone can't open the vault.
+pub struct RecoveryKit<'a> {
+    pub email: &'a str,
+    pub recovery_code: &'a RecoveryCode,
+    pub created_on: Date,
+}
+
+impl RecoveryKit<'_> {
+    /// Renders the kit as a PDF. The returned buffer contains the recovery
+    /// code and is wiped when dropped.
+    pub fn render(&self) -> Result<Zeroizing<Vec<u8>>, Error> {
+        validate_email(self.email)?;
+        let code = self.recovery_code.to_display_string();
+        Ok(pdf::document(&recovery_page(self, &code)))
     }
 }
 
@@ -194,6 +216,96 @@ fn page(kit: &Kit<'_>, key: &str) -> Zeroizing<String> {
     assert!(
         p.ops.capacity() == PAGE_CAPACITY,
         "Emergency Kit content stream outgrew its buffer"
+    );
+    p.ops
+}
+
+const RECOVERY_ADVICE: &[&str] = &[
+    "Keep this page apart from your Emergency Kit, for example in a different place at home.",
+    "With this code and access to your email, you can set a new master password.",
+    "Recovering gives you a new Secret Key and a new recovery code. This one then stops working.",
+    "Zvault never sees this code, so it can't send you another copy.",
+    "If someone else sees it, replace it in Settings > Security.",
+];
+
+fn recovery_page(kit: &RecoveryKit<'_>, code: &str) -> Zeroizing<String> {
+    let mut p = Page {
+        ops: Zeroizing::new(String::with_capacity(PAGE_CAPACITY)),
+    };
+
+    p.fill_rect(BRAND, 0.0, PAGE_H - 84.0, PAGE_W, 84.0);
+    p.text(
+        Font::Bold,
+        24.0,
+        WHITE,
+        MARGIN,
+        PAGE_H - 46.0,
+        "Zvault Recovery Kit",
+    );
+    p.text(
+        Font::Regular,
+        10.0,
+        Rgb(0.78, 0.82, 0.90),
+        MARGIN,
+        PAGE_H - 66.0,
+        "For when you forget your master password or lose your Secret Key.",
+    );
+
+    let mut y = PAGE_H - 124.0;
+    y = p.field(y, "EMAIL", kit.email);
+
+    p.label(y, "RECOVERY CODE");
+    let panel_h = 44.0;
+    let panel_top = y - 10.0;
+    p.fill_rect(PANEL, MARGIN, panel_top - panel_h, CONTENT_W, panel_h);
+    p.stroke_rect(RULE, MARGIN, panel_top - panel_h, CONTENT_W, panel_h);
+    p.text(
+        Font::MonoBold,
+        KEY_SIZE,
+        INK,
+        MARGIN + 14.0,
+        panel_top - 28.0,
+        code,
+    );
+    y = panel_top - panel_h - 16.0;
+    p.text(
+        Font::Regular,
+        9.0,
+        MUTED,
+        MARGIN,
+        y,
+        "Created on this device and never sent to Zvault. Letters are not case sensitive.",
+    );
+    y -= 30.0;
+
+    p.hline(RULE, y);
+    y -= 28.0;
+
+    p.text(Font::Bold, 13.0, INK, MARGIN, y, "How to use it");
+    y -= 22.0;
+    for line in [
+        "On the Zvault sign-in screen, choose Forgot master password?",
+        "Enter your email, the code Zvault emails you, and this recovery code.",
+        "Choose a new master password and save your new Emergency Kit.",
+    ] {
+        p.bullet(y, line);
+        y -= 18.0;
+    }
+    y -= 14.0;
+    p.text(Font::Bold, 13.0, INK, MARGIN, y, "Keep it safe");
+    y -= 22.0;
+    for line in RECOVERY_ADVICE {
+        p.bullet(y, line);
+        y -= 18.0;
+    }
+
+    let mut footer = String::from("Created on ");
+    kit.created_on.write_long(&mut footer);
+    p.text(Font::Regular, 8.0, MUTED, MARGIN, 36.0, &footer);
+
+    assert!(
+        p.ops.capacity() == PAGE_CAPACITY,
+        "Recovery Kit content stream outgrew its buffer"
     );
     p.ops
 }
@@ -413,6 +525,32 @@ mod tests {
                 Error::InvalidSignInUrl,
                 "{url}"
             );
+        }
+    }
+
+    #[test]
+    fn recovery_kit_prints_the_code_and_email() {
+        const CODE: &str = "R1-ABCDE-FGHJK-MNPQR-STVWX-YZ012-34567";
+        let code = RecoveryCode::parse(CODE).unwrap();
+        let pdf = RecoveryKit {
+            email: "ada@example.com",
+            recovery_code: &code,
+            created_on: Date::new(2026, 9, 25).unwrap(),
+        }
+        .render()
+        .unwrap();
+        for needle in [
+            CODE,
+            "(ada@example.com)",
+            "Zvault Recovery Kit",
+            "Created on 25 September 2026",
+        ] {
+            assert!(contains(&pdf, needle.as_bytes()), "missing {needle}");
+        }
+        // Not mistaken for an Emergency Kit when someone picks the wrong file.
+        assert!(read(&pdf).is_none());
+        for line in RECOVERY_ADVICE {
+            assert!(line.len() as f32 * 10.0 * 0.5 <= CONTENT_W - 12.0, "{line}");
         }
     }
 

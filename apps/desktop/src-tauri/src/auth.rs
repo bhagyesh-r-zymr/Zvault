@@ -86,9 +86,9 @@ struct Account {
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct LocalUnlock {
-    email: String,
-    kdf: KdfDto,
-    encrypted_keyset: BlobDto,
+    pub(crate) email: String,
+    pub(crate) kdf: KdfDto,
+    pub(crate) encrypted_keyset: BlobDto,
 }
 
 /// Key material held by the app between commands. Dropping it zeroizes it.
@@ -96,7 +96,7 @@ pub(crate) struct LocalUnlock {
 pub struct AuthState {
     pending: Option<PendingLogin>,
     account: Option<Account>,
-    local: Option<LocalUnlock>,
+    pub(crate) local: Option<LocalUnlock>,
 }
 
 type AppState<'a> = State<'a, Mutex<AuthState>>;
@@ -105,7 +105,7 @@ type AppState<'a> = State<'a, Mutex<AuthState>>;
 /// which input was wrong.
 const LOGIN_FAILED: &str = "Incorrect email, master password or Secret Key.";
 
-const WRONG_PASSWORD: &str = "Incorrect master password.";
+pub(crate) const WRONG_PASSWORD: &str = "Incorrect master password.";
 const SIGN_IN_AGAIN: &str = "Sign out and sign in again to unlock.";
 
 /// Creates a new account's keys: a Secret Key, KDF salt, SRP verifier and a
@@ -126,13 +126,7 @@ pub async fn create_account(
         let account = NewAccount {
             secret_key: secret_key.to_display_string().to_string(),
             secret_key_id: secret_key.id().to_owned(),
-            kdf: KdfDto {
-                alg: "argon2id".into(),
-                memory_kib: kdf.memory_kib,
-                iterations: kdf.iterations,
-                parallelism: kdf.parallelism,
-                salt: B64.encode(kdf.salt),
-            },
+            kdf: kdf_dto(&kdf),
             srp_verifier: B64.encode(srp::verifier(&keys.srp_x)),
             encrypted_keyset: blob(&sealed),
         };
@@ -273,7 +267,7 @@ pub async fn unlock_with_password(app: AppHandle, password: String) -> Result<Un
 
 /// Opens every part of the app that holds a key, after the master password
 /// was just proven.
-fn unlocked_with_password(
+pub(crate) fn unlocked_with_password(
     app: &AppHandle,
     auth: &mut AuthState,
     email: String,
@@ -332,6 +326,30 @@ pub(crate) fn restore(
     }
 }
 
+/// Swaps in the lock screen state for a new master password, after a change.
+pub(crate) fn replace_local_unlock(app: &AppHandle, local: LocalUnlock) {
+    let state = app.state::<Mutex<AuthState>>();
+    let mut auth = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    auth.local = Some(local);
+}
+
+/// Opens the account after a recovery set a new master password.
+pub(crate) fn unlock_after_recovery(
+    app: &AppHandle,
+    email: String,
+    keyset: SymmetricKey,
+    local: LocalUnlock,
+) {
+    let state = app.state::<Mutex<AuthState>>();
+    let mut auth = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    auth.local = Some(local);
+    unlocked_with_password(app, &mut auth, email, keyset);
+}
+
 /// What the lock screen needs to unlock again, for "Stay unlocked" to save.
 pub(crate) fn local_unlock(app: &AppHandle) -> Option<LocalUnlock> {
     let state = app.state::<Mutex<AuthState>>();
@@ -375,11 +393,13 @@ pub fn unlocked(state: AppState<'_>) -> Result<Option<Unlocked>, String> {
     }))
 }
 
-fn lock_state<'a>(state: &'a AppState<'_>) -> Result<std::sync::MutexGuard<'a, AuthState>, String> {
+pub(crate) fn lock_state<'a>(
+    state: &'a AppState<'_>,
+) -> Result<std::sync::MutexGuard<'a, AuthState>, String> {
     state.lock().map_err(|_| "internal error".to_string())
 }
 
-async fn blocking<T: Send + 'static>(
+pub(crate) async fn blocking<T: Send + 'static>(
     f: impl FnOnce() -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {
     tauri::async_runtime::spawn_blocking(f)
@@ -387,11 +407,11 @@ async fn blocking<T: Send + 'static>(
         .map_err(|_| "internal error".to_string())?
 }
 
-fn err(e: zvault_crypto::Error) -> String {
+pub(crate) fn err(e: zvault_crypto::Error) -> String {
     e.to_string()
 }
 
-fn kdf_params(kdf: &KdfDto) -> Result<KdfParams, String> {
+pub(crate) fn kdf_params(kdf: &KdfDto) -> Result<KdfParams, String> {
     let salt: [u8; SALT_LEN] = B64
         .decode(&kdf.salt)
         .ok()
@@ -408,17 +428,31 @@ fn kdf_params(kdf: &KdfDto) -> Result<KdfParams, String> {
     })
 }
 
-fn blob(sealed: &Sealed) -> BlobDto {
+pub(crate) fn kdf_dto(kdf: &KdfParams) -> KdfDto {
+    KdfDto {
+        alg: "argon2id".into(),
+        memory_kib: kdf.memory_kib,
+        iterations: kdf.iterations,
+        parallelism: kdf.parallelism,
+        salt: B64.encode(kdf.salt),
+    }
+}
+
+pub(crate) fn blob(sealed: &Sealed) -> BlobDto {
+    blob_with_kid(sealed, KEYSET_KID)
+}
+
+pub(crate) fn blob_with_kid(sealed: &Sealed, kid: &str) -> BlobDto {
     BlobDto {
         v: CRYPTO_VERSION,
         alg: "xchacha20poly1305".into(),
-        kid: KEYSET_KID.into(),
+        kid: kid.into(),
         nonce: B64.encode(sealed.nonce),
         ct: B64.encode(&sealed.ciphertext),
     }
 }
 
-fn sealed(blob: &BlobDto) -> Option<Sealed> {
+pub(crate) fn sealed(blob: &BlobDto) -> Option<Sealed> {
     if blob.v != CRYPTO_VERSION || blob.alg != "xchacha20poly1305" {
         return None;
     }

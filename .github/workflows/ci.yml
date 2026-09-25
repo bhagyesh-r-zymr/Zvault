@@ -13,9 +13,53 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Decides which of the jobs below this change needs. A job skipped by its
+  # `if` reports as passed, so required checks still go green.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      node: ${{ steps.node.outputs.node }}
+      rust: ${{ steps.rust.outputs.rust }}
+    steps:
+      - uses: actions/checkout@v4
+      # Everything except Rust sources and docs. The SRP test vectors under
+      # crates/ are shared with the API tests, so only .rs files are left out.
+      - uses: dorny/paths-filter@v3
+        id: node
+        with:
+          predicate-quantifier: every
+          filters: |
+            node:
+              - '**'
+              - '!**/*.rs'
+              - '!**/Cargo.toml'
+              - '!Cargo.lock'
+              - '!**/*.md'
+              - '!docs/**'
+      - uses: dorny/paths-filter@v3
+        id: rust
+        with:
+          filters: |
+            rust:
+              - 'crates/**'
+              - 'apps/desktop/src-tauri/**'
+              - '**/*.rs'
+              - '**/Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain*'
+              - '.github/workflows/ci.yml'
+
   node:
     name: TypeScript (lint, typecheck, test, build)
+    needs: changes
+    if: needs.changes.outputs.node == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -34,7 +78,10 @@ jobs:
 
   rust:
     name: Rust (fmt, clippy, test)
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Install Tauri system dependencies
@@ -51,7 +98,13 @@ jobs:
 
   macos:
     name: macOS desktop (clippy, test)
+    # macOS minutes count 10x against the private-repo allowance, so this runs
+    # only on pull requests that touch Rust, and only after the Linux Rust job
+    # passes. Merges to main were already checked here on their PR.
+    needs: [changes, rust]
+    if: github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true'
     runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

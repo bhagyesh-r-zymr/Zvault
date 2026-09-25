@@ -22,6 +22,7 @@ class SavedAccount {
 
   /// Whether the keyset is saved for fingerprint unlock.
   final bool quickUnlock;
+
   /// Minutes in the background before locking; 0 never locks.
   final int autoLockMinutes;
 

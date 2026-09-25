@@ -450,3 +450,11 @@ if (track && !reduced) {
     track.append(copy);
   });
 }
+
+// If the 3D hero couldn't start (archive.js failed to load or had no WebGL),
+// fall back to the static hero.
+document.addEventListener('DOMContentLoaded', () => {
+  if (!document.documentElement.classList.contains('archive-ready')) {
+    document.documentElement.classList.remove('archive-on');
+  }
+});

@@ -180,6 +180,38 @@ h3 {
   box-shadow: 0 4px 18px rgba(76, 91, 232, 0.45);
 }
 
+/* Phone menu */
+.menu-btn {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 40px;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--raised);
+  cursor: pointer;
+}
+.menu-btn span {
+  height: 2px;
+  border-radius: 2px;
+  background: var(--text);
+  transition:
+    transform 0.25s,
+    opacity 0.25s;
+}
+.nav.open .menu-btn span:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+.nav.open .menu-btn span:nth-child(2) {
+  opacity: 0;
+}
+.nav.open .menu-btn span:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
 /* ---------- Buttons ---------- */
 .btn {
   display: inline-flex;
@@ -2008,11 +2040,90 @@ main {
     height: 26px;
     margin: 0 auto;
   }
+  .nav nav {
+    gap: 10px;
+  }
   .nav nav a:not(.btn) {
     display: none;
   }
+  .menu-btn {
+    display: flex;
+  }
+  .nav.open nav a:not(.btn) {
+    position: absolute;
+    left: 0;
+    right: 0;
+    display: block;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(11, 13, 18, 0.97);
+    color: var(--text);
+    font-size: 16px;
+    animation: menuin 0.25s ease both;
+  }
+  .nav.open nav a:nth-child(1) {
+    top: 68px;
+  }
+  .nav.open nav a:nth-child(2) {
+    top: 118px;
+    animation-delay: 0.03s;
+  }
+  .nav.open nav a:nth-child(3) {
+    top: 168px;
+    animation-delay: 0.06s;
+  }
+  .nav.open nav a:nth-child(4) {
+    top: 218px;
+    animation-delay: 0.09s;
+  }
   .section {
     padding-top: 72px;
+  }
+  .hero {
+    gap: 64px;
+  }
+  .lede {
+    font-size: 16px;
+  }
+  /* Tiles and the email steps become swipeable rows on phones. */
+  .tiles,
+  .emailflow {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 78%;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    margin: 0 -16px;
+    padding: 4px 16px 12px;
+    scroll-padding: 0 16px;
+  }
+  .tiles::-webkit-scrollbar,
+  .emailflow::-webkit-scrollbar {
+    display: none;
+  }
+  .tile,
+  .ef-card {
+    scroll-snap-align: start;
+  }
+  .leak {
+    font-size: 11px;
+  }
+  .agentflow {
+    padding: 18px 14px;
+  }
+  .af-cmd {
+    font-size: 12px;
+  }
+  .terminal pre {
+    min-height: 220px;
+    font-size: 12.5px;
+  }
+}
+@keyframes menuin {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
   }
 }
 @media (prefers-reduced-motion: reduce) {

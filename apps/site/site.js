@@ -1,6 +1,16 @@
 // Small progressive enhancements. The page reads fine without any of this.
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+// Phone menu.
+const navEl = document.getElementById('site-nav');
+const menuBtn = navEl.querySelector('.menu-btn');
+const setMenu = (open) => {
+  navEl.classList.toggle('open', open);
+  menuBtn.setAttribute('aria-expanded', String(open));
+};
+menuBtn.addEventListener('click', () => setMenu(!navEl.classList.contains('open')));
+navEl.querySelectorAll('nav a').forEach((a) => a.addEventListener('click', () => setMenu(false)));
+
 // Reveal sections as they scroll into view.
 const io = new IntersectionObserver(
   (entries) => {

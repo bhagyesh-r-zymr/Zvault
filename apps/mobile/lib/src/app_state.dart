@@ -295,8 +295,12 @@ class AppState extends ChangeNotifier {
   void appShown() {
     final at = _backgroundedAt;
     _backgroundedAt = null;
-    final minutes = account?.autoLockMinutes ?? 1;
+    final minutes = account?.autoLockMinutes ?? defaultAutoLockMinutes;
+    // Without fingerprint unlock, locking means scanning a new QR code on the
+    // Mac, so the vault stays open until the app is closed or locked by hand.
     if (phase == Phase.unlocked &&
+        account?.quickUnlock == true &&
+        minutes > 0 &&
         at != null &&
         DateTime.now().difference(at) >= Duration(minutes: minutes)) {
       lock();

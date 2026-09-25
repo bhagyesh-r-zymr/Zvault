@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:biometric_storage/biometric_storage.dart';
 
+const defaultAutoLockMinutes = 15;
+
 /// What the phone remembers between launches. None of it opens the vault on
 /// its own: the keyset is stored separately, behind biometrics.
 class SavedAccount {
@@ -11,7 +13,7 @@ class SavedAccount {
     required this.email,
     required this.sessionToken,
     required this.quickUnlock,
-    this.autoLockMinutes = 1,
+    this.autoLockMinutes = defaultAutoLockMinutes,
   });
 
   final String api;
@@ -20,6 +22,7 @@ class SavedAccount {
 
   /// Whether the keyset is saved for fingerprint unlock.
   final bool quickUnlock;
+  /// Minutes in the background before locking; 0 never locks.
   final int autoLockMinutes;
 
   SavedAccount copyWith({bool? quickUnlock, int? autoLockMinutes}) => SavedAccount(
@@ -48,7 +51,7 @@ class SavedAccount {
         email: j['email'] as String,
         sessionToken: j['sessionToken'] as String,
         quickUnlock: j['quickUnlock'] as bool? ?? false,
-        autoLockMinutes: j['autoLockMinutes'] as int? ?? 1,
+        autoLockMinutes: j['autoLockMinutes'] as int? ?? defaultAutoLockMinutes,
       );
     } catch (_) {
       return null;

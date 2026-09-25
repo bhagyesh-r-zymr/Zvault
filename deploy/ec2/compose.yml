@@ -29,6 +29,8 @@ services:
       SMTP_PORT: 587
       SMTP_USER: ${SES_SMTP_USER:?}
       SMTP_PASS: ${SES_SMTP_PASS:?}
+      # Gets an email for each landing-page waitlist sign-up.
+      WAITLIST_OWNER_EMAIL: ${WAITLIST_OWNER_EMAIL:-bhagyesh.r@zymr.com}
     depends_on:
       postgres: { condition: service_healthy }
 

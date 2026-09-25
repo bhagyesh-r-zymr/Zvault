@@ -58,6 +58,15 @@ const EnvSchema = z
     SMTP_ALLOW_INSECURE: z.stringbool().default(false),
     SMTP_USER: z.string().min(1).optional(),
     SMTP_PASS: z.string().min(1).optional(),
+
+    /**
+     * Gets an email for each waitlist sign-up. Unset: sign-ups are still stored.
+     */
+    WAITLIST_OWNER_EMAIL: z
+      .string()
+      .transform((s) => s.trim().toLowerCase())
+      .pipe(z.email())
+      .optional(),
   })
   .superRefine((env, ctx) => {
     const prod = env.NODE_ENV === 'production';

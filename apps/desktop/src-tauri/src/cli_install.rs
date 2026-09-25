@@ -3,13 +3,16 @@
 //!
 //! Release builds bundle `zv` next to the app's own executable (a Tauri
 //! sidecar). The link goes in `/usr/local/bin` when that is writable without
-//! admin rights, otherwise in `~/.local/bin`.
+//! admin rights, otherwise in `~/.local/bin`. With `admin`, macOS asks for an
+//! administrator password and the link always goes in `/usr/local/bin`,
+//! which every terminal has on its PATH.
 
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
 const NAME: &str = "zv";
+const SYSTEM_DIR: &str = "/usr/local/bin";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,6 +21,10 @@ pub struct CliStatus {
     bundled: bool,
     /// Where `zv` is linked to this app's copy, if anywhere we look.
     installed_at: Option<String>,
+    /// Whether that link's folder is on the PATH new terminals get.
+    on_path: bool,
+    /// A command that installs this app's `zv`, to paste into a terminal.
+    command: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -37,7 +44,7 @@ fn bundled() -> Option<PathBuf> {
 }
 
 fn candidates() -> Vec<PathBuf> {
-    let mut dirs = vec![PathBuf::from("/usr/local/bin")];
+    let mut dirs = vec![PathBuf::from(SYSTEM_DIR)];
     if let Some(home) = std::env::var_os("HOME") {
         dirs.push(PathBuf::from(home).join(".local/bin"));
     }
@@ -84,16 +91,78 @@ pub fn cli_status() -> CliStatus {
             .map(|d| d.join(NAME))
             .find(|l| links_to(l, t))
     });
+    let path = login_path();
     CliStatus {
         bundled: target.is_some(),
+        on_path: installed_at
+            .as_ref()
+            .and_then(|l| l.parent())
+            .is_some_and(|d| path.iter().any(|p| p == d)),
         installed_at: installed_at.map(|p| p.display().to_string()),
+        command: target.as_deref().map(terminal_command),
     }
 }
 
 #[tauri::command]
-pub fn cli_install() -> Result<CliInstalled, String> {
+pub fn cli_install(admin: Option<bool>) -> Result<CliInstalled, String> {
     let target = bundled().ok_or("this build of Zvault does not include the zv tool")?;
+    if admin.unwrap_or(false) {
+        install_as_admin(&target)?;
+        let dir = PathBuf::from(SYSTEM_DIR);
+        return Ok(done(&dir, &dir.join(NAME), &login_path()));
+    }
     install(&target, &candidates(), &login_path())
+}
+
+/// Quotes `s` for a POSIX shell.
+fn sh_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', r"'\''"))
+}
+
+/// What to paste into a terminal to link `target` into `/usr/local/bin`.
+fn terminal_command(target: &Path) -> String {
+    format!(
+        "sudo mkdir -p {SYSTEM_DIR} && sudo ln -sf {} {SYSTEM_DIR}/{NAME}",
+        sh_quote(&target.display().to_string())
+    )
+}
+
+/// The shell script `install_as_admin` runs as root. Like `install`, it
+/// replaces an old link but never a real file someone else put there.
+fn admin_script(target: &Path) -> String {
+    let link = format!("{SYSTEM_DIR}/{NAME}");
+    format!(
+        "mkdir -p {SYSTEM_DIR} && {{ [ -L {link} ] || [ ! -e {link} ]; }} \
+         || {{ echo '{link} is not a link Zvault made; remove it first' >&2; exit 1; }}; \
+         ln -sfn {} {link}",
+        sh_quote(&target.display().to_string())
+    )
+}
+
+/// Runs `admin_script` through macOS's administrator password prompt.
+fn install_as_admin(target: &Path) -> Result<(), String> {
+    let script = admin_script(target)
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
+    let out = std::process::Command::new("/usr/bin/osascript")
+        .arg("-e")
+        .arg(format!(
+            "do shell script \"{script}\" with administrator privileges"
+        ))
+        .output()
+        .map_err(|e| e.to_string())?;
+    if out.status.success() {
+        return Ok(());
+    }
+    let err = String::from_utf8_lossy(&out.stderr);
+    if err.contains("-128") {
+        return Err("cancelled".into());
+    }
+    Err(err
+        .trim()
+        .rsplit_once("execution error: ")
+        .map_or(err.trim(), |(_, e)| e)
+        .to_owned())
 }
 
 fn install(target: &Path, dirs: &[PathBuf], path: &[PathBuf]) -> Result<CliInstalled, String> {
@@ -171,5 +240,21 @@ mod tests {
         assert!(!again.on_path);
         assert!(again.path_line.unwrap().contains(".local/bin"));
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn commands_quote_the_app_path() {
+        let odd = Path::new("/Users/me/My Apps/Bob's Zvault.app/Contents/MacOS/zv");
+        let out = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(format!(
+                "printf %s {}",
+                sh_quote(&odd.display().to_string())
+            ))
+            .output()
+            .unwrap();
+        assert_eq!(out.stdout, odd.display().to_string().as_bytes());
+        assert!(terminal_command(odd).ends_with("/usr/local/bin/zv"));
+        assert!(admin_script(odd).contains(&sh_quote(&odd.display().to_string())));
     }
 }

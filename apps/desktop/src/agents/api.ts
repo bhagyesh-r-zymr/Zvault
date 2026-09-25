@@ -15,6 +15,14 @@ import type { EncryptedBlob } from '@zvault/shared';
  * Mirrors `apps/desktop/src-tauri/src/agents.rs` and `crates/zvault-agent`.
  */
 
+/** Whether `zv` is installed from this app. */
+export interface CliStatus {
+  bundled: boolean;
+  installedAt: string | null;
+  onPath: boolean;
+  command: string | null;
+}
+
 /** When an agent needs the user's approval. */
 export type ApprovalMode = 'askEveryTime' | 'session15m' | 'whileUnlocked';
 
@@ -174,11 +182,15 @@ export const agents = {
   onUnlockRequested: (handler: () => void): Promise<UnlistenFn> =>
     listen('agent://unlock-requested', () => handler()),
 
-  /** Whether this build ships `zv`, and where it is linked. */
-  cliStatus: () => invoke<{ bundled: boolean; installedAt: string | null }>('cli_status'),
-  /** Links the bundled `zv` onto the PATH. Show `pathLine` when `onPath` is false. */
-  installCli: () =>
-    invoke<{ path: string; onPath: boolean; pathLine: string | null }>('cli_install'),
+  /** Whether this build ships `zv`, where it is linked, and a terminal command that links it. */
+  cliStatus: () => invoke<CliStatus>('cli_status'),
+  /**
+   * Links the bundled `zv` onto the PATH. With `admin`, macOS asks for an
+   * administrator password and links it in /usr/local/bin. Show `pathLine`
+   * when `onPath` is false.
+   */
+  installCli: (admin = false) =>
+    invoke<{ path: string; onPath: boolean; pathLine: string | null }>('cli_install', { admin }),
 
   /** Answers Rust's `zv ls` / `zv env` lookups. Register once, while the vault is loaded. */
   serveLists: (list: ListSecrets): Promise<UnlistenFn> =>

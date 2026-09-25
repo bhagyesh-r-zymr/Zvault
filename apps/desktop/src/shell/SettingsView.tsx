@@ -1,4 +1,6 @@
 import { useMemo } from 'react';
+import { CliInstall, ClaudeSetup } from '../agents/CliSetup.js';
+import '../agents/agents.css';
 import type { Session } from '../auth.js';
 import { createDevicesClient } from '../devices/client.js';
 import { DevicesPanel } from '../devices/DevicesPanel.js';
@@ -8,11 +10,12 @@ import { API_URL } from '../sharing/api.js';
 import { fetchTransport, twoFactorApi, TwoFactorSettings } from '../two-factor/index.js';
 import { Icon } from '../ui/Icon.js';
 
-export type SettingsSection = 'security' | 'devices' | 'account';
+export type SettingsSection = 'security' | 'devices' | 'cli' | 'account';
 
 const SECTIONS: { id: SettingsSection; label: string }[] = [
   { id: 'security', label: 'Security' },
   { id: 'devices', label: 'Devices' },
+  { id: 'cli', label: 'Command line' },
   { id: 'account', label: 'Account' },
 ];
 
@@ -70,6 +73,19 @@ export function SettingsView(props: {
 
         {props.section === 'devices' && (
           <DevicesPanel client={devices} onSignedOut={props.onSignOut} />
+        )}
+
+        {props.section === 'cli' && (
+          <>
+            <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <h2>Command-line tool</h2>
+              <CliInstall />
+            </section>
+            <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <h2>Connect Claude Code</h2>
+              <ClaudeSetup />
+            </section>
+          </>
         )}
 
         {props.section === 'account' && (

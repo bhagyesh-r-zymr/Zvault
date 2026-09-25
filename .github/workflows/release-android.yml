@@ -1,0 +1,108 @@
+name: Release Android app
+
+# Builds the Android APK and attaches it to a GitHub Release as
+# zvault-android.apk, so
+#   https://github.com/bhagyesh-r-zymr/Zvault/releases/latest/download/zvault-android.apk
+# always serves the newest one (the landing page links there).
+#
+#   - "Release macOS app" calls this after it publishes each release.
+#   - Run it from the Actions tab with an existing release tag to (re)attach
+#     the APK to that release.
+#
+# Signing: set the ANDROID_KEYSTORE_BASE64 (a base64 .jks), ANDROID_KEYSTORE_PASSWORD,
+# ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD secrets. Android installs an update
+# only over an app signed with the same key, so keep that key forever. Without
+# the secrets the APK is signed with a throwaway debug key, and every new APK
+# has to be installed fresh (uninstall first, then pair the phone again).
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing release tag to attach the APK to, e.g. v0.1.5'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    name: Build zvault-android.apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - name: Check the release tag
+        working-directory: .
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "::error::Release tags look like v0.1.0, got '$RELEASE_TAG'."
+            exit 1
+          fi
+          # versionCode must grow with every release or Android refuses the update.
+          echo "BUILD_NAME=${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$(( BASH_REMATCH[1] * 1000000 + BASH_REMATCH[2] * 1000 + BASH_REMATCH[3] ))" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.5
+          channel: stable
+          cache: true
+      # Cargokit builds the Rust core for each Android ABI with the NDK.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+
+      - name: Load the signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret: signing with a debug key. This APK can't update an installed one."
+            exit 0
+          fi
+          keystore="$RUNNER_TEMP/zvault-upload.jks"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          {
+            echo "ZVAULT_ANDROID_KEYSTORE=$keystore"
+            echo "ZVAULT_ANDROID_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD"
+            echo "ZVAULT_ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS"
+            echo "ZVAULT_ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - run: flutter pub get
+      - name: Build the APK
+        run: |
+          flutter build apk --release --target-platform android-arm64,android-x64 \
+            --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+          cp build/app/outputs/flutter-apk/app-release.apk zvault-android.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zvault-android
+          path: apps/mobile/zvault-android.apk
+          if-no-files-found: error
+
+      - name: Attach the APK to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$RELEASE_TAG" zvault-android.apk --clobber --repo "$GITHUB_REPOSITORY"

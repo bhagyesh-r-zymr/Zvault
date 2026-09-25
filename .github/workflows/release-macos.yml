@@ -3,6 +3,7 @@ name: Release macOS app
 # Builds a universal (Apple silicon + Intel) Zvault.dmg.
 #   - Push a tag like v0.1.0, or run it from the Actions tab with a release tag,
 #     to build it and publish it on a GitHub Release (with zv next to it).
+#     The Android APK is attached too (release-android.yml).
 #   - Run it by hand without a tag and the .dmg is only a workflow artifact.
 #
 # The app talks to the ZVAULT_API_URL repository variable. Until that is set it
@@ -204,3 +205,13 @@ jobs:
             files+=(zv-macos-universal.sig)
           fi
           gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
+
+  # The Android APK rides along on every release as zvault-android.apk.
+  android:
+    name: Attach the Android APK
+    needs: dmg
+    if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
+    uses: ./.github/workflows/release-android.yml
+    with:
+      release_tag: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_tag }}
+    secrets: inherit

@@ -18,6 +18,8 @@ const animated = root.classList.contains('archive-on');
 const still = !animated && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 function start() {
+  const pal = palette(section);
+  Object.assign(C, pal.card);
   const small = Math.min(screen.width, screen.height) < 700 || navigator.hardwareConcurrency <= 4;
   const renderer = new THREE.WebGLRenderer({
     canvas,
@@ -33,9 +35,9 @@ function start() {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(35, 1, 0.05, 160);
-  scene.environment = environment(renderer);
+  scene.environment = environment(renderer, pal);
   scene.environmentIntensity = 1.5;
-  scene.fog = new THREE.FogExp2(0x080a14, 0.04);
+  scene.fog = new THREE.FogExp2(pal.fog, 0.04);
 
   // ---------- helpers ----------
   const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
@@ -72,16 +74,16 @@ function start() {
     );
 
   // ---------- lights ----------
-  scene.add(new THREE.HemisphereLight(0xb4bbd4, 0x0b0d14, 0.9));
-  const key = new THREE.DirectionalLight(0xe4e9ff, 2.2);
+  scene.add(new THREE.HemisphereLight(pal.hemiSky, pal.hemiGround, 0.9));
+  const key = new THREE.DirectionalLight(pal.key, 2.2);
   key.position.set(4, 8, 7);
   scene.add(key);
-  const rim = new THREE.DirectionalLight(0x6f7dff, 0.9);
+  const rim = new THREE.DirectionalLight(pal.accent, 0.9);
   rim.position.set(-6, 2, -4);
   scene.add(rim);
   // A soft lamp that travels a little ahead of the camera, so nearby drawers
   // catch light and far ones fall off into the dark.
-  const lamp = new THREE.PointLight(0xc4ccff, 14, 18, 1.5);
+  const lamp = new THREE.PointLight(pal.lamp, 14, 18, 1.5);
   scene.add(lamp);
 
   // ---------- the aperture ----------
@@ -98,9 +100,9 @@ function start() {
     s.closePath();
     return s;
   };
-  const gunmetal = metal(0x3a4050, 0.5, 0.7);
-  const steel = metal(0x5a6276, 0.34, 0.9);
-  const bright = metal(0xb4bccc, 0.3, 1);
+  const gunmetal = metal(pal.frame, 0.5, 0.7);
+  const steel = metal(pal.steel, 0.34, 0.9);
+  const bright = metal(pal.bright, 0.3, 1);
 
   const frameShape = hex(3.0);
   frameShape.holes.push(new THREE.Path(hex(RI + 0.22).getPoints()));
@@ -149,14 +151,14 @@ function start() {
     bolts.push(b);
   }
   // Status light under the opening: iris while locked, mint when open.
-  const statusMat = new THREE.MeshBasicMaterial({ color: 0x6f7dff });
+  const statusMat = new THREE.MeshBasicMaterial({ color: pal.accent });
   const status = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.035, 0.02), statusMat);
   status.position.set(0, -2.62, 0.39);
   gate.add(status);
   // The iris: six blades that spiral out of the way.
-  const bladeMat = metal(0x4a5166, 0.32, 0.85);
+  const bladeMat = metal(pal.blade, 0.32, 0.85);
   const bladeEdgeMat = new THREE.LineBasicMaterial({
-    color: 0x8ea0ff,
+    color: pal.accentSoft,
     transparent: true,
     opacity: 0.35,
   });
@@ -194,8 +196,8 @@ function start() {
     blades.push(blade);
   }
   const coreMat = new THREE.MeshStandardMaterial({
-    color: 0x111522,
-    emissive: 0x6f7dff,
+    color: pal.glass,
+    emissive: pal.accent,
     emissiveIntensity: 1.2,
     metalness: 0.4,
     roughness: 0.3,
@@ -222,7 +224,7 @@ function start() {
   // ---------- the archive ----------
   const world = new THREE.Group();
   scene.add(world);
-  world.add(backdrop(inside));
+  world.add(backdrop(inside, pal));
 
   // Six drawers along the path, one per chapter. x alternates so the path meanders.
   const STATIONS = [
@@ -270,9 +272,9 @@ function start() {
       ph: rand() * 6.28,
     });
   }
-  const bodyMat = inside(metal(0x2c3140, 0.5, 0.6));
-  const frontMat = inside(metal(0x3a4154, 0.38, 0.7));
-  const handleMat = inside(metal(0xa9b1c2, 0.28, 1));
+  const bodyMat = inside(metal(pal.body, 0.5, 0.6));
+  const frontMat = inside(metal(pal.front, 0.38, 0.7));
+  const handleMat = inside(metal(pal.bright, 0.28, 1));
   const labelMat = inside(
     new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0 }),
   );
@@ -284,10 +286,8 @@ function start() {
   const leds = new THREE.InstancedMesh(cabinet.led, ledMat, cells.length);
   bodies.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   [fronts, handles, labels, leds].forEach((m) => (m.instanceMatrix = bodies.instanceMatrix));
-  const paper = new THREE.Color(0x3e424c);
-  const ledColors = [0x3a46b8, 0x3a46b8, 0x4c5be8, 0x2c7a5e, 0x45d6a0, 0x6b4f8f].map(
-    (c) => new THREE.Color(c),
-  );
+  const paper = new THREE.Color(pal.paper);
+  const ledColors = pal.leds.map((c) => new THREE.Color(c));
   cells.forEach((c, i) => {
     labels.setColorAt(i, paper.clone().multiplyScalar(lerp(0.55, 1.1, rand())));
     leds.setColorAt(i, ledColors[Math.floor(rand() * ledColors.length)]);
@@ -328,7 +328,7 @@ function start() {
     dustGeo,
     inside(
       new THREE.PointsMaterial({
-        color: 0xaab4e8,
+        color: pal.dust,
         size: 0.028,
         map: dotTexture(),
         transparent: true,
@@ -351,7 +351,7 @@ function start() {
       inside(
         new THREE.MeshBasicMaterial({
           map: shaftTex,
-          color: 0x8e9cff,
+          color: pal.accentSoft,
           transparent: true,
           opacity: 0.07,
           blending: THREE.AdditiveBlending,
@@ -397,7 +397,7 @@ function start() {
     const holder = new THREE.Mesh(roundedBox(0.42, 0.14, 0.02, 0.008), handleMat);
     holder.position.set(0, -0.1, 0.795);
     drawer.add(holder);
-    const trayMat = inside(metal(0x2a303e, 0.45, 0.6));
+    const trayMat = inside(metal(pal.tray, 0.45, 0.6));
     const tray = new THREE.Group();
     tray.position.z = 0.05;
     drawer.add(tray);
@@ -414,7 +414,7 @@ function start() {
     tray.add(back);
     const glowMat = inside(
       new THREE.MeshBasicMaterial({
-        color: 0x45d6a0,
+        color: pal.secure,
         transparent: true,
         opacity: 0,
         depthWrite: false,
@@ -424,7 +424,7 @@ function start() {
     glowPlane.rotation.x = -Math.PI / 2;
     glowPlane.position.y = -0.185;
     tray.add(glowPlane);
-    const light = new THREE.PointLight(0x45d6a0, 0, 3.2, 2);
+    const light = new THREE.PointLight(pal.secure, 0, 3.2, 2);
     light.position.set(0, 0.3, 1.2);
     g.add(light);
 
@@ -550,8 +550,8 @@ function start() {
   };
 
   // ---------- per-frame update ----------
-  const iris = new THREE.Color(0x6f7dff);
-  const mint = new THREE.Color(0x45d6a0);
+  const iris = new THREE.Color(pal.accent);
+  const mint = new THREE.Color(pal.secure);
   const lookAt = new THREE.Vector3();
   const pointer = { x: 0, y: 0, sx: 0, sy: 0 };
   const shift = new THREE.Vector3();
@@ -777,7 +777,7 @@ function start() {
         slab,
         inside(
           new THREE.MeshPhysicalMaterial({
-            color: 0x0c0f18,
+            color: pal.glass,
             metalness: 0.2,
             roughness: 0.14,
             clearcoat: 1,
@@ -800,7 +800,7 @@ function start() {
       g.clearRect(0, 0, cv.width, cv.height);
       // A faint sheen across the top of the glass.
       const sheen = g.createLinearGradient(0, 0, 0, cv.height);
-      sheen.addColorStop(0, 'rgba(255,255,255,0.06)');
+      sheen.addColorStop(0, C.sheen);
       sheen.addColorStop(0.4, 'rgba(255,255,255,0)');
       g.fillStyle = sheen;
       g.fillRect(0, 0, cv.width, cv.height);
@@ -822,7 +822,7 @@ function start() {
     );
     face.position.z = 0.0175;
     const edgeMat = inside(
-      new THREE.LineBasicMaterial({ color: 0x6f7dff, transparent: true, opacity: 0.8 }),
+      new THREE.LineBasicMaterial({ color: pal.accent, transparent: true, opacity: 0.8 }),
     );
     const edge = new THREE.LineLoop(
       new THREE.BufferGeometry().setFromPoints(s.getPoints(10).map((v) => V(v.x, v.y, 0.018))),
@@ -839,15 +839,15 @@ function start() {
 // Textures and card faces (plain canvas 2D)
 // ======================================================================
 
-function environment(renderer) {
+function environment(renderer, pal) {
   // A dim studio: dark gradient dome with a few soft panels to catch in the metal.
   const s = new THREE.Scene();
   const g = new THREE.SphereGeometry(10, 32, 16);
   const pos = g.attributes.position;
   const cols = [];
-  const top = new THREE.Color(0x2a3274);
-  const mid = new THREE.Color(0x0e111b);
-  const bot = new THREE.Color(0x030407);
+  const top = new THREE.Color(pal.envTop);
+  const mid = new THREE.Color(pal.envMid);
+  const bot = new THREE.Color(pal.envBottom);
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i) / 10;
     const c = y > 0 ? mid.clone().lerp(top, y) : mid.clone().lerp(bot, -y);
@@ -877,13 +877,13 @@ function environment(renderer) {
   return tex;
 }
 
-function backdrop(inside) {
+function backdrop(inside, pal) {
   const g = new THREE.SphereGeometry(110, 32, 16);
   const pos = g.attributes.position;
   const cols = [];
-  const top = new THREE.Color(0x1a1f4a);
-  const mid = new THREE.Color(0x0a0c18);
-  const bot = new THREE.Color(0x030406);
+  const top = new THREE.Color(pal.skyTop);
+  const mid = new THREE.Color(pal.skyMid);
+  const bot = new THREE.Color(pal.skyBottom);
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i) / 110;
     const c =
@@ -997,17 +997,8 @@ function roundRect(s, x, y, w, h, r) {
   s.quadraticCurveTo(x, y, x + r, y);
 }
 
-const C = {
-  text: '#e9edf5',
-  text2: '#a3abbd',
-  muted: '#7e879b',
-  line: 'rgba(142,160,255,0.16)',
-  iris: '#8ea0ff',
-  irisSolid: '#4c5be8',
-  mint: '#45d6a0',
-  amber: '#f2b64c',
-  violet: '#d9a3f5',
-};
+// Card face colours; filled from the palette when the scene starts.
+const C = {};
 const SANS = 'Geist, -apple-system, system-ui, sans-serif';
 const MONO = '"Geist Mono", ui-monospace, Menlo, monospace';
 
@@ -1073,7 +1064,7 @@ function drawZeroKnowledge(g, w) {
 function drawAgents(g, w) {
   header(g, w, 'Agent request', 'Needs approval', C.amber);
   // Agent glyph.
-  pill(g, 64, 138, 104, 104, '#1d2440');
+  pill(g, 64, 138, 104, 104, C.chip);
   g.fillStyle = C.iris;
   g.fillRect(92, 178, 14, 14);
   g.fillRect(126, 178, 14, 14);
@@ -1088,7 +1079,7 @@ function drawAgents(g, w) {
   g.font = `500 26px ${MONO}`;
   g.fillStyle = C.text2;
   g.fillText('project  payments-api / prod', 64, 350);
-  pill(g, 64, 420, 190, 80, null, 'rgba(142,160,255,0.35)');
+  pill(g, 64, 420, 190, 80, null, C.outline);
   pill(g, 276, 420, 250, 80, C.irisSolid);
   g.font = `500 32px ${SANS}`;
   g.textAlign = 'center';
@@ -1111,15 +1102,7 @@ function drawProjects(g, w) {
   envs.forEach((e, i) => {
     const tw = g.measureText(e).width + 56;
     const on = i === 2;
-    pill(
-      g,
-      x,
-      132,
-      tw,
-      64,
-      on ? 'rgba(76,91,232,0.3)' : null,
-      on ? C.iris : 'rgba(142,160,255,0.22)',
-    );
+    pill(g, x, 132, tw, 64, on ? C.chip : null, on ? C.iris : C.line);
     g.fillStyle = on ? C.text : C.text2;
     g.fillText(e, x + 28, 175);
     x += tw + 14;
@@ -1155,7 +1138,7 @@ function drawSharing(g, w) {
   g.fillText('ONE-TIME CODE', 64, 306);
   '481902'.split('').forEach((d, i) => {
     const x = 64 + i * 112;
-    pill(g, x, 330, 92, 112, 'rgba(69,214,160,0.08)', 'rgba(69,214,160,0.45)');
+    pill(g, x, 330, 92, 112, C.secureBg, C.mint);
     g.font = `500 56px ${MONO}`;
     g.fillStyle = C.mint;
     g.textAlign = 'center';
@@ -1209,8 +1192,8 @@ function drawCli(g, w) {
 
 function drawAndroid(g, w) {
   header(g, w, 'Android · Paired', 'Keystore');
-  pill(g, 64, 130, 190, 400, '#10131c', 'rgba(142,160,255,0.35)');
-  g.fillStyle = '#1b2033';
+  pill(g, 64, 130, 190, 400, C.chip, C.outline);
+  g.fillStyle = C.screen;
   g.fillRect(84, 170, 150, 320);
   pill(g, 124, 290, 70, 70, C.irisSolid);
   g.font = `700 40px ${SANS}`;
@@ -1230,6 +1213,57 @@ function drawAndroid(g, w) {
   g.fillText('Items and project secrets', 300, 400);
   g.fillStyle = C.muted;
   g.fillText('Paired by QR from your Mac', 300, 470);
+}
+
+// Colours come from --archive-* custom properties on the section (site.css), so
+// the hero can be re-skinned from CSS alone. The fallbacks are Graphite & Iris.
+function palette(el) {
+  const css = getComputedStyle(el);
+  const v = (name, fallback) => css.getPropertyValue(`--archive-${name}`).trim() || fallback;
+  const list = (name, fallback) => v(name, fallback).split(/\s+/);
+  return {
+    fog: v('fog', '#080a14'),
+    skyTop: v('sky-top', '#1a1f4a'),
+    skyMid: v('sky-mid', '#0a0c18'),
+    skyBottom: v('sky-bottom', '#030406'),
+    envTop: v('env-top', '#2a3274'),
+    envMid: v('env-mid', '#0e111b'),
+    envBottom: v('env-bottom', '#030407'),
+    hemiSky: v('light-sky', '#b4bbd4'),
+    hemiGround: v('light-ground', '#0b0d14'),
+    key: v('light-key', '#e4e9ff'),
+    lamp: v('light-lamp', '#c4ccff'),
+    frame: v('frame', '#3a4050'),
+    steel: v('steel', '#5a6276'),
+    bright: v('bright', '#b4bccc'),
+    blade: v('blade', '#4a5166'),
+    body: v('body', '#2c3140'),
+    front: v('front', '#3a4154'),
+    tray: v('tray', '#2a303e'),
+    paper: v('paper', '#3e424c'),
+    dust: v('dust', '#aab4e8'),
+    glass: v('glass', '#0c0f18'),
+    accent: v('accent', '#6f7dff'),
+    accentSoft: v('accent-soft', '#8ea0ff'),
+    secure: v('secure', '#45d6a0'),
+    leds: list('leds', '#3a46b8 #3a46b8 #4c5be8 #2c7a5e #45d6a0 #6b4f8f'),
+    card: {
+      text: v('card-text', '#e9edf5'),
+      text2: v('card-text-2', '#a3abbd'),
+      muted: v('card-muted', '#7e879b'),
+      line: v('card-line', 'rgba(142,160,255,0.2)'),
+      outline: v('card-outline', 'rgba(142,160,255,0.35)'),
+      chip: v('card-chip', 'rgba(76,91,232,0.22)'),
+      screen: v('card-screen', '#1b2033'),
+      sheen: v('card-sheen', 'rgba(255,255,255,0.06)'),
+      iris: v('card-accent', '#8ea0ff'),
+      irisSolid: v('card-button', '#4c5be8'),
+      mint: v('card-secure', '#45d6a0'),
+      secureBg: v('card-secure-bg', 'rgba(69,214,160,0.08)'),
+      amber: v('card-attention', '#f2b64c'),
+      violet: v('card-highlight', '#d9a3f5'),
+    },
+  };
 }
 
 // Start last, once every helper above is defined.

@@ -452,6 +452,49 @@ main {
 /* ---------- Hero: the floating archive (archive.js) ----------
    Hidden until html.archive-on (WebGL + full motion, set by head.js). Then the
    hero pins for a long scroll while the camera drifts through the archive. */
+/* The hero's 3D palette. archive.js reads these once at start, so a theme can
+   re-skin the archive here (for example a light theme) without touching JS. */
+.archive {
+  --archive-fog: #080a14;
+  --archive-sky-top: #1a1f4a;
+  --archive-sky-mid: #0a0c18;
+  --archive-sky-bottom: #030406;
+  --archive-env-top: #2a3274;
+  --archive-env-mid: #0e111b;
+  --archive-env-bottom: #030407;
+  --archive-light-sky: #b4bbd4;
+  --archive-light-ground: #0b0d14;
+  --archive-light-key: #e4e9ff;
+  --archive-light-lamp: #c4ccff;
+  --archive-frame: #3a4050;
+  --archive-steel: #5a6276;
+  --archive-bright: #b4bccc;
+  --archive-blade: #4a5166;
+  --archive-body: #2c3140;
+  --archive-front: #3a4154;
+  --archive-tray: #2a303e;
+  --archive-paper: #3e424c;
+  --archive-dust: #aab4e8;
+  --archive-glass: #0c0f18;
+  --archive-accent: #6f7dff;
+  --archive-accent-soft: #8ea0ff;
+  --archive-secure: #45d6a0;
+  --archive-leds: #3a46b8 #3a46b8 #4c5be8 #2c7a5e #45d6a0 #6b4f8f;
+  --archive-card-text: var(--text);
+  --archive-card-text-2: var(--text-2);
+  --archive-card-muted: var(--muted);
+  --archive-card-line: rgba(142, 160, 255, 0.2);
+  --archive-card-outline: rgba(142, 160, 255, 0.35);
+  --archive-card-chip: rgba(76, 91, 232, 0.22);
+  --archive-card-screen: #1b2033;
+  --archive-card-sheen: rgba(255, 255, 255, 0.06);
+  --archive-card-accent: var(--iris-text);
+  --archive-card-button: var(--iris);
+  --archive-card-secure: var(--secure);
+  --archive-card-secure-bg: rgba(69, 214, 160, 0.08);
+  --archive-card-attention: var(--attn);
+  --archive-card-highlight: var(--violet);
+}
 .archive-canvas,
 .archive-shade,
 .archive-chapters,

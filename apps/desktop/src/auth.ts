@@ -60,12 +60,14 @@ export const needsTwoFactor = (r: Session | TwoFactorChallenge): r is TwoFactorC
 /**
  * SRP login: the server sends its challenge, the Rust core answers it, and
  * the server's proof is checked before the keyset is opened. Accounts with
- * 2FA get a `TwoFactorChallenge` to finish with a code.
+ * 2FA get a `TwoFactorChallenge` to finish with a code. A null `secretKey`
+ * uses the one from a picked Emergency Kit or saved on this Mac; a successful
+ * sign-in saves the key used to this Mac's Keychain.
  */
 export async function signIn(
   email: string,
   password: string,
-  secretKey: string,
+  secretKey: string | null,
 ): Promise<Session | TwoFactorChallenge> {
   const start = await api.loginStart(email);
   const proof = await core.loginProve({

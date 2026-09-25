@@ -13,6 +13,7 @@
 
 mod date;
 mod pdf;
+mod read;
 
 use core::fmt::Write as _;
 
@@ -20,6 +21,7 @@ use zeroize::Zeroizing;
 use zvault_crypto::SecretKey;
 
 pub use date::Date;
+pub use read::{MAX_KIT_BYTES, ReadKit, read};
 
 /// Suggested file name for the save dialog.
 pub const FILE_NAME: &str = "Zvault Emergency Kit.pdf";

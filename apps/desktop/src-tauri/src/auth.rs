@@ -68,6 +68,8 @@ struct PendingLogin {
     email: String,
     srp: ClientSession,
     unlock_key: SymmetricKey,
+    /// Saved to the Keychain once the login succeeds.
+    secret_key: SecretKey,
 }
 
 struct Account {
@@ -126,23 +128,38 @@ pub async fn create_account(
 }
 
 /// Login step 1: derives the keys and answers the server's SRP challenge.
+/// Without a typed `secret_key`, uses the one from a picked Emergency Kit or
+/// saved on this Mac.
 #[tauri::command]
 pub async fn login_prove(
+    app: AppHandle,
     state: AppState<'_>,
     email: String,
     password: String,
-    secret_key: String,
+    secret_key: Option<String>,
     kdf: KdfDto,
     srp_b: String,
 ) -> Result<LoginProof, String> {
     let password = Zeroizing::new(password);
-    let secret_key = SecretKey::parse(&Zeroizing::new(secret_key))
-        .map_err(|_| "That Secret Key doesn't look right. Check your Emergency Kit.".to_string())?;
+    let typed = secret_key
+        .map(Zeroizing::new)
+        .filter(|k| !k.trim().is_empty())
+        .map(|k| {
+            SecretKey::parse(&k).map_err(|_| {
+                "That Secret Key doesn't look right. Check your Emergency Kit.".to_string()
+            })
+        })
+        .transpose()?;
     let params = kdf_params(&kdf)?;
     let public_b = B64.decode(srp_b).map_err(|_| LOGIN_FAILED.to_string())?;
     let email = normalize_account_id(&email);
 
     let pending = blocking(move || {
+        let secret_key = match typed {
+            Some(key) => key,
+            None => crate::remembered::key_for(&app, &email)
+                .ok_or("Enter the Secret Key from your Emergency Kit.")?,
+        };
         let keys = derive_account_keys(&password, &secret_key, &email, &params).map_err(err)?;
         let srp = ClientSession::new(&email, &params.salt, &keys.srp_x, &public_b)
             .map_err(|_| LOGIN_FAILED.to_string())?;
@@ -150,6 +167,7 @@ pub async fn login_prove(
             email,
             srp,
             unlock_key: keys.unlock_key,
+            secret_key,
         })
     })
     .await?;
@@ -193,6 +211,8 @@ pub fn login_finish(
     let keyset =
         open_keyset(&pending.unlock_key, &sealed, &pending.email).map_err(|_| LOGIN_FAILED)?;
     let email = pending.email.clone();
+    // The key just proved itself, so this Mac can remember it.
+    crate::remembered::remember(&app, &email, &pending.secret_key);
     app.state::<crate::Keyring>().unlock(copy_key(&keyset));
     crate::commands::unlocked_with_password(
         &app,

@@ -1,7 +1,7 @@
 import { CRYPTO_VERSION } from '@zvault/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { signOut, type Session } from './auth.js';
-import { core } from './core.js';
+import { core, type RememberedAccount } from './core.js';
 import { EmergencyKitStep } from './EmergencyKitStep.js';
 import { lock, useActivityReporter, type LockReason, type LockStatus } from './lock.js';
 import { LockScreen } from './LockScreen.js';
@@ -22,6 +22,24 @@ export function App() {
   const [screen, setScreen] = useState<Screen>({ name: 'login' });
   const [coreError, setCoreError] = useState<string | null>(null);
   const [lockStatus, setLockStatus] = useState<LockStatus | null>(null);
+  const [remembered, setRemembered] = useState<RememberedAccount | null>(null);
+
+  // The account whose Secret Key this Mac remembers: sign-in greets it by
+  // name and asks only for the master password. Re-read after each change.
+  const refreshRemembered = useCallback(() => {
+    core.rememberedAccount().then(
+      (account) => {
+        setRemembered(account);
+        if (account) {
+          setScreen((prev) =>
+            prev.name === 'login' && !prev.email ? { name: 'login', email: account.email } : prev,
+          );
+        }
+      },
+      () => setRemembered(null),
+    );
+  }, []);
+  useEffect(refreshRemembered, [refreshRemembered]);
 
   useEffect(() => {
     core.info().then(
@@ -75,9 +93,15 @@ export function App() {
           case 'login':
             return (
               <Login
+                // Remount when the remembered email arrives after launch.
+                key={screen.email ?? ''}
                 {...(screen.email ? { email: screen.email } : {})}
                 {...(screen.secretKey ? { secretKey: screen.secretKey } : {})}
-                onSignedIn={(session) => setScreen({ name: 'unlocked', session })}
+                remembered={remembered}
+                onSignedIn={(session) => {
+                  refreshRemembered();
+                  setScreen({ name: 'unlocked', session });
+                }}
                 onCreateAccount={() => setScreen({ name: 'signup-email' })}
               />
             );
@@ -137,6 +161,8 @@ export function App() {
                 session={screen.session}
                 lockStatus={lockStatus}
                 onLockChanged={refreshLockStatus}
+                remembered={remembered}
+                onForgetSecretKey={() => core.forgetSecretKey().then(refreshRemembered)}
                 onSignOut={() => {
                   void signOut(screen.session).then(() =>
                     setScreen({ name: 'login', email: screen.session.email }),

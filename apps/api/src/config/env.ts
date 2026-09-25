@@ -60,6 +60,13 @@ const EnvSchema = z
     SMTP_PASS: z.string().min(1).optional(),
 
     /**
+     * SES sandbox mode: only verified addresses receive mail. The API then
+     * warns senders of email-restricted links about recipients it has no
+     * sign that SES can reach (no account, not a verified waitlist joiner).
+     */
+    MAIL_SANDBOX: z.stringbool().default(false),
+
+    /**
      * Gets an email for each waitlist sign-up. Unset: sign-ups are still stored.
      */
     WAITLIST_OWNER_EMAIL: z

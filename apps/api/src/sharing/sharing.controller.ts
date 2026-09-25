@@ -21,10 +21,10 @@ import {
   RequestShareCodeRequest,
   ShareId,
   type CheckShareLinkResponse,
+  type CreateShareLinkResponse,
   type OpenShareLinkResponse,
   type OutgoingUserShare,
   type ShareLinkList,
-  type ShareLinkSummary,
   type SharingKeyResponse,
   type UserShareList,
 } from '@zvault/shared';
@@ -90,7 +90,7 @@ export class SharingController {
   createLink(
     @CurrentUser() user: SharingUser,
     @Body(new ZodPipe(CreateShareLinkRequest)) body: CreateShareLinkRequest,
-  ): Promise<ShareLinkSummary> {
+  ): Promise<CreateShareLinkResponse> {
     return this.links.create(user.id, body);
   }
 

@@ -99,6 +99,15 @@ export const ShareLinkSummary = z.object({
 });
 export type ShareLinkSummary = z.infer<typeof ShareLinkSummary>;
 
+export const CreateShareLinkResponse = ShareLinkSummary.extend({
+  /**
+   * Allowed emails that may not receive the code while Zvault email is in
+   * sandbox mode (only verified addresses get mail). Empty otherwise.
+   */
+  unverifiedEmails: z.array(z.string()).default([]),
+});
+export type CreateShareLinkResponse = z.infer<typeof CreateShareLinkResponse>;
+
 export const ShareLinkList = z.object({ links: z.array(ShareLinkSummary) });
 export type ShareLinkList = z.infer<typeof ShareLinkList>;
 

@@ -11,6 +11,7 @@ import {
 import {
   SHARE_LIMITS,
   type CheckShareLinkResponse,
+  type CreateShareLinkResponse,
   type CreateShareLinkRequest,
   type OpenShareLinkRequest,
   type OpenShareLinkResponse,
@@ -45,7 +46,7 @@ export class ShareLinksService {
     private readonly mailer: Mailer,
   ) {}
 
-  async create(ownerId: string, req: CreateShareLinkRequest): Promise<ShareLinkSummary> {
+  async create(ownerId: string, req: CreateShareLinkRequest): Promise<CreateShareLinkResponse> {
     const now = this.now();
     if ((await this.store.countActiveLinks(ownerId, now)) >= SHARE_LIMITS.maxActiveLinksPerUser) {
       throw new UnprocessableEntityException('Too many active share links; revoke some first');
@@ -65,7 +66,10 @@ export class ShareLinksService {
     };
     if (!(await this.store.insertLink(link)))
       throw new ConflictException('Share id already in use');
-    return this.summarize(link, now);
+    return {
+      ...this.summarize(link, now),
+      unverifiedEmails: await this.unverified(req.allowedEmails),
+    };
   }
 
   async list(ownerId: string): Promise<ShareLinkSummary[]> {
@@ -151,6 +155,16 @@ export class ShareLinksService {
       expiresAt: link.expiresAt.toISOString(),
       viewsRemaining: link.maxViews - link.viewCount - 1,
     };
+  }
+
+  /**
+   * In SES sandbox mode, the allowed emails with no sign they can get mail.
+   * Accounts and verified waitlist joiners have been through SES already.
+   */
+  private async unverified(emails: string[] | undefined): Promise<string[]> {
+    if (!this.env.MAIL_SANDBOX || !emails?.length) return [];
+    const reachable = await this.store.knownReachableEmails(emails);
+    return emails.filter((e) => !reachable.has(e));
   }
 
   private async openLinkFor(id: ShareId, accessToken: string): Promise<LinkRecord> {

@@ -48,6 +48,7 @@ function ShareByLink({ item, api }: { item: SharedItemPayload; api: SharingApi }
   const [emailText, setEmailText] = useState('');
   const [url, setUrl] = useState<string | null>(null);
   const [allowed, setAllowed] = useState<string[] | null>(null);
+  const [unverified, setUnverified] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,7 +65,7 @@ function ShareByLink({ item, api }: { item: SharedItemPayload; api: SharingApi }
       const link = await sharingCore.createLink(item, SHARE_ORIGIN);
       // The URL (and its key) stays here; the API gets ciphertext, a verifier
       // and, for a restricted link, the emails allowed to ask for a code.
-      await api.createLink({
+      const created = await api.createLink({
         id: link.id,
         verifier: link.verifier,
         blob: link.blob,
@@ -74,6 +75,7 @@ function ShareByLink({ item, api }: { item: SharedItemPayload; api: SharingApi }
       });
       setUrl(link.url);
       setAllowed(allowedEmails ?? null);
+      setUnverified(created.unverifiedEmails);
     } catch (e) {
       setError(message(e));
     } finally {
@@ -129,6 +131,14 @@ function ShareByLink({ item, api }: { item: SharedItemPayload; api: SharingApi }
           The key is in the part after #, which browsers never send to our servers. It stops working
           after {maxViews} {maxViews === 1 ? 'view' : 'views'} or when it expires.
         </p>
+        {unverified.length > 0 && (
+          <p role="alert" className="alert">
+            Zvault email is in test mode, so only verified addresses get the code.{' '}
+            {unverified.join(', ')} {unverified.length === 1 ? 'is' : 'are'} not verified yet and
+            may not receive it. Ask the Zvault owner to verify{' '}
+            {unverified.length === 1 ? 'that address' : 'those addresses'} first.
+          </p>
+        )}
         <ErrorLine error={error} />
         <div className="sheet-actions">
           {allowed && (

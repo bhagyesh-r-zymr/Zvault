@@ -1,7 +1,7 @@
 import {
+  CreateShareLinkResponse,
   OutgoingUserShare,
   ShareLinkList,
-  ShareLinkSummary,
   SharingKeyResponse,
   UserShareList,
   type CreateShareLinkInput,
@@ -54,7 +54,8 @@ export function sharingApi(authHeaders: AuthHeaders = () => ({})) {
   }
 
   return {
-    createLink: (req: CreateShareLinkInput) => call(ShareLinkSummary, 'POST', '/shares/links', req),
+    createLink: (req: CreateShareLinkInput) =>
+      call(CreateShareLinkResponse, 'POST', '/shares/links', req),
     listLinks: () => call(ShareLinkList, 'GET', '/shares/links'),
     revokeLink: (id: string) => call(null, 'DELETE', `/shares/links/${id}`),
     publishKey: (publicKey: string) =>

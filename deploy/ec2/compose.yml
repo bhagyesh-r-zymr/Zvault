@@ -25,6 +25,8 @@ services:
       DATABASE_SSL: 'false'
       # Amazon SES over SMTP (STARTTLS). Credentials come from .env; see README.
       MAIL_TRANSPORT: smtp
+      # SES is in sandbox mode: only verified addresses receive mail.
+      MAIL_SANDBOX: 'true'
       SMTP_HOST: email-smtp.ap-south-1.amazonaws.com
       SMTP_PORT: 587
       SMTP_USER: ${SES_SMTP_USER:?}

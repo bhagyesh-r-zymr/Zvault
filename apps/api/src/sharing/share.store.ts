@@ -1,9 +1,16 @@
 import { timingSafeEqual } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import type { EncryptedBlob, ShareId, SharingPublicKey } from '@zvault/shared';
-import { and, count, desc, eq, gt, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gt, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { DATABASE, type Database } from '../db/database.js';
-import { accounts, shareLinkCodes, shareLinks, sharingKeys, userShares } from '../db/schema.js';
+import {
+  accounts,
+  shareLinkCodes,
+  shareLinks,
+  sharingKeys,
+  userShares,
+  waitlist,
+} from '../db/schema.js';
 
 export interface LinkRecord {
   id: ShareId;
@@ -90,6 +97,8 @@ export interface ShareStore {
    */
   issueLinkCode(code: NewLinkCode): Promise<boolean>;
   accountEmail(userId: string): Promise<string | null>;
+  /** Which of `emails` belong to an account or a verified waitlist joiner. */
+  knownReachableEmails(emails: string[]): Promise<Set<string>>;
 
   putSharingKey(key: SharingKeyRecord): Promise<void>;
   getSharingKeyByUser(userId: string): Promise<SharingKeyRecord | null>;
@@ -278,6 +287,21 @@ export class PostgresShareStore implements ShareStore {
       .where(eq(accounts.id, userId))
       .limit(1);
     return row?.email ?? null;
+  }
+
+  async knownReachableEmails(emails: string[]): Promise<Set<string>> {
+    if (emails.length === 0) return new Set();
+    const [owners, joiners] = await Promise.all([
+      this.db
+        .select({ email: accounts.email })
+        .from(accounts)
+        .where(inArray(accounts.email, emails)),
+      this.db
+        .select({ email: waitlist.email })
+        .from(waitlist)
+        .where(and(inArray(waitlist.email, emails), eq(waitlist.status, 'verified'))),
+    ]);
+    return new Set([...owners, ...joiners].map((r) => r.email));
   }
 
   async putSharingKey(key: SharingKeyRecord): Promise<void> {

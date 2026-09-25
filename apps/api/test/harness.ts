@@ -32,6 +32,8 @@ export interface HarnessOptions {
   clock?: () => Date;
   /** Keep the real rate limits, keyed on `X-Forwarded-For`. */
   rateLimits?: boolean;
+  /** Extra environment variables. */
+  env?: Record<string, string>;
 }
 
 /** Boots the real app on an in-process PGlite Postgres with the migrations applied. */
@@ -40,7 +42,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
   const db = drizzle(pglite, { schema });
   await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
   const mailer = new MemoryMailer();
-  const env = loadEnv({ NODE_ENV: 'test', CORS_ORIGINS: 'http://localhost:1420' });
+  const env = loadEnv({ NODE_ENV: 'test', CORS_ORIGINS: 'http://localhost:1420', ...options.env });
 
   let builder = Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(ENV)

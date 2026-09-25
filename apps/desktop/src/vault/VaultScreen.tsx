@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { OneTimePasswordCode, OneTimePasswordEditor } from '../otp/index.js';
 import type { SharingApi } from '../sharing/api.js';
 import { ShareItem } from '../sharing/ShareItem.js';
@@ -13,6 +21,14 @@ const SYNC_INTERVAL_MS = 30_000;
 
 /** Fired by the app shell on ⌘K so the list's search box takes focus. */
 export const FOCUS_SEARCH_EVENT = 'zvault:focus-search';
+
+const SEARCH_SHORTCUT = navigator.platform.toLowerCase().includes('mac') ? '⌘K' : 'Ctrl K';
+
+/** The letter an item is grouped under in the list (items arrive sorted by title). */
+function groupLetter(title: string): string {
+  const first = (title.trim()[0] ?? '').toUpperCase();
+  return /\p{L}/u.test(first) ? first : '#';
+}
 
 const EMPTY: ItemFields = {
   title: '',
@@ -127,51 +143,70 @@ function VaultView({ sync, sharing }: { sync: VaultSync; sharing?: SharingApi })
   }, [selectedGone]);
 
   return (
-    <div className="split">
-      <section className="list-pane" aria-label="Items">
-        <div className="list-head">
-          <div className="title-row">
-            <span className="crumb">
-              <strong>{sync.vault.name}</strong>
-            </span>
-            <button
-              type="button"
-              className="primary"
-              onClick={() => setPane({ mode: 'edit', id: null })}
-            >
-              <Icon name="plus" size={13} strokeWidth={2.4} />
-              New
-            </button>
-          </div>
+    <div className="split has-toolbar">
+      <div className="toolbar">
+        <label className="toolbar-search">
+          <Icon name="search" size={14} />
           <input
             ref={search}
             type="search"
-            placeholder="Search this vault"
+            placeholder={`Search in ${sync.vault.name}`}
             aria-label="Search items"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+          {!query && <kbd>{SEARCH_SHORTCUT}</kbd>}
+        </label>
+        <button
+          type="button"
+          className="primary"
+          onClick={() => setPane({ mode: 'edit', id: null })}
+        >
+          <Icon name="plus" size={13} strokeWidth={2.4} />
+          New item
+        </button>
+      </div>
+      <section className="list-pane" aria-label="Items">
+        <div className="list-head">
+          <div className="title-row">
+            <span className="crumb truncate">
+              <strong>{sync.vault.name}</strong>
+            </span>
+            <span className="sort-note">Sorted by title</span>
+          </div>
         </div>
         <div className="list-body">
-          {visible.map(({ id, summary }) => (
-            <button
-              key={id}
-              type="button"
-              className="list-item"
-              aria-current={pane.mode !== 'none' && pane.id === id}
-              onClick={() => setPane({ mode: 'view', id })}
-            >
-              <LetterTile name={summary.title || '?'} />
-              <span className="row-main">
-                <span className="row-title truncate">{summary.title || 'Untitled'}</span>
-                <span className="row-sub truncate">{summary.username || summary.url || ' '}</span>
-              </span>
-            </button>
-          ))}
+          {visible.map(({ id, summary }, i) => {
+            const letter = groupLetter(summary.title);
+            const prev = visible[i - 1];
+            return (
+              <Fragment key={id}>
+                {(!prev || groupLetter(prev.summary.title) !== letter) && (
+                  <div className="list-group" aria-hidden="true">
+                    {letter}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="list-item"
+                  aria-current={pane.mode !== 'none' && pane.id === id}
+                  onClick={() => setPane({ mode: 'view', id })}
+                >
+                  <LetterTile name={summary.title || '?'} />
+                  <span className="row-main">
+                    <span className="row-title truncate">{summary.title || 'Untitled'}</span>
+                    <span className="row-sub truncate">
+                      {summary.username || summary.url || ' '}
+                    </span>
+                  </span>
+                </button>
+              </Fragment>
+            );
+          })}
           {items.length === 0 && (
             <div className="empty">
               <Icon name="key" size={28} />
-              <span>No items yet. Add your first login with New.</span>
+              <span>No items yet. Add your first login with New item.</span>
             </div>
           )}
           {items.length > 0 && visible.length === 0 && (
@@ -218,7 +253,7 @@ function VaultView({ sync, sharing }: { sync: VaultSync; sharing?: SharingApi })
         {pane.mode === 'none' && (
           <div className="empty">
             <Icon name="items" size={32} />
-            <span>Select an item, or press New to add one.</span>
+            <span>Select an item, or press New item to add one.</span>
           </div>
         )}
       </section>
@@ -261,30 +296,29 @@ function ItemDetail(props: {
   const title = fields.title || 'Untitled';
   return (
     <>
-      <div className="detail-bar">
-        <span>Personal</span>
-        {sharing && (
-          <button type="button" onClick={() => setSharingOpen(true)}>
-            <Icon name="share" size={13} /> Share
-          </button>
-        )}
-        <button type="button" onClick={onEdit}>
-          <Icon name="edit" size={13} /> Edit
-        </button>
-      </div>
       <article className="detail-body">
         <div className="item-head">
           <LetterTile name={title} size="large" />
           <div>
             <h1>{title}</h1>
-            {fields.urls[0] && <span className="row-sub">{fields.urls[0]}</span>}
+            {fields.urls[0] && <span className="row-sub truncate">{fields.urls[0]}</span>}
+          </div>
+          <div className="item-actions">
+            {sharing && (
+              <button type="button" className="small" onClick={() => setSharingOpen(true)}>
+                <Icon name="share" size={13} /> Share
+              </button>
+            )}
+            <button type="button" className="small" onClick={onEdit}>
+              <Icon name="edit" size={13} /> Edit
+            </button>
           </div>
         </div>
         <div className="panel rows">
           <div className="row">
             <div className="row-main">
               <span className="row-label">username</span>
-              <span style={{ fontSize: 15 }}>{fields.username || '—'}</span>
+              <span className="field-value">{fields.username || '—'}</span>
             </div>
             <CopyButton value={fields.username} secret={false} />
           </div>
@@ -320,9 +354,7 @@ function ItemDetail(props: {
             <div key={url} className="row">
               <div className="row-main">
                 <span className="row-label">website</span>
-                <span className="truncate" style={{ color: 'var(--iris-text)' }}>
-                  {url}
-                </span>
+                <span className="field-value link truncate">{url}</span>
               </div>
               <CopyButton value={url} secret={false} />
             </div>
@@ -431,9 +463,6 @@ function ItemEditor(props: {
 
   return (
     <>
-      <div className="detail-bar">
-        <span>{id === null ? 'New item' : 'Editing'}</span>
-      </div>
       <form className="detail-body item-form" onSubmit={submit}>
         <h1>{id === null ? 'New login' : 'Edit item'}</h1>
         <label className="field">

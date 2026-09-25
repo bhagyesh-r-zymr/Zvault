@@ -56,7 +56,7 @@ class _ProjectCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = hexColor(project.color) ?? Zv.iris;
+    final (bg, fg) = project.tile;
     return Panel(
       child: InkWell(
         onTap: () =>
@@ -74,13 +74,16 @@ class _ProjectCard extends StatelessWidget {
                     height: 36,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.18),
+                      color: hexColor(bg),
                       borderRadius: BorderRadius.circular(Zv.radiusS),
-                      border: Border.all(color: color.withValues(alpha: 0.45)),
                     ),
                     child: Text(
                       project.name.isEmpty ? '?' : project.name[0].toUpperCase(),
-                      style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 16),
+                      style: TextStyle(
+                        color: hexColor(fg),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -98,7 +101,7 @@ class _ProjectCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${project.secrets.length} secrets',
+                    project.secrets.length == 1 ? '1 secret' : '${project.secrets.length} secrets',
                     style: const TextStyle(color: Zv.text2, fontSize: 13),
                   ),
                 ],

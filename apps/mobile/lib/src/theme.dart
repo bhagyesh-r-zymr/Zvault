@@ -80,7 +80,9 @@ ThemeData zvaultTheme() {
             fontWeight: FontWeight.w600,
             color: Zv.muted,
           ),
-        ),
+        )
+        // The styles above replace the base ones, so give them the font again.
+        .apply(fontFamily: Zv.font),
     appBarTheme: const AppBarTheme(
       backgroundColor: Zv.bg,
       surfaceTintColor: Colors.transparent,

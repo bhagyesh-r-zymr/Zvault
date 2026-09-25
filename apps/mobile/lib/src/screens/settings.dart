@@ -8,6 +8,14 @@ import '../widgets.dart';
 class SettingsTab extends StatelessWidget {
   const SettingsTab({super.key});
 
+  // ListTile gives trailing text the small caps label style; keep it body text.
+  static const _trailing = TextStyle(
+    color: Zv.text2,
+    fontSize: 14,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0,
+  );
+
   static const _autoLock = {1: '1 minute', 5: '5 minutes', 15: '15 minutes', 60: '1 hour'};
 
   Future<void> _pickAutoLock(BuildContext context, AppState app) async {
@@ -93,7 +101,11 @@ class SettingsTab extends StatelessWidget {
                     children: [
                       Text(
                         a?.email ?? '',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Zv.text,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -124,10 +136,7 @@ class SettingsTab extends StatelessWidget {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        _autoLock[minutes] ?? '$minutes minutes',
-                        style: const TextStyle(color: Zv.text2),
-                      ),
+                      Text(_autoLock[minutes] ?? '$minutes minutes', style: _trailing),
                       const Icon(Icons.chevron_right_rounded, color: Zv.muted),
                     ],
                   ),
@@ -150,14 +159,14 @@ class SettingsTab extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Icons.sync_rounded, color: Zv.text2),
                   title: const Text('Last synced'),
-                  trailing: Text(_ago(app.lastSynced), style: const TextStyle(color: Zv.text2)),
+                  trailing: Text(_ago(app.lastSynced), style: _trailing),
                   onTap: app.sync,
                 ),
                 const Divider(),
                 ListTile(
                   leading: const Icon(Icons.info_outline_rounded, color: Zv.text2),
                   title: const Text('Version'),
-                  trailing: const Text(appVersion, style: TextStyle(color: Zv.text2)),
+                  trailing: const Text(appVersion, style: _trailing),
                 ),
               ],
             ),

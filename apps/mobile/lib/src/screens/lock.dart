@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -20,7 +22,11 @@ class _LockScreenState extends State<LockScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _unlock());
+    // Phones ask for the fingerprint right away. The desktop build keeps the
+    // keyset in memory with no prompt, so it waits for a tap instead.
+    if (Platform.isAndroid || Platform.isIOS) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _unlock());
+    }
   }
 
   Future<void> _unlock() async {

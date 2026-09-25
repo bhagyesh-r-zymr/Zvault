@@ -35,7 +35,15 @@ class Environment {
       slug = meta['slug'] as String? ?? '',
       kind = meta['kind'] as String? ?? 'custom',
       position = (meta['position'] as num?)?.toInt() ?? 0,
-      color = meta['color'] as String?;
+      color = meta['color'] as String? ?? envColors[meta['kind']] ?? envColors['custom'];
+
+  /// Default dot colour per kind, as on the Mac (`ENV_COLORS`).
+  static const envColors = {
+    'development': '#45D6A0',
+    'staging': '#F2B64C',
+    'production': '#FF7A7A',
+    'custom': '#D9A3F5',
+  };
 
   final String id;
   final String name;
@@ -85,6 +93,23 @@ class Project {
   final String? description;
   final String? color;
   final environments = <Environment>[];
+
+  /// Tile colours, picked from the id like the Mac does when there's no colour.
+  (String bg, String fg) get tile {
+    if (color != null) return (color!, '#FFFFFF');
+    var h = 0;
+    for (final c in id.codeUnits) {
+      h = (h * 31 + c) & 0xFFFFFFFF;
+    }
+    return _tiles[h % _tiles.length];
+  }
+
+  static const _tiles = [
+    ('#4C5BE8', '#FFFFFF'),
+    ('#1E3B33', '#7FE6BE'),
+    ('#3A2A14', '#F2B64C'),
+    ('#33203A', '#D9A3F5'),
+  ];
   final folders = <String, Folder>{};
   final secrets = <Secret>[];
 }

@@ -8,7 +8,7 @@ import { Icon } from '../ui/Icon.js';
  * A new recovery code, shown once, with a Recovery Kit PDF to save. The code
  * is also staged in Rust for the PDF until the caller discards it.
  */
-export function RecoveryCodeCard(props: { code: string; onSaved?: () => void }) {
+export function RecoveryCodeCard(props: { code: string; label?: string; onSaved?: () => void }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +30,7 @@ export function RecoveryCodeCard(props: { code: string; onSaved?: () => void }) 
 
   return (
     <div className="recovery-card">
-      <span className="eyebrow">Recovery code</span>
+      <span className="eyebrow">{props.label ?? 'Recovery code'}</span>
       <code className="recovery-code" aria-label="Recovery code">
         {props.code}
       </code>

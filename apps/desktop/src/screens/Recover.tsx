@@ -271,8 +271,7 @@ export function RecoveredKits(props: { email: string; recoveryCode: string; onDo
             </div>
             <ErrorLine error={error} />
           </div>
-          <span className="eyebrow">2 · New recovery code</span>
-          <RecoveryCodeCard code={props.recoveryCode} />
+          <RecoveryCodeCard code={props.recoveryCode} label="2 · New recovery code" />
         </div>
 
         <label className="check panel panel-pad" style={{ padding: '14px 16px' }}>

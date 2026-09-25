@@ -64,6 +64,12 @@ class _ShareItemScreenState extends State<ShareItemScreen> {
             const SizedBox(height: 20),
             SegmentedButton<_Mode>(
               showSelectedIcon: false,
+              style: SegmentedButton.styleFrom(
+                selectedBackgroundColor: Zv.irisRing,
+                selectedForegroundColor: Zv.text,
+                foregroundColor: Zv.text2,
+                side: const BorderSide(color: Zv.line),
+              ),
               segments: const [
                 ButtonSegment(
                   value: _Mode.link,

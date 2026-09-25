@@ -4,6 +4,7 @@ import '../agents/agents.css';
 import type { Session } from '../auth.js';
 import { createDevicesClient } from '../devices/client.js';
 import { DevicesPanel } from '../devices/DevicesPanel.js';
+import { createPairingClient } from '../devices/pairing.js';
 import type { LockStatus } from '../lock.js';
 import { LockSettingsPanel } from '../LockSettingsPanel.js';
 import { API_URL } from '../sharing/api.js';
@@ -36,6 +37,10 @@ export function SettingsView(props: {
   );
   const devices = useMemo(
     () => createDevicesClient({ baseUrl: API_URL, getToken: () => session.token }),
+    [session.token],
+  );
+  const pairing = useMemo(
+    () => createPairingClient({ baseUrl: API_URL, getToken: () => session.token }),
     [session.token],
   );
 
@@ -73,7 +78,12 @@ export function SettingsView(props: {
         )}
 
         {props.section === 'devices' && (
-          <DevicesPanel client={devices} onSignedOut={props.onSignOut} />
+          <DevicesPanel
+            client={devices}
+            pairing={pairing}
+            apiUrl={API_URL}
+            onSignedOut={props.onSignOut}
+          />
         )}
 
         {props.section === 'cli' && (

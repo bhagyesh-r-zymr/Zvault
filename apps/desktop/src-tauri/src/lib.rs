@@ -12,6 +12,7 @@ mod commands;
 mod emergency_kit;
 mod generator;
 mod otp;
+mod pairing;
 mod platform;
 mod projects;
 mod session;
@@ -56,6 +57,7 @@ pub fn run() {
         .manage(autolock::AppState::new())
         .manage(agents::AgentHub::default())
         .manage(updater::PendingUpdate::default())
+        .manage(pairing::PendingPairing::default())
         .setup(|app| {
             autolock::start(app.handle());
             agents::start(app.handle());
@@ -80,6 +82,11 @@ pub fn run() {
             vault::item_summary,
             vault::item_totp_code,
             otp::otp_parse,
+            pairing::pairing_begin,
+            pairing::pairing_qr,
+            pairing::pairing_code,
+            pairing::pairing_grant,
+            pairing::pairing_cancel,
             otp::otp_scan_image,
             otp::otp_scan_screen,
             projects::project_create,

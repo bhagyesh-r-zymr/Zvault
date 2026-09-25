@@ -243,6 +243,18 @@ pub(crate) fn with_keyset<T>(app: &AppHandle, f: impl FnOnce(&SymmetricKey) -> T
     auth.account.as_ref().map(|a| f(&a.keyset))
 }
 
+/// Runs `f` on the unlocked account's email and keyset, or returns None while locked.
+pub(crate) fn with_account<T>(
+    app: &AppHandle,
+    f: impl FnOnce(&str, &SymmetricKey) -> T,
+) -> Option<T> {
+    let state = app.state::<Mutex<AuthState>>();
+    let auth = state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    auth.account.as_ref().map(|a| f(&a.email, &a.keyset))
+}
+
 /// A second handle on the same key, for the parts of the app that each hold one.
 pub(crate) fn copy_key(key: &SymmetricKey) -> SymmetricKey {
     SymmetricKey::from_bytes(*key.as_bytes())

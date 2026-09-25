@@ -1,0 +1,64 @@
+/* Add a phone */
+.pairing {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.pairing-steps {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pairing-qr {
+  position: relative;
+  align-self: center;
+}
+.pairing-qr .qr {
+  width: 220px;
+  height: 220px;
+}
+.pairing-qr.expired .qr {
+  opacity: 0.12;
+}
+.pairing-qr.expired button {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: max-content;
+}
+.pairing-timer {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.pairing-text {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+  word-break: break-all;
+  user-select: all;
+  padding: 10px 12px;
+  border-radius: var(--radius-m);
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+}
+.pairing-code {
+  font-family: var(--mono);
+  font-size: 34px;
+  letter-spacing: 0.12em;
+  text-align: center;
+  color: var(--attn);
+  padding: 14px 0;
+  border-radius: var(--radius-l);
+  background: var(--attn-bg);
+  border: 1px solid var(--attn-line);
+  font-variant-numeric: tabular-nums;
+}
+.pairing-done {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--secure);
+  font-weight: 600;
+}

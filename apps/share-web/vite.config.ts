@@ -8,6 +8,8 @@ export default defineConfig(({ mode }) => {
   return {
     clearScreen: false,
     server: { port: 1430, strictPort: true },
+    // Served under /share/ on the demo host; the landing page owns the site root.
+    base: '/share/',
     build: { target: 'es2022', sourcemap: false },
     define: { __API_ORIGIN__: JSON.stringify(apiOrigin) },
     plugins: [

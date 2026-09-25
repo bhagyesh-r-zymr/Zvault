@@ -226,6 +226,19 @@ impl Keyring {
         })
     }
 
+    /// Re-seals a project's metadata (to rename it), keeping its key.
+    pub fn seal_project_meta(&self, project_id: &str, meta: &Value) -> Result<Blob> {
+        let project_id = canonical_id(project_id)?;
+        self.with_project_keys(|_, keys| {
+            seal_json(
+                keys.project(&project_id)?,
+                meta,
+                &aad::project_meta(&project_id),
+                &project_id,
+            )
+        })
+    }
+
     /// Returns an environment's metadata, and keeps its key if the account
     /// holds one: its own grant, or `member_wrap` for a shared environment.
     pub fn open_environment(
@@ -413,6 +426,17 @@ pub fn project_open(
     keyring.open_project(&project, member_wrap.as_ref())
 }
 
+/// A project's new metadata, sealed for `PATCH /v1/projects/:id`.
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub fn project_seal(
+    keyring: tauri::State<'_, Keyring>,
+    project_id: String,
+    meta: Value,
+) -> Result<Blob> {
+    keyring.seal_project_meta(&project_id, &meta)
+}
+
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 pub fn environment_open(
@@ -516,6 +540,22 @@ mod tests {
             encrypted_key: p.encrypted_key.clone(),
             encrypted_meta: p.encrypted_meta.clone(),
         }
+    }
+
+    #[test]
+    fn renaming_a_project_reseals_its_meta_under_the_same_key() {
+        let keyring = unlocked();
+        let p = project(&keyring);
+        let blob = keyring
+            .seal_project_meta(&p.id, &json!({"name": "Renamed", "slug": "renamed"}))
+            .unwrap();
+        let renamed = ProjectCipher {
+            encrypted_meta: blob,
+            ..cipher(&p)
+        };
+        let meta = keyring.open_project(&renamed, None).unwrap();
+        assert_eq!(meta["slug"], "renamed");
+        assert!(keyring.seal_project_meta(&p.id, &json!("x")).is_err());
     }
 
     #[test]

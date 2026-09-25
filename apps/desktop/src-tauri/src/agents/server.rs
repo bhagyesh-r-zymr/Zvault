@@ -12,7 +12,9 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use tauri::{AppHandle, Emitter, Manager};
 use uuid::Uuid;
+use zeroize::Zeroize;
 use zvault_agent::activity::{ActivityEntry, Outcome, Verification};
+use zvault_agent::manage::{self, Change, ItemContents, ItemInfo, ItemPatch, ProjectInfo};
 use zvault_agent::policy::{AgentRecord, ApprovalMode, Decision};
 use zvault_agent::protocol::{
     self, ErrorCode, MAX_REFS, PROTOCOL_VERSION, Purpose, PurposeKind, Request, RequestBody,
@@ -21,13 +23,13 @@ use zvault_agent::protocol::{
 use zvault_agent::{ScopePattern, SecretRef, paths};
 
 use super::{
-    ACTIVITY_FILE, APPROVAL_EVENT, AgentHub, Answer, LIST_EVENT, PAIRING_EVENT,
-    PROMPT_CLOSED_EVENT, REGISTRY_FILE, RESOLVE_EVENT, ResolvedSecret, UNLOCK_EVENT, WRITE_EVENT,
-    now_secs, read_json,
+    ACTIVITY_FILE, APPROVAL_EVENT, AgentHub, Answer, CHANGE_EVENT, ITEM_EVENT, LIST_EVENT,
+    PAIRING_EVENT, PROMPT_CLOSED_EVENT, REGISTRY_FILE, RESOLVE_EVENT, ResolvedSecret,
+    STRUCTURE_EVENT, UNLOCK_EVENT, WRITE_EVENT, now_secs, read_json,
 };
 use crate::autolock::AppState;
 use crate::projects::EntryKind;
-use crate::vault::{Blob, Keyring, VaultError};
+use crate::vault::{Blob, ItemCipher, ItemFields, Keyring, VaultError};
 
 const APPROVAL_TIMEOUT: Duration = Duration::from_secs(90);
 const PAIRING_TIMEOUT: Duration = Duration::from_secs(120);
@@ -36,6 +38,9 @@ const UNLOCK_TIMEOUT: Duration = Duration::from_secs(120);
 const UI_TIMEOUT: Duration = Duration::from_secs(15);
 /// For the UI to save and sync an item.
 const WRITE_TIMEOUT: Duration = Duration::from_secs(30);
+/// For the UI to make a change, which may touch many secrets (deleting an
+/// environment deletes the secrets only it held).
+const CHANGE_TIMEOUT: Duration = Duration::from_secs(90);
 /// A client has this long to send its request.
 const READ_TIMEOUT: Duration = Duration::from_secs(10);
 /// Prompts that may wait at once; more get `Busy`.
@@ -222,6 +227,8 @@ fn handle(app: &AppHandle, req: Request, peer: Peer) -> Response {
             export(app, hub, &who, &prefix, &purpose, peer)
         }
 
+        (RequestBody::Structure, _) => structure(app, hub, &who, peer),
+
         (RequestBody::Status, Who::Agent(a)) => Ok(Response::Status(a.status())),
         (RequestBody::Unpair, Who::Agent(a)) => {
             unpair(app, hub, &a.id);
@@ -241,12 +248,24 @@ fn handle(app: &AppHandle, req: Request, peer: Peer) -> Response {
         (RequestBody::Set { reference, value }, Who::User) => {
             set(app, hub, reference, &value, peer)
         }
+        (RequestBody::Change { change }, Who::User) => make_change(app, hub, &change, peer),
+        (RequestBody::Items, Who::User) => items(app, hub, peer),
+        (RequestBody::ItemGet { item }, Who::User) => item_get(app, hub, &item, peer),
+        (RequestBody::ItemPut { item, patch }, Who::User) => {
+            item_put(app, hub, item.as_deref(), patch, peer)
+        }
+        (RequestBody::ItemDelete { item }, Who::User) => item_delete(app, hub, &item, peer),
         (
             RequestBody::Pair { .. }
             | RequestBody::SignIn
             | RequestBody::SignOut
             | RequestBody::Copy { .. }
-            | RequestBody::Set { .. },
+            | RequestBody::Set { .. }
+            | RequestBody::Change { .. }
+            | RequestBody::Items
+            | RequestBody::ItemGet { .. }
+            | RequestBody::ItemPut { .. }
+            | RequestBody::ItemDelete { .. },
             Who::Agent(_),
         ) => Err(ErrorCode::UserOnly),
     };
@@ -361,11 +380,7 @@ pub(super) fn unpair(app: &AppHandle, hub: &AgentHub, agent_id: &str) -> Option<
 fn sign_in(app: &AppHandle, hub: &AgentHub, peer: Peer) -> Result<Response, ErrorCode> {
     // Without a session id there is no terminal to remember.
     let sid = peer.sid.ok_or(ErrorCode::BadRequest)?;
-    let purpose = Purpose {
-        kind: PurposeKind::SignIn,
-        command: vec![],
-        cwd: None,
-    };
+    let purpose = Purpose::app(PurposeKind::SignIn, None);
     logged(app, hub, &Who::User, &[], &purpose, peer, || {
         hub.guard().terminals.grant(sid, now_secs());
         Ok(())
@@ -400,11 +415,7 @@ fn list(
     prefix: Option<&ScopePattern>,
     peer: Peer,
 ) -> Result<Response, ErrorCode> {
-    let purpose = Purpose {
-        kind: PurposeKind::List,
-        command: vec![],
-        cwd: None,
-    };
+    let purpose = Purpose::app(PurposeKind::List, None);
     let refs = match who {
         // Names inside an agent's scopes are already approved for it, so
         // listing them needs no prompt.
@@ -462,11 +473,7 @@ fn copy(
     reference: SecretRef,
     peer: Peer,
 ) -> Result<Response, ErrorCode> {
-    let purpose = Purpose {
-        kind: PurposeKind::Copy,
-        command: vec![],
-        cwd: None,
-    };
+    let purpose = Purpose::app(PurposeKind::Copy, None);
     let refs = [reference];
     let secs = logged(app, hub, &Who::User, &refs, &purpose, peer, || {
         let found = resolve(app, hub, &refs)?;
@@ -491,11 +498,7 @@ fn set(
     value: &str,
     peer: Peer,
 ) -> Result<Response, ErrorCode> {
-    let purpose = Purpose {
-        kind: PurposeKind::Set,
-        command: vec![],
-        cwd: None,
-    };
+    let purpose = Purpose::app(PurposeKind::Set, None);
     let refs = [reference];
     logged(app, hub, &Who::User, &refs, &purpose, peer, || {
         let r = &refs[0];
@@ -551,6 +554,321 @@ fn set(
     Ok(Response::Ok)
 }
 
+/// Projects, environments and folders by name. Like `list`, an agent sees
+/// only what its scopes reach, without a prompt.
+fn structure(
+    app: &AppHandle,
+    hub: &AgentHub,
+    who: &Who,
+    peer: Peer,
+) -> Result<Response, ErrorCode> {
+    let fetch = || -> Result<Vec<ProjectInfo>, ErrorCode> {
+        ui_request(app, hub, STRUCTURE_EVENT, UI_TIMEOUT, |request_id| {
+            IdPrompt { request_id }
+        })
+    };
+    let projects = match who {
+        Who::Agent(a) => {
+            if a.paused {
+                return Err(ErrorCode::Paused);
+            }
+            if app.state::<AppState>().session().is_locked() {
+                return Err(ErrorCode::Locked);
+            }
+            manage::visible(fetch()?, &a.scopes)
+        }
+        Who::User => {
+            let purpose = Purpose::app(
+                PurposeKind::List,
+                Some("List your projects, environments and folders (names only)".into()),
+            );
+            logged(app, hub, who, &[], &purpose, peer, fetch)?
+        }
+    };
+    Ok(Response::Structure { projects })
+}
+
+/// The UI's answer to a change or item request.
+#[derive(Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UiReply {
+    /// Why the UI could not do it, for the person at the terminal.
+    #[serde(default)]
+    error: Option<String>,
+    /// What it did, for people.
+    #[serde(default)]
+    message: Option<String>,
+    #[serde(default)]
+    items: Option<Vec<ItemInfo>>,
+    #[serde(default)]
+    vault_id: Option<String>,
+    #[serde(default)]
+    item: Option<ItemCipher>,
+}
+
+impl UiReply {
+    /// `Err(Rejected)` with the UI's reason kept in `why`.
+    fn check(self, why: &mut Option<String>) -> Result<Self, ErrorCode> {
+        match self.error {
+            None => Ok(self),
+            Some(e) => {
+                *why = Some(e);
+                Err(ErrorCode::Rejected)
+            }
+        }
+    }
+}
+
+/// Turns a rejection into an error response that carries the UI's reason.
+fn with_reason(
+    result: Result<Response, ErrorCode>,
+    why: Option<String>,
+) -> Result<Response, ErrorCode> {
+    match result {
+        Err(ErrorCode::Rejected) => Ok(Response::Error {
+            code: ErrorCode::Rejected,
+            message: why.unwrap_or_else(|| ErrorCode::Rejected.message().into()),
+        }),
+        other => other,
+    }
+}
+
+fn change_purpose(kind: PurposeKind, detail: String, destructive: bool) -> Purpose {
+    Purpose {
+        destructive,
+        ..Purpose::app(kind, Some(detail))
+    }
+}
+
+/// Creates, renames or deletes a project, environment, folder or secret.
+/// The UI does the work with its projects store, which seals metadata in
+/// Rust; no secret value passes through it.
+fn make_change(
+    app: &AppHandle,
+    hub: &AgentHub,
+    change: &Change,
+    peer: Peer,
+) -> Result<Response, ErrorCode> {
+    change.validate().map_err(|_| ErrorCode::BadRequest)?;
+    let purpose = change_purpose(PurposeKind::Change, change.describe(), change.destructive());
+    let refs = match change {
+        Change::DeleteSecret { reference, .. } => vec![reference.clone()],
+        _ => vec![],
+    };
+    let mut why = None;
+    let result = logged(app, hub, &Who::User, &refs, &purpose, peer, || {
+        let reply: UiReply = ui_request(app, hub, CHANGE_EVENT, CHANGE_TIMEOUT, |request_id| {
+            ChangePrompt { request_id, change }
+        })?;
+        let reply = reply.check(&mut why)?;
+        Ok(Response::Changed {
+            message: reply.message.unwrap_or_else(|| change.describe()),
+        })
+    });
+    with_reason(result, why)
+}
+
+/// Asks the UI to do something with the personal vault.
+fn item_request(
+    app: &AppHandle,
+    hub: &AgentHub,
+    op: ItemOp<'_>,
+    why: &mut Option<String>,
+) -> Result<UiReply, ErrorCode> {
+    let reply: UiReply = ui_request(app, hub, ITEM_EVENT, WRITE_TIMEOUT, |request_id| {
+        ItemPrompt { request_id, op }
+    })?;
+    reply.check(why)
+}
+
+/// The vault holding `item` (an id or a title) and its ciphertext.
+fn find_item(
+    app: &AppHandle,
+    hub: &AgentHub,
+    item: &str,
+    why: &mut Option<String>,
+) -> Result<(String, ItemCipher), ErrorCode> {
+    let reply = item_request(app, hub, ItemOp::Find { item }, why)?;
+    match (reply.vault_id, reply.item) {
+        (Some(v), Some(c)) => Ok((v, c)),
+        _ => Err(ErrorCode::NotFound),
+    }
+}
+
+fn items(app: &AppHandle, hub: &AgentHub, peer: Peer) -> Result<Response, ErrorCode> {
+    let purpose = Purpose::app(
+        PurposeKind::List,
+        Some("List the items in your vault (no passwords)".into()),
+    );
+    let mut why = None;
+    let result = logged(app, hub, &Who::User, &[], &purpose, peer, || {
+        let reply = item_request(app, hub, ItemOp::List, &mut why)?;
+        Ok(Response::Items {
+            items: reply.items.unwrap_or_default(),
+        })
+    });
+    with_reason(result, why)
+}
+
+fn item_get(
+    app: &AppHandle,
+    hub: &AgentHub,
+    item: &str,
+    peer: Peer,
+) -> Result<Response, ErrorCode> {
+    let purpose = Purpose::app(
+        PurposeKind::ReadItem,
+        Some(format!("Show the item “{item}”, password included")),
+    );
+    let mut why = None;
+    let result = logged(app, hub, &Who::User, &[], &purpose, peer, || {
+        let (vault_id, cipher) = find_item(app, hub, item, &mut why)?;
+        let fields = app
+            .state::<Keyring>()
+            .open_item(&vault_id, &cipher)
+            .map_err(vault_error)?;
+        let otp = if fields.totp.is_empty() {
+            None
+        } else {
+            zvault_otp::Totp::parse(&fields.totp)
+                .ok()
+                .map(|t| crate::otp::OtpCode::now(&t).code)
+        };
+        Ok(Response::Item(ItemContents {
+            id: cipher.id.clone(),
+            title: fields.title.clone(),
+            username: fields.username.clone(),
+            password: fields.password.clone().into(),
+            urls: fields.urls.clone(),
+            notes: fields.notes.clone().into(),
+            totp: fields.totp.clone().into(),
+            otp,
+        }))
+    });
+    with_reason(result, why)
+}
+
+/// Creates an item (`item` is `None`) or changes one. Rust opens the current
+/// item, applies the patch and seals it; the UI only uploads ciphertext.
+fn item_put(
+    app: &AppHandle,
+    hub: &AgentHub,
+    item: Option<&str>,
+    patch: ItemPatch,
+    peer: Peer,
+) -> Result<Response, ErrorCode> {
+    patch
+        .validate(item.is_none())
+        .map_err(|_| ErrorCode::BadRequest)?;
+    let fields = patch.field_names().join(", ");
+    let detail = match (item, &patch.title) {
+        (None, Some(title)) => format!("Create the item “{}” ({fields})", title.trim()),
+        (None, None) => return Err(ErrorCode::BadRequest),
+        (Some(item), _) => format!("Change {fields} of the item “{item}”"),
+    };
+    let purpose = change_purpose(PurposeKind::ChangeItem, detail, false);
+    let mut why = None;
+    let result = logged(app, hub, &Who::User, &[], &purpose, peer, || {
+        let keyring = app.state::<Keyring>();
+        let (vault_id, existing) = match item {
+            Some(item) => {
+                let (v, c) = find_item(app, hub, item, &mut why)?;
+                (v, Some(c))
+            }
+            None => {
+                let reply = item_request(app, hub, ItemOp::Vault, &mut why)?;
+                (reply.vault_id.ok_or(ErrorCode::Internal)?, None)
+            }
+        };
+        let mut fields = match &existing {
+            Some(c) => keyring.open_item(&vault_id, c).map_err(vault_error)?,
+            None => ItemFields::default(),
+        };
+        apply_patch(&mut fields, patch);
+        let title = fields.title.trim().to_owned();
+        let sealed = keyring
+            .seal_item(&vault_id, existing.as_ref(), fields)
+            .map_err(|e| match e {
+                VaultError::OneTimePassword(_) => ErrorCode::BadRequest,
+                other => vault_error(other),
+            })?;
+        let created = existing.is_none();
+        item_request(
+            app,
+            hub,
+            ItemOp::Upload {
+                vault_id: &vault_id,
+                item: &sealed,
+                created,
+            },
+            &mut why,
+        )?;
+        Ok(Response::Changed {
+            message: if created {
+                format!("Created the item “{title}”.")
+            } else {
+                format!("Saved the item “{title}”.")
+            },
+        })
+    });
+    with_reason(result, why)
+}
+
+fn apply_patch(fields: &mut ItemFields, patch: ItemPatch) {
+    let ItemPatch {
+        title,
+        username,
+        password,
+        urls,
+        notes,
+        totp,
+    } = patch;
+    if let Some(v) = title {
+        fields.title = v;
+    }
+    if let Some(v) = username {
+        fields.username = v;
+    }
+    if let Some(v) = password {
+        fields.password.zeroize();
+        fields.password.push_str(&v);
+    }
+    if let Some(v) = urls {
+        fields.urls = v;
+    }
+    if let Some(v) = notes {
+        fields.notes.zeroize();
+        fields.notes.push_str(&v);
+    }
+    if let Some(v) = totp {
+        fields.totp.zeroize();
+        fields.totp.push_str(&v);
+    }
+}
+
+fn item_delete(
+    app: &AppHandle,
+    hub: &AgentHub,
+    item: &str,
+    peer: Peer,
+) -> Result<Response, ErrorCode> {
+    let purpose = change_purpose(
+        PurposeKind::ChangeItem,
+        format!("Delete the item “{item}” from your vault"),
+        true,
+    );
+    let mut why = None;
+    let result = logged(app, hub, &Who::User, &[], &purpose, peer, || {
+        let reply = item_request(app, hub, ItemOp::Delete { item }, &mut why)?;
+        Ok(Response::Changed {
+            message: reply
+                .message
+                .unwrap_or_else(|| format!("Deleted the item “{item}”.")),
+        })
+    });
+    with_reason(result, why)
+}
+
 // ---------------------------------------------------------------------------
 // Deciding
 
@@ -582,7 +900,13 @@ fn authorize(
         Who::User => {
             wait_unlocked(app)?;
             // Changes and new sign-ins always need the user.
-            let may_skip = !matches!(purpose.kind, PurposeKind::Set | PurposeKind::SignIn);
+            let may_skip = !matches!(
+                purpose.kind,
+                PurposeKind::Set
+                    | PurposeKind::SignIn
+                    | PurposeKind::Change
+                    | PurposeKind::ChangeItem
+            );
             if may_skip
                 && peer
                     .sid
@@ -877,6 +1201,47 @@ struct RefsPrompt<'a> {
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct IdPrompt {
+    request_id: String,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChangePrompt<'a> {
+    request_id: String,
+    change: &'a Change,
+}
+
+/// What the UI should do with the personal vault.
+#[derive(Clone, Copy, Serialize)]
+#[serde(tag = "op", rename_all = "camelCase", rename_all_fields = "camelCase")]
+enum ItemOp<'a> {
+    /// Every item's summary: `{ items }`.
+    List,
+    /// The vault new items go in: `{ vaultId }`.
+    Vault,
+    /// An item by id or title: `{ vaultId, item }`.
+    Find { item: &'a str },
+    /// Uploads what Rust sealed.
+    Upload {
+        vault_id: &'a str,
+        item: &'a ItemCipher,
+        created: bool,
+    },
+    /// Deletes an item by id or title: `{ message }`.
+    Delete { item: &'a str },
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ItemPrompt<'a> {
+    request_id: String,
+    #[serde(flatten)]
+    op: ItemOp<'a>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct ListPrompt<'a> {
     request_id: String,
     prefix: Option<&'a str>,
@@ -900,6 +1265,63 @@ struct WritePrompt {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn item_requests_reach_the_ui_in_the_shape_it_reads() {
+        let json = |op| {
+            serde_json::to_value(ItemPrompt {
+                request_id: "r".into(),
+                op,
+            })
+            .unwrap()
+        };
+        assert_eq!(
+            json(ItemOp::List),
+            serde_json::json!({ "requestId": "r", "op": "list" })
+        );
+        assert_eq!(
+            json(ItemOp::Find { item: "GitHub" }),
+            serde_json::json!({ "requestId": "r", "op": "find", "item": "GitHub" })
+        );
+        let blob = Blob {
+            v: 1,
+            alg: "xchacha20poly1305".into(),
+            kid: "k".into(),
+            nonce: "n".into(),
+            ct: "c".into(),
+        };
+        let cipher = ItemCipher {
+            id: "i".into(),
+            encrypted_key: blob.clone(),
+            encrypted_data: blob,
+        };
+        let upload = json(ItemOp::Upload {
+            vault_id: "v",
+            item: &cipher,
+            created: true,
+        });
+        assert_eq!(upload["op"], "upload");
+        assert_eq!(upload["vaultId"], "v");
+        assert_eq!(upload["item"]["encryptedKey"]["kid"], "k");
+
+        // What the UI sends back.
+        let reply: UiReply = serde_json::from_value(serde_json::json!({
+            "vaultId": "v",
+            "item": { "id": "i", "encryptedKey": upload["item"]["encryptedKey"], "encryptedData": upload["item"]["encryptedData"] },
+        }))
+        .unwrap();
+        assert_eq!(reply.vault_id.as_deref(), Some("v"));
+        let mut why = None;
+        let refused: UiReply =
+            serde_json::from_value(serde_json::json!({ "error": "No item is called “x”." }))
+                .unwrap();
+        assert_eq!(refused.check(&mut why).err(), Some(ErrorCode::Rejected));
+        assert_eq!(why.as_deref(), Some("No item is called “x”."));
+        let changed = with_reason(Err(ErrorCode::Rejected), why).unwrap();
+        assert!(
+            matches!(changed, Response::Error { code: ErrorCode::Rejected, message } if message.contains("“x”"))
+        );
+    }
 
     #[test]
     fn the_socket_is_private_and_answers_the_same_user() {

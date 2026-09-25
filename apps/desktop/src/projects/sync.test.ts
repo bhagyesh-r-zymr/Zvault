@@ -11,7 +11,13 @@ import type {
   SyncProjectResponse,
 } from '@zvault/shared';
 import { describe, expect, it, vi } from 'vitest';
-import type { FindSecret, ListSecrets, SaveSecret } from '../agents/api.js';
+import type {
+  ApplyChange,
+  FindSecret,
+  ListSecrets,
+  ProjectInfo,
+  SaveSecret,
+} from '../agents/api.js';
 import { serveZv } from '../agents/bridge.js';
 import { EntryConflictError, type ProjectsApi } from './api.js';
 import type { ProjectsCore } from './core.js';
@@ -27,7 +33,16 @@ const STARTER = [
   { name: 'Production', kind: 'production' as const },
 ];
 
-const served = vi.hoisted((): { find?: unknown; list?: unknown; save?: unknown } => ({}));
+const served = vi.hoisted(
+  (): {
+    find?: unknown;
+    list?: unknown;
+    save?: unknown;
+    structure?: unknown;
+    change?: unknown;
+    items?: unknown;
+  } => ({}),
+);
 vi.mock('../agents/api.js', () => {
   const stop = () => Promise.resolve(() => undefined);
   return {
@@ -35,6 +50,9 @@ vi.mock('../agents/api.js', () => {
       serveResolves: (f: unknown) => ((served.find = f), stop()),
       serveLists: (l: unknown) => ((served.list = l), stop()),
       serveWrites: (w: unknown) => ((served.save = w), stop()),
+      serveStructure: (d: unknown) => ((served.structure = d), stop()),
+      serveChanges: (c: unknown) => ((served.change = c), stop()),
+      serveItems: (i: unknown) => ((served.items = i), stop()),
     },
   };
 });
@@ -72,6 +90,7 @@ const fakeCore: ProjectsCore = {
     });
   },
   openProject: (p) => Promise.resolve(decode(p.encryptedMeta)),
+  sealProject: (id, meta) => Promise.resolve(blob(id, meta)),
   openEnvironment: (_pid, env) =>
     Promise.resolve({ meta: decode(env.encryptedMeta), unlocked: !!env.encryptedKey }),
   sealEnvironment: (_pid, id, meta) => {
@@ -129,6 +148,23 @@ class FakeServer {
       void this.save(req.id, e.id, 0, { type: 'environment', encryptedMeta: e.encryptedMeta });
     }
     return Promise.resolve(record);
+  }
+
+  updateProject(
+    projectId: string,
+    body: { baseRevision: number; encryptedMeta: EncryptedBlob },
+  ): Promise<ProjectRecord> {
+    const current = this.projects.get(projectId)!;
+    if (current.revision !== body.baseRevision) return Promise.reject(new Error('409'));
+    const next = { ...current, revision: current.revision + 1, encryptedMeta: body.encryptedMeta };
+    this.projects.set(projectId, next);
+    return Promise.resolve(next);
+  }
+
+  deleteProject(projectId: string): Promise<void> {
+    this.projects.delete(projectId);
+    for (const [id, e] of this.entries) if (e.projectId === projectId) this.entries.delete(id);
+    return Promise.resolve();
   }
 
   syncProject(projectId: string, since: number): Promise<SyncProjectResponse> {
@@ -669,5 +705,115 @@ describe('zv bridge', () => {
     expect(await other.openValue(projectId, secretId, prod!.id)).toBe('sk_live');
     expect(await other.openValue(projectId, sealed.id, dev!.id)).toBe('postgres://');
     expect(other.get().secrets.find((s) => s.id === secretId)!.name).toBe('Stripe');
+  });
+});
+
+describe('zv changes', () => {
+  it('creates, renames and deletes projects, environments, folders and values', async () => {
+    const server = new FakeServer();
+    const mine = device(server);
+    await mine.load();
+    serveZv(mine);
+    const change = served.change as ApplyChange;
+    const structure = served.structure as () => Promise<ProjectInfo[]>;
+
+    expect(
+      await change({
+        op: 'createProject',
+        name: 'Payments API',
+        slug: null,
+        environments: ['Development', 'Production'],
+      }),
+    ).toBe('Created project zv://payments-api with environments development, production.');
+    await expect(
+      change({ op: 'createProject', name: 'Other', slug: 'payments-api', environments: [] }),
+    ).rejects.toThrow(/already uses/);
+
+    await change({
+      op: 'createEnvironment',
+      project: 'payments-api',
+      name: 'QA',
+      slug: null,
+      kind: null,
+      inheritsFrom: 'development',
+    });
+    await change({ op: 'createFolder', project: 'payments-api', name: 'Stripe', slug: null });
+    let [project] = await structure();
+    expect(project).toMatchObject({ slug: 'payments-api', name: 'Payments API', owner: true });
+    expect(project!.environments.map((e) => [e.slug, e.kind, e.inheritsFrom])).toEqual([
+      ['development', 'development', null],
+      ['production', 'production', null],
+      ['qa', 'staging', 'development'],
+    ]);
+    expect(project!.folders).toEqual([{ slug: 'stripe', name: 'Stripe' }]);
+
+    await change({
+      op: 'updateEnvironment',
+      project: 'payments-api',
+      environment: 'qa',
+      name: 'Quality',
+      slug: 'quality',
+      kind: null,
+      inheritsFrom: null,
+      noFallback: true,
+    });
+    await change({ op: 'updateProject', project: 'payments-api', name: 'Payments', slug: 'pay' });
+    await change({
+      op: 'updateFolder',
+      project: 'pay',
+      folder: 'stripe',
+      name: null,
+      slug: 'billing',
+    });
+    [project] = await structure();
+    expect(project).toMatchObject({ slug: 'pay', name: 'Payments' });
+    expect(project!.environments[2]).toMatchObject({ slug: 'quality', inheritsFrom: null });
+    expect(project!.folders[0]!.slug).toBe('billing');
+
+    // A value in two environments: removing one keeps the secret.
+    const view = mine.get().projects[0]!;
+    const [dev, prod] = view.environments;
+    const secretId = await mine.createSecret(view.id, {
+      name: 'Stripe',
+      key: 'STRIPE_KEY',
+      folderId: view.folders[0]!.id,
+      tags: [],
+      values: { [dev!.id]: 'sk_test', [prod!.id]: 'sk_live' },
+    });
+    await expect(change({ op: 'deleteFolder', project: 'pay', folder: 'billing' })).rejects.toThrow(
+      /still holds 1 secret/,
+    );
+    await change({
+      op: 'deleteSecret',
+      reference: 'zv://pay/production/billing/STRIPE_KEY',
+      allEnvironments: false,
+    });
+    expect(Object.keys(mine.get().secrets[0]!.values)).toEqual([dev!.id]);
+    await expect(
+      change({
+        op: 'deleteSecret',
+        reference: 'zv://pay/quality/billing/STRIPE_KEY',
+        allEnvironments: false,
+      }),
+    ).rejects.toThrow(/no value/);
+    // The last value takes the secret with it.
+    await change({
+      op: 'deleteSecret',
+      reference: 'zv://pay/development/billing/STRIPE_KEY',
+      allEnvironments: false,
+    });
+    expect(mine.get().secrets.find((s) => s.id === secretId)).toBeUndefined();
+
+    await change({ op: 'deleteFolder', project: 'pay', folder: 'billing' });
+    await change({ op: 'deleteEnvironment', project: 'pay', environment: 'quality' });
+    [project] = await structure();
+    expect(project!.folders).toEqual([]);
+    expect(project!.environments.map((e) => e.slug)).toEqual(['development', 'production']);
+
+    await change({ op: 'deleteProject', project: 'pay' });
+    expect(await structure()).toEqual([]);
+    await expect(change({ op: 'deleteProject', project: 'pay' })).rejects.toThrow(
+      /no project zv:\/\/pay/,
+    );
   });
 });

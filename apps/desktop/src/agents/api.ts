@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { EncryptedBlob } from '@zvault/shared';
+import type { EncryptedBlob, EnvironmentKind } from '@zvault/shared';
+import type { ItemCipher } from '../vault/core.js';
 
 /**
  * Bridge to the `zv` CLI. Rust owns the socket, the policy and every key; the
@@ -44,13 +45,27 @@ export interface Agent {
   scopes: string[];
 }
 
-export type PurposeKind = 'run' | 'read' | 'export' | 'list' | 'copy' | 'set' | 'signIn';
+export type PurposeKind =
+  | 'run'
+  | 'read'
+  | 'export'
+  | 'list'
+  | 'copy'
+  | 'set'
+  | 'signIn'
+  | 'change'
+  | 'readItem'
+  | 'changeItem';
 
 export interface Purpose {
   kind: PurposeKind;
   /** Reported by the CLI; show it as the agent's claim. */
   command: string[];
   cwd: string | null;
+  /** What a change does, written by Zvault from the change itself. */
+  detail?: string | null;
+  /** The change deletes something. */
+  destructive?: boolean;
 }
 
 export type ErrorCode =
@@ -66,6 +81,7 @@ export type ErrorCode =
   | 'busy'
   | 'agentsOnly'
   | 'userOnly'
+  | 'rejected'
   | 'internal';
 
 export interface ActivityEntry {
@@ -150,6 +166,91 @@ export type SaveSecret = (write: {
   created: boolean;
 }) => Promise<void>;
 
+/** A project as `zv projects` lists it: names only. Mirrors `manage::ProjectInfo`. */
+export interface ProjectInfo {
+  slug: string;
+  name: string;
+  owner: boolean;
+  environments: {
+    slug: string;
+    name: string;
+    kind: EnvironmentKind;
+    /** Slug of the environment it falls back to. */
+    inheritsFrom: string | null;
+    locked: boolean;
+  }[];
+  folders: { slug: string; name: string }[];
+}
+
+/**
+ * One change `zv` asks for, already approved by the person in Zvault.
+ * Projects, environments and folders are named by slug. Mirrors
+ * `manage::Change` in `crates/zvault-agent`.
+ */
+export type Change =
+  | { op: 'createProject'; name: string; slug: string | null; environments: string[] }
+  | { op: 'updateProject'; project: string; name: string | null; slug: string | null }
+  | { op: 'deleteProject'; project: string }
+  | {
+      op: 'createEnvironment';
+      project: string;
+      name: string;
+      slug: string | null;
+      kind: EnvironmentKind | null;
+      inheritsFrom: string | null;
+    }
+  | {
+      op: 'updateEnvironment';
+      project: string;
+      environment: string;
+      name: string | null;
+      slug: string | null;
+      kind: EnvironmentKind | null;
+      inheritsFrom: string | null;
+      noFallback: boolean;
+    }
+  | { op: 'deleteEnvironment'; project: string; environment: string }
+  | { op: 'createFolder'; project: string; name: string; slug: string | null }
+  | {
+      op: 'updateFolder';
+      project: string;
+      folder: string;
+      name: string | null;
+      slug: string | null;
+    }
+  | { op: 'deleteFolder'; project: string; folder: string }
+  | { op: 'deleteSecret'; reference: string; allEnvironments: boolean };
+
+/** Makes a change and returns what it did, for the terminal. Throw to refuse it. */
+export type ApplyChange = (change: Change) => Promise<string>;
+
+/** A vault item as `zv item list` shows it: never its password. */
+export interface ItemInfo {
+  id: string;
+  title: string;
+  username: string;
+  url: string | null;
+  hasTotp: boolean;
+}
+
+/** What Rust asks of the personal vault for `zv item`. Mirrors `ItemOp` in server.rs. */
+export type ItemOp =
+  | { op: 'list' }
+  | { op: 'vault' }
+  | { op: 'find'; item: string }
+  | { op: 'upload'; vaultId: string; item: ItemCipher; created: boolean }
+  | { op: 'delete'; item: string };
+
+/** The answer to an {@link ItemOp}; only ciphertext and summaries, never a password. */
+export interface ItemReply {
+  items?: ItemInfo[];
+  vaultId?: string;
+  item?: ItemCipher;
+  message?: string;
+}
+
+export type HandleItem = (op: ItemOp) => Promise<ItemReply>;
+
 export const agents = {
   accessStatus: () =>
     invoke<{ listening: boolean; socketPath: string | null }>('agent_access_status'),
@@ -204,6 +305,31 @@ export const agents = {
       void answerWrite(requestId, write, save);
     }),
 
+  /** Answers `zv projects` with every project's environments and folders, by name. */
+  serveStructure: (describe: () => Promise<ProjectInfo[]>): Promise<UnlistenFn> =>
+    listen<{ requestId: string }>('agent://structure-request', (e) => {
+      void answer(e.payload.requestId, describe, () => []);
+    }),
+  /** Makes the project, environment, folder and secret changes `zv` asks for. */
+  serveChanges: (apply: ApplyChange): Promise<UnlistenFn> =>
+    listen<{ requestId: string; change: Change }>('agent://change-request', (e) => {
+      void answer(
+        e.payload.requestId,
+        async () => ({ message: await apply(e.payload.change) }),
+        (error) => ({ error }),
+      );
+    }),
+  /** Finds, lists, uploads and deletes personal vault items for `zv item`. */
+  serveItems: (handle: HandleItem): Promise<UnlistenFn> =>
+    listen<{ requestId: string } & ItemOp>('agent://item-request', (e) => {
+      const { requestId, ...op } = e.payload;
+      void answer(
+        requestId,
+        () => handle(op),
+        (error) => ({ error }),
+      );
+    }),
+
   /**
    * Answers Rust's "where does this path live?" requests. Register once,
    * while projects are loaded.
@@ -213,6 +339,21 @@ export const agents = {
       void answerResolve(e.payload.requestId, e.payload.refs, find);
     }),
 };
+
+/** Sends `work`'s result to Rust, or what `failed` makes of its error. */
+async function answer(
+  requestId: string,
+  work: () => Promise<unknown>,
+  failed: (message: string) => unknown,
+) {
+  let reply: unknown;
+  try {
+    reply = await work();
+  } catch (e) {
+    reply = failed(e instanceof Error ? e.message : String(e));
+  }
+  await invoke('agent_ui_respond', { requestId, reply });
+}
 
 async function answerResolve(requestId: string, refs: string[], find: FindSecret) {
   const items: ResolvedSecret[] = [];

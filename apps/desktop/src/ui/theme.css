@@ -393,6 +393,14 @@ input[type='checkbox'] {
   color: var(--secure);
 }
 
+.notice.danger {
+  color: var(--danger);
+}
+
+.notice.danger svg {
+  color: var(--danger-dot);
+}
+
 /* ---------- Secrets ---------- */
 
 .secret {

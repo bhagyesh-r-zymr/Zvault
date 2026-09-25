@@ -10,6 +10,7 @@ use std::io::{BufRead, Write};
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
+use crate::manage::{Change, ItemContents, ItemInfo, ItemPatch, ProjectInfo};
 use crate::policy::ApprovalMode;
 use crate::reference::{ScopePattern, SecretRef};
 
@@ -49,6 +50,26 @@ pub struct Purpose {
     pub command: Vec<String>,
     #[serde(default)]
     pub cwd: Option<String>,
+    /// What a change does, written by the app from the change itself (never
+    /// taken from the CLI).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    /// The change deletes something.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub destructive: bool,
+}
+
+impl Purpose {
+    /// A purpose the app states itself, for requests that carry none.
+    pub fn app(kind: PurposeKind, detail: Option<String>) -> Self {
+        Self {
+            kind,
+            command: vec![],
+            cwd: None,
+            detail,
+            destructive: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -66,6 +87,12 @@ pub enum PurposeKind {
     Set,
     /// `zv signin`: lets this terminal skip prompts for a while.
     SignIn,
+    /// Creates, renames or deletes a project, environment, folder or secret.
+    Change,
+    /// `zv item get`: an item from the personal vault, password included.
+    ReadItem,
+    /// `zv item create`, `edit` or `delete`.
+    ChangeItem,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -116,6 +143,28 @@ pub enum RequestBody {
         reference: SecretRef,
         value: Zeroizing<String>,
     },
+    /// Projects with their environments and folders, by name. An agent sees
+    /// only what its scopes reach.
+    Structure,
+    /// Changes projects, environments, folders or secrets. User only, and
+    /// always approved in the app.
+    #[serde(rename_all = "camelCase")]
+    Change { change: Change },
+    /// Lists the items in the personal vault, without passwords. User only.
+    Items,
+    /// One item's contents, found by id or by title. User only.
+    #[serde(rename_all = "camelCase")]
+    ItemGet { item: String },
+    /// Creates an item (`item` absent) or changes one. User only, and always
+    /// approved in the app.
+    #[serde(rename_all = "camelCase")]
+    ItemPut {
+        item: Option<String>,
+        patch: ItemPatch,
+    },
+    /// Deletes an item. User only, and always approved in the app.
+    #[serde(rename_all = "camelCase")]
+    ItemDelete { item: String },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -163,6 +212,17 @@ pub enum Response {
     Copied {
         clear_after_secs: u32,
     },
+    Structure {
+        projects: Vec<ProjectInfo>,
+    },
+    /// A change was made. `message` says what, for people.
+    Changed {
+        message: String,
+    },
+    Items {
+        items: Vec<ItemInfo>,
+    },
+    Item(ItemContents),
     Ok,
     Error {
         code: ErrorCode,
@@ -196,6 +256,8 @@ pub enum ErrorCode {
     Busy,
     AgentsOnly,
     UserOnly,
+    /// The app turned the change down; the message says why.
+    Rejected,
     Internal,
 }
 
@@ -214,6 +276,7 @@ impl ErrorCode {
             Self::Busy => "Zvault is already showing a request; try again",
             Self::AgentsOnly => "that command is for paired agents; pass --agent",
             Self::UserOnly => "agents cannot do that; run it yourself without --agent",
+            Self::Rejected => "Zvault could not make that change",
             Self::Internal => "Zvault could not complete the request",
         }
     }
@@ -288,6 +351,8 @@ mod tests {
                     kind: PurposeKind::Run,
                     command: vec!["npm".into(), "test".into()],
                     cwd: None,
+                    detail: None,
+                    destructive: false,
                 },
             },
         };
@@ -324,6 +389,34 @@ mod tests {
         let mut line = bad.to_vec();
         line.push(b'\n');
         assert!(read_message::<Request>(&mut Cursor::new(line)).is_err());
+    }
+
+    #[test]
+    fn change_requests_round_trip() {
+        let req = Request {
+            v: PROTOCOL_VERSION,
+            auth: None,
+            body: RequestBody::Change {
+                change: Change::CreateEnvironment {
+                    project: "web".into(),
+                    name: "QA".into(),
+                    slug: None,
+                    kind: None,
+                    inherits_from: Some("development".into()),
+                },
+            },
+        };
+        let mut buf = Vec::new();
+        write_message(&mut buf, &req).unwrap();
+        let text = String::from_utf8(buf.clone()).unwrap();
+        assert!(text.contains(r#""type":"change""#), "{text}");
+        let back: Request = read_message(&mut Cursor::new(buf)).unwrap();
+        assert!(matches!(
+            back.body,
+            RequestBody::Change {
+                change: Change::CreateEnvironment { .. }
+            }
+        ));
     }
 
     #[test]

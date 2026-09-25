@@ -114,11 +114,21 @@ export class ProjectsSync {
    * Creates a project. It starts with no environments unless some are given;
    * people add their own afterwards. Returns its id.
    */
-  async createProject(name: string, environments: EnvironmentDraft[] = []): Promise<string> {
+  async createProject(
+    name: string,
+    environments: EnvironmentDraft[] = [],
+    slug?: string,
+  ): Promise<string> {
     const taken = [...this.projects.values()].map((p) => p.meta.slug);
+    if (slug !== undefined) {
+      if (!Slug.safeParse(slug).success) {
+        throw new Error('Use lowercase letters, digits and single dashes in the slug.');
+      }
+      if (taken.includes(slug)) throw new Error(`Another project already uses “${slug}”.`);
+    }
     const meta = ProjectMeta.parse({
       name: name.trim(),
-      slug: uniqueSlug(slugify(name) || 'project', taken),
+      slug: slug ?? uniqueSlug(slugify(name) || 'project', taken),
     });
     const envs: EnvironmentMeta[] = [];
     for (const draft of environments) envs.push(environmentMeta(draft, envs, envs.length));
@@ -127,6 +137,39 @@ export class ProjectsSync {
     this.projects.set(record.id, blank(record, meta));
     await this.pull(record.id);
     return record.id;
+  }
+
+  /** Renames a project or changes its slug (owners and org admins). */
+  async updateProject(projectId: string, changes: { name?: string; slug?: string }): Promise<void> {
+    const project = this.project(projectId);
+    const slug = changes.slug?.trim() ?? project.meta.slug;
+    if (!Slug.safeParse(slug).success) {
+      throw new Error('Use lowercase letters, digits and single dashes in the slug.');
+    }
+    const taken = [...this.projects.values()].some(
+      (p) => p.id !== projectId && p.meta.slug === slug,
+    );
+    if (taken) throw new Error(`Another project already uses “${slug}”.`);
+    const meta = ProjectMeta.parse({
+      ...project.meta,
+      name: changes.name?.trim() ?? project.meta.name,
+      slug,
+    });
+    const encryptedMeta = await this.core.sealProject(projectId, meta);
+    const record = await this.api.updateProject(projectId, {
+      baseRevision: project.revision,
+      encryptedMeta,
+    });
+    Object.assign(project, { meta, revision: record.revision });
+    this.emit();
+  }
+
+  /** Deletes a project with every environment, folder and secret in it (owner only). */
+  async deleteProject(projectId: string): Promise<void> {
+    this.project(projectId);
+    await this.api.deleteProject(projectId);
+    this.projects.delete(projectId);
+    this.emit();
   }
 
   /** Adds an environment with a fresh key (owners and org admins). Returns its id. */
@@ -250,14 +293,18 @@ export class ProjectsSync {
   }
 
   /** Adds a folder (owners only). Returns its id. */
-  async createFolder(projectId: string, name: string): Promise<string> {
+  async createFolder(projectId: string, name: string, slug?: string): Promise<string> {
     const project = this.project(projectId);
+    const taken = [...project.folders.values()].map((f) => f.meta.slug);
+    if (slug !== undefined) {
+      if (!Slug.safeParse(slug).success) {
+        throw new Error('Use lowercase letters, digits and single dashes in the slug.');
+      }
+      if (taken.includes(slug)) throw new Error(`Another folder already uses “${slug}”.`);
+    }
     const meta = FolderMeta.parse({
       name: name.trim(),
-      slug: uniqueSlug(
-        slugify(name) || 'folder',
-        [...project.folders.values()].map((f) => f.meta.slug),
-      ),
+      slug: slug ?? uniqueSlug(slugify(name) || 'folder', taken),
     });
     const sealed = await this.core.sealEntry(projectId, 'folder', null, meta);
     const entry = await this.write(project, () =>
@@ -267,6 +314,78 @@ export class ProjectsSync {
       }),
     );
     return entry.id;
+  }
+
+  /** Renames a folder or changes its slug. Secrets in it keep their place. */
+  async updateFolder(
+    projectId: string,
+    folderId: string,
+    changes: { name?: string; slug?: string },
+  ): Promise<void> {
+    const project = this.project(projectId);
+    const folder = project.folders.get(folderId);
+    if (!folder) throw new Error('This folder is no longer available.');
+    const slug = changes.slug?.trim() ?? folder.meta.slug;
+    if (!Slug.safeParse(slug).success) {
+      throw new Error('Use lowercase letters, digits and single dashes in the slug.');
+    }
+    if ([...project.folders].some(([id, f]) => id !== folderId && f.meta.slug === slug)) {
+      throw new Error(`Another folder already uses “${slug}”.`);
+    }
+    const meta = FolderMeta.parse({ name: changes.name?.trim() ?? folder.meta.name, slug });
+    const sealed = await this.core.sealEntry(projectId, 'folder', folderId, meta);
+    await this.write(project, () =>
+      this.api.putFolder(projectId, folderId, {
+        baseRevision: folder.revision,
+        encryptedMeta: sealed.encryptedMeta,
+      }),
+    );
+  }
+
+  /** Deletes a folder. Refuses while secrets are still in it. */
+  async deleteFolder(projectId: string, folderId: string): Promise<void> {
+    const project = this.project(projectId);
+    const folder = project.folders.get(folderId);
+    if (!folder) return;
+    const inside = [...project.secrets.values()].filter((s) => s.meta.folderId === folderId);
+    if (inside.length > 0) {
+      throw new Error(
+        `The folder still holds ${inside.length} secret${inside.length === 1 ? '' : 's'}; delete or move them first.`,
+      );
+    }
+    await this.write(project, () =>
+      this.api.deleteEntry(projectId, 'folder', folderId, folder.revision),
+    );
+  }
+
+  /**
+   * Removes a secret's own value in one environment. A secret left with no
+   * value in any environment is deleted.
+   */
+  async removeValue(projectId: string, secretId: string, environmentId: string): Promise<void> {
+    await this.pull(projectId);
+    const project = this.project(projectId);
+    const secret = project.secrets.get(secretId);
+    if (!secret) throw new Error('This secret is no longer available.');
+    if (!secret.values[environmentId]) {
+      throw new Error('This secret has no value of its own in that environment.');
+    }
+    const others = Object.entries(secret.values).filter(([id, v]) => id !== environmentId && v);
+    // Values in environments this account can't read aren't in `values`, so
+    // only delete outright when every environment is readable.
+    const allReadable = [...project.environments.values()].every((e) => e.unlocked);
+    if (others.length === 0 && allReadable) {
+      await this.deleteSecret(projectId, secretId);
+      return;
+    }
+    const sealed = await this.core.sealEntry(projectId, 'secret', secretId, secret.meta);
+    await this.write(project, () =>
+      this.api.putSecret(projectId, secretId, {
+        baseRevision: secret.revision,
+        encryptedMeta: sealed.encryptedMeta,
+        values: { [environmentId]: null },
+      }),
+    );
   }
 
   /** Seals a new secret's metadata and each value, then uploads it. Returns its id. */

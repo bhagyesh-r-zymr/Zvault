@@ -16,7 +16,10 @@
 //! 5. asks the UI which secrets the `zv://` paths name ([`RESOLVE_EVENT`],
 //!    [`LIST_EVENT`]); the UI sends only ciphertext and Rust decrypts it, so no
 //!    secret value passes through JavaScript. `zv set` goes the other way:
-//!    Rust seals the value and the UI uploads it ([`WRITE_EVENT`]);
+//!    Rust seals the value and the UI uploads it ([`WRITE_EVENT`]). Changes to
+//!    projects, environments and folders are made by the UI's projects store
+//!    ([`CHANGE_EVENT`]), and vault items are sealed and opened here while the
+//!    UI only finds and uploads their ciphertext ([`ITEM_EVENT`]);
 //! 6. logs the use or denial and answers over the socket.
 //!
 //! Only the values asked for, and allowed, leave the app.
@@ -43,6 +46,12 @@ pub const PAIRING_EVENT: &str = "agent://pairing-request";
 pub const RESOLVE_EVENT: &str = "agent://resolve-request";
 pub const LIST_EVENT: &str = "agent://list-request";
 pub const WRITE_EVENT: &str = "agent://write-request";
+/// `zv projects` and friends: every project with its environments and folders.
+pub const STRUCTURE_EVENT: &str = "agent://structure-request";
+/// `zv project`, `environment`, `folder` and `rm`: make one change.
+pub const CHANGE_EVENT: &str = "agent://change-request";
+/// `zv item`: list, find, upload or delete personal vault items.
+pub const ITEM_EVENT: &str = "agent://item-request";
 /// `zv` is waiting for the user to unlock Zvault.
 pub const UNLOCK_EVENT: &str = "agent://unlock-requested";
 /// Sent after every logged entry, and after agent settings change, so open
@@ -379,6 +388,18 @@ pub fn agent_write_respond(
     error: Option<String>,
 ) -> Result<(), String> {
     hub.reply(&request_id, serde_json::Value::from(error))
+}
+
+/// The UI's answer to [`STRUCTURE_EVENT`], [`CHANGE_EVENT`] or
+/// [`ITEM_EVENT`], as the JSON each one describes.
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub fn agent_ui_respond(
+    hub: State<'_, AgentHub>,
+    request_id: String,
+    reply: serde_json::Value,
+) -> Result<(), String> {
+    hub.reply(&request_id, reply)
 }
 
 // ---------------------------------------------------------------------------

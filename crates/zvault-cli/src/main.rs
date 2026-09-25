@@ -8,6 +8,8 @@
 mod client;
 mod credentials;
 mod format;
+mod guide;
+mod manage;
 mod run;
 mod update;
 
@@ -25,13 +27,22 @@ use crate::client::ClientError;
 use crate::credentials::{AGENT_ENV, CredError, Store};
 use crate::format::EnvFormat;
 
+const AFTER_HELP: &str = "\
+Secrets are named zv://project/environment/[folder/]KEY, for example
+zv://payments-api/production/STRIPE_SECRET_KEY.
+
+zv needs the Zvault app running and unlocked on this computer; cloud agents
+cannot use it yet. Every change is approved by you in the app.
+
+AI agents: run `zv guide` (or `zv help agents`) for the workflow, path
+syntax, approvals and examples. `zv <command> --help` shows each command.";
+
 #[derive(Parser)]
 #[command(
     name = "zv",
     version = update::VERSION,
-    about = "Use your Zvault secrets from the terminal, scripts and AI agents",
-    after_help = "Secrets are named zv://project/environment/[folder/]KEY, \
-                  for example zv://payments-api/production/STRIPE_SECRET_KEY."
+    about = "Zvault from the terminal, scripts and AI agents: projects, environments, secrets and logins",
+    after_help = AFTER_HELP
 )]
 struct Cli {
     #[command(subcommand)]
@@ -41,7 +52,10 @@ struct Cli {
 #[derive(Subcommand)]
 enum Cmd {
     /// Show whether Zvault is running, locked, and this terminal signed in.
-    Status,
+    Status {
+        #[arg(long)]
+        json: bool,
+    },
     /// Bring Zvault forward and wait until it is unlocked.
     Unlock,
     /// Approve this terminal for 10 minutes of use (at most an hour), so
@@ -49,7 +63,28 @@ enum Cmd {
     Signin,
     /// End this terminal's approval.
     Signout,
-    /// List projects, environments, folders and secrets. Names only.
+    /// List your projects with their environments and folders.
+    Projects {
+        #[command(flatten)]
+        who: Who,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Create, list, rename or delete projects.
+    #[command(subcommand)]
+    Project(manage::ProjectCmd),
+    /// Create, list, edit or delete a project's environments.
+    #[command(subcommand, visible_alias = "envs")]
+    Environment(manage::EnvironmentCmd),
+    /// Create, list, rename or delete a project's folders.
+    #[command(subcommand, visible_alias = "folders")]
+    Folder(manage::FolderCmd),
+    /// List secrets under a place, or the places themselves. Names only.
+    #[command(
+        after_help = "Examples:\n  zv ls                        your projects\n  \
+        zv ls zv://payments-api       its environments\n  \
+        zv ls -r zv://payments-api    every secret path in it"
+    )]
     Ls {
         #[command(flatten)]
         who: Who,
@@ -58,6 +93,9 @@ enum Cmd {
         /// Print the full path of every secret below the place.
         #[arg(short = 'r', long)]
         recursive: bool,
+        /// Print every secret path below the place as a JSON array.
+        #[arg(long)]
+        json: bool,
     },
     /// Print one secret to stdout.
     Read {
@@ -73,7 +111,29 @@ enum Cmd {
     Copy { reference: String },
     /// Set a secret's value in one environment, creating the secret if
     /// needed. Reads the value from stdin, hidden when typed.
-    Set { reference: String },
+    #[command(
+        after_help = "Examples:\n  printf '%s' \"$VALUE\" | zv set zv://payments-api/staging/DATABASE_URL\n  \
+        zv set zv://payments-api/production/SESSION_SECRET --generate 48\n\n\
+        The project and environment (and folder) must exist. Zvault asks you to approve every change."
+    )]
+    Set {
+        reference: String,
+        /// Save a random value of this many characters (default 32) instead of
+        /// reading one. It is not printed.
+        #[arg(long, value_name = "LENGTH", num_args = 0..=1, default_missing_value = "32")]
+        generate: Option<usize>,
+    },
+    /// Delete a secret's value in one environment, or the whole secret.
+    Rm {
+        /// zv://project/environment/[folder/]KEY
+        reference: String,
+        /// Delete the secret from every environment, not just this one.
+        #[arg(long)]
+        all_environments: bool,
+        /// Confirm the delete. Zvault still asks you to approve it.
+        #[arg(long)]
+        yes: bool,
+    },
     /// Print every secret in an environment or folder as variables.
     ///
     /// Each secret becomes the variable named by its KEY. Example:
@@ -107,9 +167,19 @@ enum Cmd {
         #[arg(last = true, required = true, value_name = "COMMAND")]
         command: Vec<String>,
     },
+    /// Logins in your personal vault: list, show, create, edit, delete.
+    /// `zv items` lists them.
+    #[command(visible_alias = "items")]
+    Item {
+        #[command(subcommand)]
+        cmd: Option<manage::ItemCmd>,
+    },
     /// Pair, inspect or remove AI agents.
     #[command(subcommand)]
     Agent(AgentCmd),
+    /// How an AI agent should use zv: workflow, paths, approvals, examples.
+    /// Also `zv help agents`.
+    Guide,
     /// Update zv to the latest release. The zv inside Zvault.app updates
     /// with the app instead.
     Update {
@@ -182,6 +252,12 @@ fn usage(what: &str, e: impl std::fmt::Display) -> Error {
 }
 
 fn main() -> ExitCode {
+    // `zv help agents` reads more naturally than `zv guide`.
+    let args: Vec<String> = std::env::args().skip(1).take(3).collect();
+    if matches!(args.as_slice(), [h, g] if h == "help" && (g == "agents" || g == "guide")) {
+        print!("{}", guide::GUIDE);
+        return ExitCode::SUCCESS;
+    }
     let cli = Cli::parse();
     match dispatch(cli.command) {
         Ok(code) => ExitCode::from(code),
@@ -252,13 +328,15 @@ fn purpose(kind: PurposeKind, command: &[String]) -> Purpose {
         cwd: std::env::current_dir()
             .ok()
             .map(|d| d.display().to_string()),
+        detail: None,
+        destructive: false,
     }
 }
 
 fn dispatch(cmd: Cmd) -> Result<u8, Error> {
     let store_path = credentials::default_path()?;
     match cmd {
-        Cmd::Status => status(&store_path),
+        Cmd::Status { json } => status(&store_path, json),
         Cmd::Unlock => {
             if std::io::stderr().is_terminal() {
                 eprintln!("zv: unlock Zvault to continue…");
@@ -280,10 +358,22 @@ fn dispatch(cmd: Cmd) -> Result<u8, Error> {
             println!("Signed out.");
             Ok(0)
         }
+        Cmd::Projects { who, json } => {
+            manage::list_projects(&Conn::acting_as(&store_path, &who)?, json)
+        }
+        Cmd::Project(cmd) => manage::project(cmd, &store_path),
+        Cmd::Environment(cmd) => manage::environment(cmd, &store_path),
+        Cmd::Folder(cmd) => manage::folder(cmd, &store_path),
+        Cmd::Item { cmd } => manage::item(cmd.unwrap_or(manage::ItemCmd::List { json: false })),
+        Cmd::Guide => {
+            print!("{}", guide::GUIDE);
+            Ok(0)
+        }
         Cmd::Ls {
             who,
             place,
             recursive,
+            json,
         } => {
             let prefix = place.as_deref().map(parse_place).transpose()?;
             let conn = Conn::acting_as(&store_path, &who)?;
@@ -293,7 +383,19 @@ fn dispatch(cmd: Cmd) -> Result<u8, Error> {
                 Response::List { refs } => refs,
                 other => return unexpected(other),
             };
-            for line in format::listing(prefix.as_ref(), &refs, recursive) {
+            if json {
+                let all: Vec<String> = format::listing(prefix.as_ref(), &refs, true);
+                println!("{}", serde_json::to_string_pretty(&all).unwrap_or_default());
+                return Ok(0);
+            }
+            let lines = format::listing(prefix.as_ref(), &refs, recursive);
+            if lines.is_empty() && std::io::stderr().is_terminal() {
+                eprintln!(
+                    "zv: no secrets there yet. `zv projects` lists projects and environments, \
+                     including empty ones."
+                );
+            }
+            for line in lines {
                 println!("{line}");
             }
             Ok(0)
@@ -325,9 +427,28 @@ fn dispatch(cmd: Cmd) -> Result<u8, Error> {
                 other => unexpected(other),
             }
         }
-        Cmd::Set { reference } => {
+        Cmd::Set {
+            reference,
+            generate,
+        } => {
             let reference = parse_ref(&reference)?;
-            let value = read_value(&format!("Value for {reference}: "))?;
+            let value = match generate {
+                Some(len)
+                    if (zvault_agent::manage::MIN_GENERATED
+                        ..=zvault_agent::manage::MAX_GENERATED)
+                        .contains(&len) =>
+                {
+                    zvault_agent::manage::generate_password(len)
+                }
+                Some(_) => {
+                    return Err(Error::Usage(format!(
+                        "--generate takes a length from {} to {}",
+                        zvault_agent::manage::MIN_GENERATED,
+                        zvault_agent::manage::MAX_GENERATED
+                    )));
+                }
+                None => read_value(&format!("Value for {reference}: "))?,
+            };
             let shown = reference.to_string();
             match Conn::user()?.send(RequestBody::Set { reference, value })? {
                 Response::Ok => {
@@ -336,6 +457,27 @@ fn dispatch(cmd: Cmd) -> Result<u8, Error> {
                 }
                 other => unexpected(other),
             }
+        }
+        Cmd::Rm {
+            reference,
+            all_environments,
+            yes,
+        } => {
+            let reference = parse_ref(&reference)?;
+            if !yes {
+                return Err(Error::Usage(format!(
+                    "this deletes {} for good; run it again with --yes (Zvault will still ask you to approve)",
+                    if all_environments {
+                        format!("{} from every environment", reference.key)
+                    } else {
+                        format!("the value of {reference}")
+                    }
+                )));
+            }
+            manage::change(zvault_agent::manage::Change::DeleteSecret {
+                reference,
+                all_environments,
+            })
         }
         Cmd::Env { who, place, format } => {
             let prefix = parse_place(&place)?;
@@ -392,7 +534,7 @@ fn dispatch(cmd: Cmd) -> Result<u8, Error> {
     }
 }
 
-fn status(store_path: &Path) -> Result<u8, Error> {
+fn status(store_path: &Path, json: bool) -> Result<u8, Error> {
     let paired = Store::load(store_path).map_or(0, |s| s.agents.len());
     let reply = Conn::user()?.send(RequestBody::AppStatus);
     let (running, locked, signed_in) = match reply {
@@ -405,6 +547,16 @@ fn status(store_path: &Path) -> Result<u8, Error> {
         Err(e) => return Err(e),
         Ok(other) => return unexpected(other),
     };
+    if json {
+        let value = serde_json::json!({
+            "running": running,
+            "locked": locked,
+            "signedInSecs": signed_in,
+            "pairedAgents": paired,
+        });
+        println!("{value}");
+        return Ok(if running { 0 } else { 2 });
+    }
     println!(
         "Zvault:    {}",
         if running { "running" } else { "not running" }

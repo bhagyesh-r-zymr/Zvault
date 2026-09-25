@@ -8,8 +8,9 @@ decides and decrypts.
 ## Install
 
 Release builds ship `zv` inside Zvault.app. In Zvault, use **Install
-command-line tool**: it links `zv` into `/usr/local/bin` when that is writable,
-otherwise `~/.local/bin` (and tells you the `PATH` line to add). The release
+command-line tool**: it links `zv` (and the alias `zvault`) into
+`/usr/local/bin` when that is writable, otherwise `~/.local/bin` (and tells you
+the `PATH` line to add). The release
 workflow also uploads `zv` on its own as the `zv-macOS` artifact.
 
 The linked copy updates with the app. A standalone `zv` updates itself with
@@ -33,6 +34,34 @@ eval "$(zv env zv://web/development --format shell)"
 zv run --env-from zv://web/development -- npm test
 zv signout
 ```
+
+Projects, environments, folders and logins:
+
+```sh
+zv projects                             # every project with its environments and folders
+zv project create "Web" --env Development --env Staging --env Production
+zv project rename zv://web "Website" --slug website
+zv environment create zv://web QA --inherits staging
+zv environment edit zv://web/qa --name Quality --no-inherit
+zv folder create zv://web Stripe
+zv set zv://web/production/SESSION_SECRET --generate 48   # random, never printed
+zv rm zv://web/staging/DATABASE_URL --yes                 # that environment's value
+zv rm zv://web/staging/DATABASE_URL --all-environments --yes
+zv folder delete zv://web stripe --yes                     # must be empty
+zv environment delete zv://web/qa --yes
+zv project delete zv://web --yes
+zv item list                                               # never passwords
+zv item create --title GitHub --username me --url https://github.com --generate
+zv item get GitHub --field password
+zv item edit GitHub --generate 40
+zv item delete GitHub --yes
+zv guide                                                   # the guide for AI agents
+```
+
+Listings take `--json`. Every change runs as you and always asks in Zvault,
+even in a signed-in terminal; deletes also need `--yes`. Changes are made by
+the app's own projects store (which seals metadata in Rust); item passwords
+are opened and sealed in Rust, and the web view only moves ciphertext.
 
 Without `--agent`, commands run as you. Each one asks for approval in Zvault
 (with Touch ID when Touch ID unlock is set up), and when Zvault is locked it
@@ -59,7 +88,9 @@ zv agent unpair
 ```
 
 Commands act as an agent when given `--agent NAME` or `ZV_AGENT`. An agent
-cannot copy, set or sign in.
+cannot copy, sign in or change anything (set, rm, project, environment, folder,
+item); those run as you. `zv projects` as an agent shows only what its scopes
+reach. `zv guide` (or `zv help agents`) prints the full guide an agent needs.
 
 ## Paths
 
@@ -114,7 +145,9 @@ An agent's scopes are paths (one secret) or places ending in `/*`:
 masked). `--no-mask` hands the child the terminal instead.
 
 Exit codes: the child's own code for `zv run`; 2 Zvault not reachable, 3 not
-paired, 4 denied / out of scope / paused / timed out, 5 locked, 64 usage.
+paired, 4 denied / out of scope / paused / timed out, 5 locked, 64 usage, 1
+anything else (the app's reason is printed, for example "the folder still
+holds 2 secrets").
 
 ## For the app UI
 
@@ -126,7 +159,9 @@ as Development") is decrypted with that environment's key.
 `agents/AgentsView.tsx` lists paired agents. Rust events:
 `agent://approval-request`, `agent://pairing-request`, `agent://prompt-closed`,
 `agent://resolve-request`, `agent://list-request`, `agent://write-request`,
-`agent://unlock-requested`, `agent://activity`.
+`agent://structure-request`, `agent://change-request`, `agent://item-request`
+(answered with `agent_ui_respond`), `agent://unlock-requested`,
+`agent://activity`.
 
 ## Code
 

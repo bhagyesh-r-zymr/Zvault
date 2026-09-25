@@ -55,6 +55,7 @@ import {
 } from './access.facts.js';
 import { ACCESS_CLOCK, type Clock } from './clock.js';
 import { allLevels, effectiveLevel, holderKey, type GrantFacts } from './levels.js';
+import { dropVersionValues } from '../projects/projects.store.js';
 
 type GrantRow = typeof environmentGrants.$inferSelect;
 type RequestRow = typeof accessRequests.$inferSelect;
@@ -633,6 +634,8 @@ export class EnvironmentsService {
             this.grantRow(env.projectId, environmentId, w, next, accountId, now),
           ),
         );
+      // Old values in secret history were sealed with the retired key.
+      await dropVersionValues(tx, env.projectId, environmentId);
       for (const v of req.values) {
         await tx
           .update(secretValues)

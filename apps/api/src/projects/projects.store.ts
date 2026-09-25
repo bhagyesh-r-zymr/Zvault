@@ -1,6 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { EncryptedBlob, EntryType, ProjectEntry, SecretValueRecord } from '@zvault/shared';
-import { and, asc, count, eq, gt, inArray } from 'drizzle-orm';
+import {
+  MAX_VERSIONS_PER_RECORD,
+  type EncryptedBlob,
+  type EntryType,
+  type ProjectEntry,
+  type SecretValueRecord,
+  type SecretVersion,
+} from '@zvault/shared';
+import { and, asc, count, desc, eq, gt, gte, inArray, lt, lte, sql } from 'drizzle-orm';
 import { DATABASE, type Database } from '../db/database.js';
 import {
   environmentAccess,
@@ -8,10 +15,12 @@ import {
   projectEntries,
   projects,
   secretValues,
+  secretVersions,
 } from '../db/schema.js';
 
 type ProjectRow = typeof projects.$inferSelect;
 type EntryRow = typeof projectEntries.$inferSelect;
+type VersionRow = typeof secretVersions.$inferSelect;
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
 type Db = Database | Tx;
 
@@ -56,6 +65,14 @@ export interface EntryWrite {
   /** The account the result is shaped for (which env keys and values it sees). */
   viewer: string;
   now: Date;
+}
+
+/** A deleted secret that still has content to restore. */
+export interface StoredTrashedSecret {
+  id: string;
+  revision: number;
+  deletedAt: Date;
+  lastVersion: SecretVersion;
 }
 
 export type EntryWriteResult =
@@ -233,6 +250,9 @@ export class ProjectsStore {
 
       const seq = project.seq + 1;
       await tx.update(projects).set({ seq }).where(eq(projects.id, w.projectId));
+      if (w.type === 'secret' && current && !current.deleted && current.encryptedMeta) {
+        await keepSecretVersion(tx, current, current.encryptedMeta);
+      }
       const values = {
         type: w.type,
         revision: w.baseRevision + 1,
@@ -258,6 +278,7 @@ export class ProjectsStore {
           await tx
             .delete(keyGrants)
             .where(and(eq(keyGrants.projectId, w.projectId), eq(keyGrants.resourceId, w.id)));
+          await dropVersionValues(tx, w.projectId, w.id);
           // So do its team grants and access requests (they cascade from this row).
           await tx
             .delete(environmentAccess)
@@ -324,6 +345,96 @@ export class ProjectsStore {
     });
   }
 
+  /** Earlier versions of a secret, newest first, with only the values `viewer` can open. */
+  async listSecretVersions(
+    projectId: string,
+    secretId: string,
+    viewer: string,
+  ): Promise<SecretVersion[]> {
+    const rows = await this.db
+      .select()
+      .from(secretVersions)
+      .where(and(eq(secretVersions.projectId, projectId), eq(secretVersions.secretId, secretId)))
+      .orderBy(desc(secretVersions.revision));
+    const environments = await viewerEnvironments(this.db, projectId, viewer);
+    return rows.map((r) => toSecretVersion(r, environments));
+  }
+
+  /** Secrets deleted at or after `since` that still have versions, newest first. */
+  async listTrash(projectId: string, since: Date, viewer: string): Promise<StoredTrashedSecret[]> {
+    const rows = await this.db
+      .selectDistinctOn([projectEntries.id], { entry: projectEntries, version: secretVersions })
+      .from(projectEntries)
+      .innerJoin(
+        secretVersions,
+        and(
+          eq(secretVersions.projectId, projectEntries.projectId),
+          eq(secretVersions.secretId, projectEntries.id),
+        ),
+      )
+      .where(
+        and(
+          eq(projectEntries.projectId, projectId),
+          eq(projectEntries.type, 'secret'),
+          eq(projectEntries.deleted, true),
+          gte(projectEntries.updatedAt, since),
+        ),
+      )
+      .orderBy(projectEntries.id, desc(secretVersions.revision));
+    const environments = await viewerEnvironments(this.db, projectId, viewer);
+    return rows
+      .map(({ entry, version }) => ({
+        id: entry.id,
+        revision: entry.revision,
+        deletedAt: entry.updatedAt,
+        lastVersion: toSecretVersion(version, environments),
+      }))
+      .sort((a, b) => b.deletedAt.getTime() - a.deletedAt.getTime());
+  }
+
+  /**
+   * Drops the versions of deleted secrets: one secret (`secretId`), or every
+   * secret deleted before `before` (`secretId` null). Returns how many secrets were purged.
+   */
+  async purgeTrash(projectId: string, secretId: string | null, before: Date): Promise<number> {
+    const deleted = await this.db
+      .select({ id: projectEntries.id })
+      .from(projectEntries)
+      .where(
+        and(
+          eq(projectEntries.projectId, projectId),
+          eq(projectEntries.type, 'secret'),
+          eq(projectEntries.deleted, true),
+          secretId === null
+            ? lt(projectEntries.updatedAt, before)
+            : eq(projectEntries.id, secretId),
+        ),
+      );
+    if (deleted.length === 0) return 0;
+    const purged = await this.db
+      .delete(secretVersions)
+      .where(
+        and(
+          eq(secretVersions.projectId, projectId),
+          inArray(
+            secretVersions.secretId,
+            deleted.map((d) => d.id),
+          ),
+        ),
+      )
+      .returning({ secretId: secretVersions.secretId });
+    return new Set(purged.map((p) => p.secretId)).size;
+  }
+
+  /** Drops the versions of every secret, in any project, deleted before `before`. */
+  async purgeExpired(before: Date): Promise<void> {
+    await this.db.delete(secretVersions).where(
+      sql`exists (select 1 from ${projectEntries} where ${projectEntries.projectId} = ${secretVersions.projectId}
+        and ${projectEntries.id} = ${secretVersions.secretId}
+        and ${projectEntries.deleted} and ${projectEntries.updatedAt} < ${before.toISOString()})`,
+    );
+  }
+
   /** Entries changed after `since`, ordered by `seq`, as `viewer` may see them. */
   async listChanges(
     projectId: string,
@@ -339,6 +450,71 @@ export class ProjectsStore {
       .limit(limit);
     return hydrate(this.db, projectId, viewer, rows);
   }
+}
+
+/** Keeps a secret's content (metadata and every environment's value) before a write replaces it. */
+async function keepSecretVersion(tx: Tx, current: EntryRow, encryptedMeta: EncryptedBlob) {
+  const valueRows = await tx
+    .select({
+      environmentId: secretValues.environmentId,
+      encryptedValue: secretValues.encryptedValue,
+    })
+    .from(secretValues)
+    .where(
+      and(eq(secretValues.projectId, current.projectId), eq(secretValues.secretId, current.id)),
+    );
+  await tx.insert(secretVersions).values({
+    projectId: current.projectId,
+    secretId: current.id,
+    revision: current.revision,
+    encryptedMeta,
+    values: Object.fromEntries(valueRows.map((v) => [v.environmentId, v.encryptedValue])),
+    savedAt: current.updatedAt,
+  });
+  await tx
+    .delete(secretVersions)
+    .where(
+      and(
+        eq(secretVersions.projectId, current.projectId),
+        eq(secretVersions.secretId, current.id),
+        lte(secretVersions.revision, current.revision - MAX_VERSIONS_PER_RECORD),
+      ),
+    );
+}
+
+/**
+ * Forgets an environment's old values in every secret version: once the
+ * environment is deleted or its key rotated, nobody holds the key they were
+ * sealed with.
+ */
+export async function dropVersionValues(db: Db, projectId: string, environmentId: string) {
+  await db
+    .update(secretVersions)
+    .set({ values: sql`${secretVersions.values} - ${environmentId}::text` })
+    .where(eq(secretVersions.projectId, projectId));
+}
+
+/** Environments `viewer` holds a key for. */
+async function viewerEnvironments(db: Db, projectId: string, viewer: string): Promise<Set<string>> {
+  const grants = await db
+    .select({ resourceId: keyGrants.resourceId })
+    .from(keyGrants)
+    .where(and(eq(keyGrants.projectId, projectId), eq(keyGrants.accountId, viewer)));
+  const ids = new Set(grants.map((g) => g.resourceId));
+  ids.delete(projectId);
+  return ids;
+}
+
+function toSecretVersion(r: VersionRow, environments: Set<string>): SecretVersion {
+  return {
+    revision: r.revision,
+    savedAt: r.savedAt.toISOString(),
+    encryptedMeta: r.encryptedMeta,
+    values: Object.entries(r.values)
+      .filter(([environmentId]) => environments.has(environmentId))
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([environmentId, encryptedValue]) => ({ environmentId, encryptedValue })),
+  };
 }
 
 /**

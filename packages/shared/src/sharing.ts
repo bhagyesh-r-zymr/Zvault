@@ -24,7 +24,15 @@ export const SHARE_LIMITS = {
   /** Plaintext items are small; this bounds storage abuse. */
   maxCiphertextBytes: 64 * 1024,
   maxActiveLinksPerUser: 200,
+  /** People an email-restricted link can name. */
+  maxAllowedEmails: 20,
+  /** One-time codes for email-restricted links. */
+  codeTtlMinutes: 10,
+  codeLength: 6,
 } as const;
+
+/** Emails are compared trimmed and lowercased. */
+export const ShareEmail = z.string().trim().toLowerCase().pipe(z.email().max(254));
 
 /** The `kid` a share blob is sealed under. */
 export const SHARE_LINK_KID = 'share-link' as const;
@@ -63,6 +71,17 @@ export const CreateShareLinkRequest = z.object({
   verifier: base64UrlOfLength(32),
   expiresInSeconds: ttlSeconds.default(SHARE_LIMITS.defaultTtlSeconds),
   maxViews: z.number().int().min(1).max(SHARE_LIMITS.maxViews).default(1),
+  /**
+   * When set, only these people can open the link: each must confirm their
+   * email with a one-time code first. The link key still never reaches the
+   * server.
+   */
+  allowedEmails: z
+    .array(ShareEmail)
+    .min(1)
+    .max(SHARE_LIMITS.maxAllowedEmails)
+    .transform((emails) => [...new Set(emails)])
+    .optional(),
 });
 export type CreateShareLinkRequest = z.infer<typeof CreateShareLinkRequest>;
 /** What a client sends: `expiresInSeconds` and `maxViews` have defaults. */
@@ -74,6 +93,8 @@ export const ShareLinkSummary = z.object({
   expiresAt: IsoDate,
   maxViews: z.number().int(),
   viewCount: z.number().int(),
+  /** How many people the link is limited to; 0 means anyone with the link. */
+  allowedEmailCount: z.number().int().min(0).default(0),
   status: z.enum(['active', 'expired', 'used_up', 'revoked']),
 });
 export type ShareLinkSummary = z.infer<typeof ShareLinkSummary>;
@@ -81,8 +102,47 @@ export type ShareLinkSummary = z.infer<typeof ShareLinkSummary>;
 export const ShareLinkList = z.object({ links: z.array(ShareLinkSummary) });
 export type ShareLinkList = z.infer<typeof ShareLinkList>;
 
-export const OpenShareLinkRequest = z.object({ accessToken: base64UrlOfLength(32) });
+const LinkAccessToken = base64UrlOfLength(32);
+
+/** Asks whether a link needs an email check before it opens. Counts no view. */
+export const CheckShareLinkRequest = z.object({ accessToken: LinkAccessToken });
+export type CheckShareLinkRequest = z.infer<typeof CheckShareLinkRequest>;
+
+export const CheckShareLinkResponse = z.object({ emailRequired: z.boolean() });
+export type CheckShareLinkResponse = z.infer<typeof CheckShareLinkResponse>;
+
+/**
+ * Emails a one-time code to `email` if the link allows it. The answer is the
+ * same whether or not it does, so the list of people can't be probed.
+ */
+export const RequestShareCodeRequest = z.object({
+  accessToken: LinkAccessToken,
+  email: ShareEmail,
+});
+export type RequestShareCodeRequest = z.infer<typeof RequestShareCodeRequest>;
+
+export const ShareCode = z
+  .string()
+  .trim()
+  .regex(new RegExp(`^[0-9]{${SHARE_LIMITS.codeLength}}$`));
+
+export const OpenShareLinkRequest = z.object({
+  accessToken: LinkAccessToken,
+  /** Required, with `code`, for email-restricted links. */
+  email: ShareEmail.optional(),
+  code: ShareCode.optional(),
+});
 export type OpenShareLinkRequest = z.infer<typeof OpenShareLinkRequest>;
+
+/**
+ * Why a link that the caller holds the key for did not open: it needs an
+ * email check, or the email and code given don't match a live code.
+ */
+export const ShareLinkDenial = z.object({
+  reason: z.enum(['email_required', 'invalid_code']),
+  message: z.string(),
+});
+export type ShareLinkDenial = z.infer<typeof ShareLinkDenial>;
 
 export const OpenShareLinkResponse = z.object({
   blob: shareBlob(SHARE_LINK_KID),

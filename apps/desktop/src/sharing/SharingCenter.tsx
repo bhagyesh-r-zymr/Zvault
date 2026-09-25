@@ -130,7 +130,12 @@ export function SharingCenter({ api }: { api: SharingApi }) {
                   <span className="row-title">
                     {l.viewCount} of {l.maxViews} views
                   </span>
-                  <span className="row-sub">Expires {when(l.expiresAt)}</span>
+                  <span className="row-sub">
+                    {l.allowedEmailCount > 0
+                      ? `Only ${l.allowedEmailCount} ${l.allowedEmailCount === 1 ? 'person' : 'people'} · `
+                      : 'Anyone with the link · '}
+                    Expires {when(l.expiresAt)}
+                  </span>
                 </div>
                 <span className={l.status === 'active' ? 'pill secure' : 'pill'}>{l.status}</span>
                 {l.status === 'active' && (

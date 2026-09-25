@@ -30,6 +30,9 @@ export const sharingCore = {
   fingerprint: (publicKey: string) => invoke<string>('sharing_fingerprint', { publicKey }),
   sealTo: (recipientPublicKey: string, item: SharedItemPayload) =>
     invoke<NewUserShare>('share_seal_to', { recipientPublicKey, payload: JSON.stringify(item) }),
+  /** Opens a draft in the user's own mail app, so the link never passes through Zvault. */
+  composeEmail: (to: string[], subject: string, body: string) =>
+    invoke<void>('share_compose_email', { to, subject, body }),
   open: async (share: IncomingUserShare): Promise<string> =>
     invoke<string>('share_open', {
       share: {

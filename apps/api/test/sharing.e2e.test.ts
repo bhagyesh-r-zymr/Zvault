@@ -1,21 +1,16 @@
 import 'reflect-metadata';
 import { createHash, randomBytes } from 'node:crypto';
-import type { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
 import {
   OpenShareLinkResponse,
   OutgoingUserShare,
   ShareLinkList,
   SharingKeyResponse,
   UserShareList,
+  type ShareId,
 } from '@zvault/shared';
-import type { NextFunction, Request, Response } from 'express';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { AppModule } from '../src/app.module.js';
-import { configureApp } from '../src/bootstrap.js';
-import { loadEnv } from '../src/config/env.js';
-import { SHARE_CLOCK } from '../src/sharing/clock.js';
+import { createHarness, signedInAccount, type Harness } from './harness.js';
 
 const b64 = (buf: Buffer) => buf.toString('base64url');
 const rand = (n: number) => b64(randomBytes(n));
@@ -38,60 +33,49 @@ function newLink() {
   };
 }
 
-const ALICE = 'user-alice:alice@example.com';
-const BOB = 'user-bob:bob@example.com';
-
 describe('Sharing (e2e)', () => {
-  let app: INestApplication;
-  let server: Parameters<typeof request>[0];
+  let h: Harness;
+  let server: Harness['server'];
   let now = new Date('2026-09-24T12:00:00Z');
+  let alice: Awaited<ReturnType<typeof signedInAccount>>;
+  let bob: Awaited<ReturnType<typeof signedInAccount>>;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(SHARE_CLOCK)
-      .useValue(() => now)
-      .compile();
-    app = moduleRef.createNestApplication();
-    // Lets each test pick its client IP, so the open endpoint's rate limit
-    // applies per test rather than across the whole suite.
-    (app.getHttpAdapter().getInstance() as { set: (k: string, v: unknown) => void }).set(
-      'trust proxy',
-      true,
-    );
-    // Stand-in for the auth layer, which sets request.user on real sessions.
-    app.use((req: Request & { user?: unknown }, _res: Response, next: NextFunction) => {
-      const header = req.header('x-test-user');
-      if (header) {
-        const [id, email] = header.split(':');
-        req.user = { id, email };
-      }
-      next();
-    });
-    configureApp(app, loadEnv({ NODE_ENV: 'test' }));
-    await app.init();
-    server = app.getHttpServer() as typeof server;
+    h = await createHarness({ clock: () => now, rateLimits: true });
+    server = h.server;
+    alice = await signedInAccount(h, 'alice@example.com');
+    bob = await signedInAccount(h, 'bob@example.com');
   });
 
   afterAll(async () => {
-    await app.close();
+    await h.close();
   });
 
   beforeEach(() => {
     now = new Date(now.getTime() + 60 * 60 * 1000);
   });
 
-  const createLink = (link: ReturnType<typeof newLink>, extra: object = {}) =>
-    request(server)
-      .post('/v1/shares/links')
-      .set('x-test-user', ALICE)
-      .send({ id: link.id, verifier: link.verifier, blob: blob('share-link'), ...extra });
-
+  // Each test gets its own client IP, so rate limits apply per test rather
+  // than across the whole suite.
   let clientIp = '';
   let clients = 0;
   beforeEach(() => {
     clients++;
     clientIp = `10.0.${clients >> 8}.${clients & 255}`;
   });
+
+  const as = (who: { headers: { Authorization: string } }) => ({
+    ...who.headers,
+    'x-forwarded-for': clientIp,
+  });
+  const ALICE = () => as(alice);
+  const BOB = () => as(bob);
+
+  const createLink = (link: ReturnType<typeof newLink>, extra: object = {}) =>
+    request(server)
+      .post('/v1/shares/links')
+      .set(ALICE())
+      .send({ id: link.id, verifier: link.verifier, blob: blob('share-link'), ...extra });
 
   const open = (id: string, accessToken: string) =>
     request(server)
@@ -101,8 +85,12 @@ describe('Sharing (e2e)', () => {
 
   describe('links', () => {
     it('requires sign-in to create or list', async () => {
-      await request(server).post('/v1/shares/links').send({}).expect(401);
-      await request(server).get('/v1/shares/links').expect(401);
+      await request(server)
+        .post('/v1/shares/links')
+        .set('x-forwarded-for', clientIp)
+        .send({})
+        .expect(401);
+      await request(server).get('/v1/shares/links').set('x-forwarded-for', clientIp).expect(401);
     });
 
     it('opens once by default, then is gone', async () => {
@@ -117,7 +105,7 @@ describe('Sharing (e2e)', () => {
 
       await open(link.id, link.accessToken).expect(404);
       const list = ShareLinkList.parse(
-        (await request(server).get('/v1/shares/links').set('x-test-user', ALICE)).body,
+        (await request(server).get('/v1/shares/links').set(ALICE())).body,
       );
       expect(list.links.find((l) => l.id === link.id)?.status).toBe('used_up');
     });
@@ -149,14 +137,8 @@ describe('Sharing (e2e)', () => {
     it('can be revoked by its owner only', async () => {
       const link = newLink();
       await createLink(link, { maxViews: 5 }).expect(201);
-      await request(server)
-        .delete(`/v1/shares/links/${link.id}`)
-        .set('x-test-user', BOB)
-        .expect(404);
-      await request(server)
-        .delete(`/v1/shares/links/${link.id}`)
-        .set('x-test-user', ALICE)
-        .expect(204);
+      await request(server).delete(`/v1/shares/links/${link.id}`).set(BOB()).expect(404);
+      await request(server).delete(`/v1/shares/links/${link.id}`).set(ALICE()).expect(204);
       await open(link.id, link.accessToken).expect(404);
     });
 
@@ -199,12 +181,12 @@ describe('Sharing (e2e)', () => {
     beforeAll(async () => {
       await request(server)
         .put('/v1/shares/keys/me')
-        .set('x-test-user', ALICE)
+        .set(ALICE())
         .send({ publicKey: aliceKey })
         .expect(200);
       await request(server)
         .put('/v1/shares/keys/me')
-        .set('x-test-user', BOB)
+        .set(BOB())
         .send({ publicKey: bobKey })
         .expect(200);
     });
@@ -212,7 +194,7 @@ describe('Sharing (e2e)', () => {
     const share = (extra: object = {}) =>
       request(server)
         .post('/v1/shares/users')
-        .set('x-test-user', ALICE)
+        .set(ALICE())
         .send({
           id: rand(16),
           recipientEmail: 'Bob@Example.com',
@@ -227,42 +209,46 @@ describe('Sharing (e2e)', () => {
       const res = await request(server)
         .get('/v1/shares/keys')
         .query({ email: 'BOB@example.com' })
-        .set('x-test-user', ALICE)
+        .set(ALICE())
         .expect(200);
       expect(SharingKeyResponse.parse(res.body)).toEqual({
-        userId: 'user-bob',
+        userId: bob.id,
         email: 'bob@example.com',
         publicKey: bobKey,
       });
       await request(server)
         .get('/v1/shares/keys')
         .query({ email: 'nobody@example.com' })
-        .set('x-test-user', ALICE)
+        .set(ALICE())
         .expect(404);
-      await request(server).get('/v1/shares/keys').query({ email: 'bob@example.com' }).expect(401);
+      await request(server)
+        .get('/v1/shares/keys')
+        .query({ email: 'bob@example.com' })
+        .set('x-forwarded-for', clientIp)
+        .expect(401);
     });
 
     it('delivers to the recipient and lets either side remove it', async () => {
       const { id } = OutgoingUserShare.parse((await share().expect(201)).body);
 
       const bobView = UserShareList.parse(
-        (await request(server).get('/v1/shares/users').set('x-test-user', BOB)).body,
+        (await request(server).get('/v1/shares/users').set(BOB())).body,
       );
       const received = bobView.incoming.find((s) => s.id === id);
       expect(received?.sender).toEqual({
-        userId: 'user-alice',
+        userId: alice.id,
         email: 'alice@example.com',
         publicKey: aliceKey,
       });
 
       const aliceView = UserShareList.parse(
-        (await request(server).get('/v1/shares/users').set('x-test-user', ALICE)).body,
+        (await request(server).get('/v1/shares/users').set(ALICE())).body,
       );
       expect(aliceView.outgoing.map((s) => s.id)).toContain(id);
       expect(aliceView.incoming).toHaveLength(0);
 
-      await request(server).delete(`/v1/shares/users/${id}`).set('x-test-user', BOB).expect(204);
-      await request(server).delete(`/v1/shares/users/${id}`).set('x-test-user', ALICE).expect(404);
+      await request(server).delete(`/v1/shares/users/${id}`).set(BOB()).expect(204);
+      await request(server).delete(`/v1/shares/users/${id}`).set(ALICE()).expect(404);
     });
 
     it('refuses stale or mismatched keys', async () => {
@@ -283,9 +269,157 @@ describe('Sharing (e2e)', () => {
       );
       now = new Date(now.getTime() + 601 * 1000);
       const bobView = UserShareList.parse(
-        (await request(server).get('/v1/shares/users').set('x-test-user', BOB)).body,
+        (await request(server).get('/v1/shares/users').set(BOB())).body,
       );
       expect(bobView.incoming.map((s) => s.id)).not.toContain(created.id);
+    });
+  });
+
+  describe('email-restricted links', () => {
+    const CAROL = 'carol@example.com';
+    const post = (id: string, action: string, body: object) =>
+      request(server)
+        .post(`/v1/shares/links/${id}/${action}`)
+        .set('x-forwarded-for', clientIp)
+        .send(body);
+    const codeFor = (to: string) => /\b(\d{6})\b/.exec(h.mailer.lastTo(to)?.text ?? '')?.[1];
+    // The code email is sent in the background.
+    const settle = () => new Promise((r) => setTimeout(r, 20));
+
+    it('opens only after the recipient confirms a listed email', async () => {
+      const link = newLink();
+      const created = await createLink(link, {
+        allowedEmails: [' Carol@Example.com ', 'dave@example.com', 'carol@example.com'],
+      }).expect(201);
+      expect(created.body).toMatchObject({ allowedEmailCount: 2 });
+
+      const check = await post(link.id, 'check', { accessToken: link.accessToken }).expect(200);
+      expect(check.body).toEqual({ emailRequired: true });
+
+      const denied = await post(link.id, 'open', { accessToken: link.accessToken }).expect(403);
+      expect(denied.body).toMatchObject({ reason: 'email_required' });
+
+      await post(link.id, 'code', {
+        accessToken: link.accessToken,
+        email: 'CAROL@example.com',
+      }).expect(202);
+      await settle();
+      const mail = h.mailer.lastTo(CAROL);
+      expect(mail?.subject).toContain('alice@example.com');
+      expect(mail?.text).not.toContain(link.accessToken);
+      const code = codeFor(CAROL);
+      expect(code).toMatch(/^\d{6}$/);
+
+      const opened = await post(link.id, 'open', {
+        accessToken: link.accessToken,
+        email: CAROL,
+        code,
+      }).expect(200);
+      expect(OpenShareLinkResponse.parse(opened.body).viewsRemaining).toBe(0);
+      await post(link.id, 'open', { accessToken: link.accessToken, email: CAROL, code }).expect(
+        404,
+      );
+    });
+
+    it('answers unlisted emails the same and emails them nothing', async () => {
+      const link = newLink();
+      await createLink(link, { allowedEmails: [CAROL] }).expect(201);
+      const sent = h.mailer.sent.length;
+      const listed = await post(link.id, 'code', { accessToken: link.accessToken, email: CAROL });
+      const other = await post(link.id, 'code', {
+        accessToken: link.accessToken,
+        email: 'mallory@example.com',
+      });
+      expect(other.status).toBe(listed.status);
+      expect(other.body).toEqual(listed.body);
+      await settle();
+      expect(h.mailer.sent.length).toBe(sent + 1);
+      expect(h.mailer.lastTo('mallory@example.com')).toBeUndefined();
+
+      const guess = await post(link.id, 'open', {
+        accessToken: link.accessToken,
+        email: 'mallory@example.com',
+        code: '123456',
+      }).expect(403);
+      expect(guess.body).toMatchObject({ reason: 'invalid_code' });
+    });
+
+    it('spends a code once, and closes it after too many wrong tries', async () => {
+      const link = newLink();
+      await createLink(link, { allowedEmails: [CAROL], maxViews: 5 }).expect(201);
+      await post(link.id, 'code', { accessToken: link.accessToken, email: CAROL }).expect(202);
+      await settle();
+      const code = codeFor(CAROL)!;
+      const wrong = code === '000000' ? '111111' : '000000';
+      for (let i = 0; i < 5; i++) {
+        await post(link.id, 'open', {
+          accessToken: link.accessToken,
+          email: CAROL,
+          code: wrong,
+        }).expect(403);
+      }
+      // The right code no longer works: it was closed after five misses.
+      await post(link.id, 'open', { accessToken: link.accessToken, email: CAROL, code }).expect(
+        403,
+      );
+    });
+
+    it('expires codes and limits how often they are sent', async () => {
+      const link = newLink();
+      await createLink(link, { allowedEmails: [CAROL], maxViews: 5 }).expect(201);
+      const ask = () => post(link.id, 'code', { accessToken: link.accessToken, email: CAROL });
+      await ask().expect(202);
+      await settle();
+      const first = codeFor(CAROL);
+      const sent = h.mailer.sent.length;
+      await ask().expect(202); // Within the cooldown: nothing new is sent.
+      await settle();
+      expect(h.mailer.sent.length).toBe(sent);
+
+      now = new Date(now.getTime() + 11 * 60 * 1000);
+      await post(link.id, 'open', {
+        accessToken: link.accessToken,
+        email: CAROL,
+        code: first,
+      }).expect(403);
+    });
+
+    it('needs the link key for every step', async () => {
+      const link = newLink();
+      await createLink(link, { allowedEmails: [CAROL] }).expect(201);
+      const sent = h.mailer.sent.length;
+      await post(link.id, 'check', { accessToken: rand(32) }).expect(404);
+      await post(link.id, 'code', { accessToken: rand(32), email: CAROL }).expect(404);
+      await post(link.id, 'open', { accessToken: rand(32), email: CAROL, code: '123456' }).expect(
+        404,
+      );
+      await settle();
+      expect(h.mailer.sent.length).toBe(sent);
+    });
+
+    it('leaves ordinary links open to anyone with the link', async () => {
+      const link = newLink();
+      const created = await createLink(link).expect(201);
+      expect(created.body).toMatchObject({ allowedEmailCount: 0 });
+      const check = await post(link.id, 'check', { accessToken: link.accessToken }).expect(200);
+      expect(check.body).toEqual({ emailRequired: false });
+      await post(link.id, 'open', { accessToken: link.accessToken }).expect(200);
+    });
+
+    it('rejects bad email lists', async () => {
+      await createLink(newLink(), { allowedEmails: [] }).expect(400);
+      await createLink(newLink(), { allowedEmails: ['not-an-email'] }).expect(400);
+      const many = Array.from({ length: 21 }, (_, i) => `p${i}@example.com`);
+      await createLink(newLink(), { allowedEmails: many }).expect(400);
+    });
+
+    it('keeps links in Postgres', async () => {
+      const link = newLink();
+      await createLink(link, { maxViews: 2 }).expect(201);
+      const rows = await h.db.query.shareLinks.findFirst({
+        where: (t, { eq }) => eq(t.id, link.id as ShareId),
+      });
+      expect(rows?.verifier).toBeInstanceOf(Buffer);
     });
   });
 });

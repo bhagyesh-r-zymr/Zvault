@@ -65,6 +65,6 @@ VITE_API_URL=https://$HOST VITE_SHARE_ORIGIN=https://$HOST pnpm tauri build --co
 
 ## Known demo limits
 
-- Share links are held in memory by the API today, so they disappear when the API restarts.
+- Share links are stored in Postgres (migration 0006), so they survive restarts and deploys. Codes for email-restricted links go out through SES, so while SES is in sandbox mode only verified recipients get them (see `waitlist.sh --verify`).
 - Only SES-verified addresses receive email (sandbox).
 - One box, no backups. Snapshot the EBS volume if the data matters.

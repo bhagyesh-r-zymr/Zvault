@@ -43,6 +43,13 @@
       "when": 1790331926492,
       "tag": "0005_waitlist",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790333627653,
+      "tag": "0006_sharing",
+      "breakpoints": true
     }
   ]
 }

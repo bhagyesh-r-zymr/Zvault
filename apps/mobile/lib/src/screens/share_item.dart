@@ -19,13 +19,13 @@ String _message(Object e) => e is FormatException ? e.message : e.toString();
 
 enum _Mode { link, person }
 
-/// Share one item by secure link or with another Zvault user, as on the Mac.
-/// The item is encrypted on this phone; the link's key never reaches Zvault.
+/// Share one item or project secret by secure link or with another Zvault
+/// user, as on the Mac. It is encrypted on this phone; the link's key never
+/// reaches Zvault.
 class ShareItemScreen extends StatefulWidget {
-  const ShareItemScreen({super.key, required this.item, required this.title});
+  const ShareItemScreen({super.key, required this.subject});
 
-  final VaultItem item;
-  final String title;
+  final ShareSubject subject;
 
   @override
   State<ShareItemScreen> createState() => _ShareItemScreenState();
@@ -36,6 +36,7 @@ class _ShareItemScreenState extends State<ShareItemScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final subject = widget.subject;
     return Scaffold(
       appBar: AppBar(title: const Text('Share')),
       body: SafeArea(
@@ -44,18 +45,36 @@ class _ShareItemScreenState extends State<ShareItemScreen> {
           children: [
             Row(
               children: [
-                LetterTile(widget.title, size: 44, radius: 12),
+                switch (subject) {
+                  ItemShareSubject(:final title) => LetterTile(title, size: 44, radius: 12),
+                  SecretShareSubject() => const _KeyTile(),
+                },
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(widget.title, style: Theme.of(context).textTheme.titleLarge),
-                      const SizedBox(height: 2),
                       Text(
-                        'Encrypted on this phone before it leaves',
-                        style: TextStyle(fontSize: 13, color: context.zv.muted),
+                        switch (subject) {
+                          ItemShareSubject(:final title) => title,
+                          SecretShareSubject(:final secret) => secret.key,
+                        },
+                        style: switch (subject) {
+                          ItemShareSubject() => Theme.of(context).textTheme.titleLarge,
+                          SecretShareSubject() => Zv.monoStyle.copyWith(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: context.zv.ink,
+                          ),
+                        },
+                        overflow: TextOverflow.ellipsis,
                       ),
+                      const SizedBox(height: 2),
+                      Text(switch (subject) {
+                        ItemShareSubject() => 'Encrypted on this phone before it leaves',
+                        SecretShareSubject(:final project, :final environment) =>
+                          '${project.name} / ${environment.name} value, encrypted on this phone',
+                      }, style: TextStyle(fontSize: 13, color: context.zv.muted)),
                     ],
                   ),
                 ),
@@ -81,9 +100,9 @@ class _ShareItemScreenState extends State<ShareItemScreen> {
             ),
             const SizedBox(height: 24),
             if (_mode == _Mode.link)
-              _ShareByLink(item: widget.item, title: widget.title)
+              _ShareByLink(subject: subject)
             else
-              _ShareWithPerson(item: widget.item),
+              _ShareWithPerson(subject: subject),
           ],
         ),
       ),
@@ -91,11 +110,27 @@ class _ShareItemScreenState extends State<ShareItemScreen> {
   }
 }
 
-class _ShareByLink extends StatefulWidget {
-  const _ShareByLink({required this.item, required this.title});
+class _KeyTile extends StatelessWidget {
+  const _KeyTile();
 
-  final VaultItem item;
-  final String title;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: context.zv.accentSoft,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(Icons.key_rounded, color: context.zv.accent, size: 22),
+    );
+  }
+}
+
+class _ShareByLink extends StatefulWidget {
+  const _ShareByLink({required this.subject});
+
+  final ShareSubject subject;
 
   @override
   State<_ShareByLink> createState() => _ShareByLinkState();
@@ -130,7 +165,7 @@ class _ShareByLinkState extends State<_ShareByLink> {
     setState(() => _busy = true);
     try {
       final link = await context.read<AppState>().createShareLink(
-        widget.item,
+        widget.subject,
         expiresInSeconds: _expiresInSeconds,
         maxViews: _maxViews,
         allowedEmails: allowed,
@@ -143,10 +178,10 @@ class _ShareByLinkState extends State<_ShareByLink> {
     }
   }
 
-  String get _subject => 'I shared "${widget.title}" with you';
+  String get _subject => 'I shared "${widget.subject.label}" with you';
 
   String _body(CreatedShareLink link) => [
-    'I shared "${widget.title}" with you using Zvault.',
+    'I shared "${widget.subject.label}" with you using Zvault.',
     '',
     'Open this link: ${link.url}',
     '',
@@ -193,7 +228,7 @@ class _ShareByLinkState extends State<_ShareByLink> {
         Text(
           allowed != null
               ? 'Only ${allowed.join(', ')} can open this link, after confirming their email with a one-time code. It is shown only now.'
-              : 'Anyone with this link can view the item. It is shown only now.',
+              : 'Anyone with this link can view the ${widget.subject.noun}. It is shown only now.',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 14),
@@ -350,9 +385,9 @@ class _ShareByLinkState extends State<_ShareByLink> {
 }
 
 class _ShareWithPerson extends StatefulWidget {
-  const _ShareWithPerson({required this.item});
+  const _ShareWithPerson({required this.subject});
 
-  final VaultItem item;
+  final ShareSubject subject;
 
   @override
   State<_ShareWithPerson> createState() => _ShareWithPersonState();
@@ -391,7 +426,7 @@ class _ShareWithPersonState extends State<_ShareWithPerson> {
   });
 
   Future<void> _send(ShareRecipient r) => _run((app) async {
-    await app.shareWithUser(widget.item, r);
+    await app.shareWithUser(widget.subject, r);
     if (mounted) {
       setState(() {
         _sentTo = r.email;
@@ -469,7 +504,7 @@ class _ShareWithPersonState extends State<_ShareWithPerson> {
           ],
           const SizedBox(height: 10),
           Text(
-            'For sensitive items, ask them to read out the code in their Zvault settings. If it differs, do not send.',
+            'For sensitive ${widget.subject.noun}s, ask them to read out the code in their Zvault settings. If it differs, do not send.',
             style: TextStyle(fontSize: 13, color: context.zv.muted, height: 1.4),
           ),
           const SizedBox(height: 16),

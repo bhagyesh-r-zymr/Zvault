@@ -72,7 +72,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 1312526392;
+  int get rustContentHash => -1827355528;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -135,6 +135,16 @@ abstract class RustLibApi extends BaseApi {
   Future<String> crateApiVaultProjectOpen({
     required String recordJson,
     String? memberWrapJson,
+  });
+
+  Future<NewShareLink> crateApiSharingSecretShareLinkCreate({
+    required SecretShare secret,
+    required String shareOrigin,
+  });
+
+  Future<NewUserShare> crateApiSharingSecretShareSealTo({
+    required SecretShare secret,
+    required String recipientPublicKey,
   });
 
   Future<String> crateApiVaultSecretValueOpen({
@@ -563,6 +573,76 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  Future<NewShareLink> crateApiSharingSecretShareLinkCreate({
+    required SecretShare secret,
+    required String shareOrigin,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_secret_share(secret, serializer);
+          sse_encode_String(shareOrigin, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 13,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_new_share_link,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiSharingSecretShareLinkCreateConstMeta,
+        argValues: [secret, shareOrigin],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSharingSecretShareLinkCreateConstMeta =>
+      const TaskConstMeta(
+        debugName: "secret_share_link_create",
+        argNames: ["secret", "shareOrigin"],
+      );
+
+  @override
+  Future<NewUserShare> crateApiSharingSecretShareSealTo({
+    required SecretShare secret,
+    required String recipientPublicKey,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_secret_share(secret, serializer);
+          sse_encode_String(recipientPublicKey, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 14,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_new_user_share,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiSharingSecretShareSealToConstMeta,
+        argValues: [secret, recipientPublicKey],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSharingSecretShareSealToConstMeta =>
+      const TaskConstMeta(
+        debugName: "secret_share_seal_to",
+        argNames: ["secret", "recipientPublicKey"],
+      );
+
+  @override
   Future<String> crateApiVaultSecretValueOpen({
     required String projectId,
     required String secretId,
@@ -580,7 +660,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 15,
             port: port_,
           );
         },
@@ -617,7 +697,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 16,
             port: port_,
           );
         },
@@ -654,7 +734,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 17,
             port: port_,
           );
         },
@@ -686,7 +766,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 16,
+            funcId: 18,
             port: port_,
           );
         },
@@ -716,7 +796,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 17,
+            funcId: 19,
             port: port_,
           );
         },
@@ -748,7 +828,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 18,
+            funcId: 20,
             port: port_,
           );
         },
@@ -772,7 +852,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 19)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 21)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_opt_String,
@@ -798,7 +878,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 20,
+            funcId: 22,
             port: port_,
           );
         },
@@ -844,6 +924,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   PasskeyDetail dco_decode_box_autoadd_passkey_detail(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_passkey_detail(raw);
+  }
+
+  @protected
+  SecretShare dco_decode_box_autoadd_secret_share(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_secret_share(raw);
   }
 
   @protected
@@ -1010,6 +1096,25 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SecretShare dco_decode_secret_share(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    return SecretShare(
+      projectId: dco_decode_String(arr[0]),
+      secretId: dco_decode_String(arr[1]),
+      environmentId: dco_decode_String(arr[2]),
+      valueJson: dco_decode_String(arr[3]),
+      name: dco_decode_String(arr[4]),
+      key: dco_decode_String(arr[5]),
+      note: dco_decode_String(arr[6]),
+      projectName: dco_decode_String(arr[7]),
+      environmentName: dco_decode_String(arr[8]),
+    );
+  }
+
+  @protected
   SharingIdentity dco_decode_sharing_identity(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -1085,6 +1190,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_passkey_detail(deserializer));
+  }
+
+  @protected
+  SecretShare sse_decode_box_autoadd_secret_share(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_secret_share(deserializer));
   }
 
   @protected
@@ -1281,6 +1394,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SecretShare sse_decode_secret_share(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_projectId = sse_decode_String(deserializer);
+    var var_secretId = sse_decode_String(deserializer);
+    var var_environmentId = sse_decode_String(deserializer);
+    var var_valueJson = sse_decode_String(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_key = sse_decode_String(deserializer);
+    var var_note = sse_decode_String(deserializer);
+    var var_projectName = sse_decode_String(deserializer);
+    var var_environmentName = sse_decode_String(deserializer);
+    return SecretShare(
+      projectId: var_projectId,
+      secretId: var_secretId,
+      environmentId: var_environmentId,
+      valueJson: var_valueJson,
+      name: var_name,
+      key: var_key,
+      note: var_note,
+      projectName: var_projectName,
+      environmentName: var_environmentName,
+    );
+  }
+
+  @protected
   SharingIdentity sse_decode_sharing_identity(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_publicKey = sse_decode_String(deserializer);
@@ -1359,6 +1497,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_passkey_detail(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_secret_share(
+    SecretShare self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_secret_share(self, serializer);
   }
 
   @protected
@@ -1505,6 +1652,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.claimToken, serializer);
     sse_encode_String(self.publicKey, serializer);
     sse_encode_String(self.code, serializer);
+  }
+
+  @protected
+  void sse_encode_secret_share(SecretShare self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.projectId, serializer);
+    sse_encode_String(self.secretId, serializer);
+    sse_encode_String(self.environmentId, serializer);
+    sse_encode_String(self.valueJson, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.key, serializer);
+    sse_encode_String(self.note, serializer);
+    sse_encode_String(self.projectName, serializer);
+    sse_encode_String(self.environmentName, serializer);
   }
 
   @protected

@@ -68,7 +68,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   void _share(String title) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => ShareItemScreen(item: widget.item, title: title),
+        builder: (_) => ShareItemScreen(subject: ItemShareSubject(widget.item, title)),
       ),
     );
   }

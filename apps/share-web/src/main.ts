@@ -85,9 +85,11 @@ function showItem(link: ParsedLink, meta: OpenShareLinkResponse) {
   } catch {
     return fail('This link is damaged and could not be decrypted.');
   }
+  const secret = item.secret;
   const rows = [
+    secret && field('Variable', secret.key),
     item.username && field('Username', item.username),
-    item.password && field('Password', item.password, true),
+    item.password && field(secret ? 'Value' : 'Password', item.password, true),
     item.url && field('Website', item.url),
   ].filter((r): r is HTMLElement => Boolean(r));
   const notes = item.notes ? [el('h3', 'Notes'), el('pre', item.notes)] : [];
@@ -110,8 +112,16 @@ function showItem(link: ParsedLink, meta: OpenShareLinkResponse) {
     meta.viewsRemaining === 0
       ? 'This was the last view. Save what you need now; the link no longer works.'
       : `This link can be opened ${meta.viewsRemaining} more time${meta.viewsRemaining === 1 ? '' : 's'} until ${new Date(meta.expiresAt).toLocaleString()}.`;
+  const from = secret
+    ? [
+        el('p', `Project secret from ${secret.project} / ${secret.environment}`, {
+          className: 'hint',
+        }),
+      ]
+    : [];
   render(
     el('h2', item.title),
+    ...from,
     ...rows,
     ...passkey,
     ...notes,

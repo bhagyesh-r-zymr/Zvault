@@ -111,7 +111,9 @@ export function SharingCenter({ api }: { api: SharingApi }) {
               </li>
             ))}
             {outgoing.length === 0 && (
-              <li className="row muted">Share an item from its page with the Share button.</li>
+              <li className="row muted">
+                Share an item or a project secret with its Share button.
+              </li>
             )}
           </ul>
         </section>
@@ -228,10 +230,21 @@ function IncomingRow({ share, onRemove }: { share: IncomingUserShare; onRemove: 
               <CopyButton value={item.username} secret={false} />
             </div>
           )}
+          {item.secret && (
+            <div className="row">
+              <div className="row-main">
+                <span className="row-label">
+                  project secret · {item.secret.project} / {item.secret.environment}
+                </span>
+                <span className="mono">{item.secret.key}</span>
+              </div>
+              <CopyButton value={item.secret.key} secret={false} />
+            </div>
+          )}
           {item.password && (
             <div className="row">
               <div className="row-main">
-                <span className="row-label">password</span>
+                <span className="row-label">{item.secret ? 'value' : 'password'}</span>
                 <SecretText value={item.password} masked />
               </div>
               <CopyButton value={item.password} />

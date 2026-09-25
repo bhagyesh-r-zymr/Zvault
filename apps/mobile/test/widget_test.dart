@@ -245,6 +245,54 @@ void main() {
     });
   });
 
+  testWidgets('shares a project secret only where this account can read it', (tester) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(412, 1400);
+    addTearDown(tester.view.reset);
+    final requests = <http.Request>[];
+    final core = FakeCore(values: {'blob-db-dev': 'postgres://dev'});
+    final state = unlockedState(core)
+      ..api = ZvaultApi(
+        'https://zvault.example',
+        token: 'token',
+        client: MockClient((req) async {
+          requests.add(req);
+          return http.Response('{"unverifiedEmails":[]}', 201);
+        }),
+      );
+    await tester.pumpWidget(ZvaultApp(state: state));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('tab-projects')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Payments API'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('env-prod')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('share-secret-DATABASE_URL')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('env-dev')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('share-secret-DATABASE_URL')));
+    await tester.pumpAndSettle();
+    expect(find.text('Payments API / Development value, encrypted on this phone'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('share-create-link')));
+    await tester.pumpAndSettle();
+
+    final shared = core.sharedSecrets.single;
+    expect(
+      [shared.projectId, shared.secretId, shared.environmentId, shared.valueJson, shared.key],
+      ['p1', 's1', 'dev', 'blob-db-dev', 'DATABASE_URL'],
+    );
+    expect(shared.environmentName, 'Development');
+    expect(requests.single.url.path, '/v1/shares/links');
+    expect(requests.single.body, isNot(contains('postgres://dev')));
+    expect(requests.single.body, isNot(contains('linkkey')));
+    expect(find.textContaining('Anyone with this link can view the secret'), findsOneWidget);
+  });
+
   group('ZvaultApi', () {
     test('reads an approved pairing', () async {
       final api = ZvaultApi(

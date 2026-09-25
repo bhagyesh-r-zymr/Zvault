@@ -1,7 +1,7 @@
-//! Sharing an item, as the Mac does it: by secure link, or sealed to another
-//! Zvault user. The item is opened and encrypted here, so its password never
-//! reaches Dart; Dart gets ciphertext, public keys and, for links, the URL to
-//! hand to the share sheet.
+//! Sharing an item or a project secret, as the Mac does it: by secure link,
+//! or sealed to another Zvault user. The item or value is opened and
+//! encrypted here, so it never reaches Dart; Dart gets ciphertext, public keys
+//! and, for links, the URL to hand to the share sheet.
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
@@ -13,7 +13,7 @@ use zvault_crypto::{
 
 use super::keyring;
 use crate::keyring::ItemFields;
-use crate::records::{self, CRYPTO_VERSION, ItemRecord, decode_key};
+use crate::records::{self, Blob, CRYPTO_VERSION, ItemRecord, decode_key};
 
 /// `SHARE_LINK_KID` and `SHARE_BOX_KID` in `@zvault/shared`.
 const LINK_KID: &str = "share-link";
@@ -79,6 +79,8 @@ struct Payload<'a> {
     notes: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     passkey: Option<SharedPasskey<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    secret: Option<SecretOrigin<'a>>,
 }
 
 /// `SharedPasskey`: everything needed to use the passkey elsewhere.
@@ -90,6 +92,29 @@ struct SharedPasskey<'a> {
     user_handle: &'a str,
     credential_id: &'a str,
     private_key: &'a str,
+}
+
+/// `SharedItemPayload.secret`: where a shared project secret came from.
+#[derive(Serialize)]
+struct SecretOrigin<'a> {
+    key: &'a str,
+    project: &'a str,
+    environment: &'a str,
+}
+
+/// One project secret's value in one environment, to share. The value is
+/// opened here; the rest is its already-open metadata, for the recipient.
+pub struct SecretShare {
+    pub project_id: String,
+    pub secret_id: String,
+    pub environment_id: String,
+    /// The sealed value, as `EncryptedBlob` JSON.
+    pub value_json: String,
+    pub name: String,
+    pub key: String,
+    pub note: String,
+    pub project_name: String,
+    pub environment_name: String,
 }
 
 fn payload(f: &ItemFields) -> anyhow::Result<Zeroizing<Vec<u8>>> {
@@ -116,7 +141,36 @@ fn payload(f: &ItemFields) -> anyhow::Result<Zeroizing<Vec<u8>>> {
                 credential_id: &p.credential_id,
                 private_key: pem,
             }),
+        secret: None,
     })?))
+}
+
+/// `secretSharePayload` in `@zvault/shared`: the value travels in `password`
+/// so apps that predate `secret` still show it.
+fn secret_payload(s: &SecretShare, value: &str) -> anyhow::Result<Zeroizing<Vec<u8>>> {
+    Ok(Zeroizing::new(serde_json::to_vec(&Payload {
+        v: 1,
+        title: if s.name.is_empty() { &s.key } else { &s.name },
+        username: "",
+        password: value,
+        url: "",
+        notes: &s.note,
+        passkey: None,
+        secret: Some(SecretOrigin {
+            key: &s.key,
+            project: &s.project_name,
+            environment: &s.environment_name,
+        }),
+    })?))
+}
+
+/// Opens the value with the environment key this account holds, so only
+/// members with Use or higher can share it.
+fn open_secret_payload(s: &SecretShare) -> anyhow::Result<Zeroizing<Vec<u8>>> {
+    let blob: Blob = records::parse(&s.value_json)?;
+    let value =
+        keyring().open_secret_value(&s.project_id, &s.secret_id, &s.environment_id, &blob)?;
+    secret_payload(s, &value)
 }
 
 fn open_payload(vault_id: &str, record_json: &str) -> anyhow::Result<Zeroizing<Vec<u8>>> {
@@ -158,6 +212,26 @@ fn seal_link(plaintext: &[u8], origin: &str) -> anyhow::Result<NewShareLink> {
         blob_json: blob_json(LINK_KID, &sealed)?,
         id,
     })
+}
+
+/// Encrypts one project secret's value under a fresh link key.
+pub fn secret_share_link_create(
+    secret: SecretShare,
+    share_origin: String,
+) -> anyhow::Result<NewShareLink> {
+    let origin = check_origin(&share_origin)?;
+    seal_link(&open_secret_payload(&secret)?, origin)
+}
+
+/// Encrypts one project secret's value to another user's sharing key.
+pub fn secret_share_seal_to(
+    secret: SecretShare,
+    recipient_public_key: String,
+) -> anyhow::Result<NewUserShare> {
+    let recipient = decode_key(&recipient_public_key)?;
+    let plaintext = open_secret_payload(&secret)?;
+    let me = keyring().sharing_key_pair()?;
+    seal_box(&me, &recipient, &plaintext)
 }
 
 /// This account's sharing public key, to publish before sending a share.
@@ -204,7 +278,7 @@ fn seal_box(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::records::{Blob, decode_array};
+    use crate::records::decode_array;
     use zvault_crypto::{BoxedShare, KEY_LEN, open_from};
 
     fn fields() -> ItemFields {
@@ -252,6 +326,30 @@ mod tests {
             serde_json::json!({
                 "v": 1, "title": "GitHub", "username": "octo",
                 "password": "hunter2", "url": "https://github.com"
+            })
+        );
+    }
+
+    #[test]
+    fn secret_payload_matches_the_macs() {
+        let share = SecretShare {
+            project_id: String::new(),
+            secret_id: String::new(),
+            environment_id: String::new(),
+            value_json: String::new(),
+            name: String::new(),
+            key: "DATABASE_URL".into(),
+            note: String::new(),
+            project_name: "Payments API".into(),
+            environment_name: "Staging".into(),
+        };
+        let json: serde_json::Value =
+            serde_json::from_slice(&secret_payload(&share, "postgres://db").unwrap()).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "v": 1, "title": "DATABASE_URL", "password": "postgres://db",
+                "secret": { "key": "DATABASE_URL", "project": "Payments API", "environment": "Staging" }
             })
         );
     }

@@ -73,8 +73,37 @@ export const SharedItemPayload = z.object({
   url: z.string().max(2048).optional(),
   notes: z.string().max(10_000).optional(),
   passkey: SharedPasskey.optional(),
+  /**
+   * Set when a project secret is shared rather than a vault item. Its value
+   * travels in `password`, so apps that predate this field still show it.
+   */
+  secret: z
+    .object({
+      key: z.string().max(256),
+      project: z.string().max(200),
+      environment: z.string().max(200),
+    })
+    .optional(),
 });
 export type SharedItemPayload = z.infer<typeof SharedItemPayload>;
+
+/** The payload for one project secret's value in one environment. */
+export function secretSharePayload(s: {
+  name: string;
+  key: string;
+  value: string;
+  note?: string | undefined;
+  project: string;
+  environment: string;
+}): SharedItemPayload {
+  return {
+    v: 1,
+    title: s.name || s.key,
+    password: s.value,
+    ...(s.note && { notes: s.note }),
+    secret: { key: s.key, project: s.project, environment: s.environment },
+  };
+}
 
 // ---------------------------------------------------------------- links
 

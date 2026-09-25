@@ -1,6 +1,16 @@
 // Small progressive enhancements. The page reads fine without any of this.
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+// Phone menu.
+const navEl = document.getElementById('site-nav');
+const menuBtn = navEl.querySelector('.menu-btn');
+const setMenu = (open) => {
+  navEl.classList.toggle('open', open);
+  menuBtn.setAttribute('aria-expanded', String(open));
+};
+menuBtn.addEventListener('click', () => setMenu(!navEl.classList.contains('open')));
+navEl.querySelectorAll('nav a').forEach((a) => a.addEventListener('click', () => setMenu(false)));
+
 // Reveal sections as they scroll into view.
 const io = new IntersectionObserver(
   (entries) => {
@@ -303,3 +313,105 @@ const termIo = new IntersectionObserver((entries) => {
   }
 });
 termIo.observe(term);
+
+// Agent flow: the agent asks, Zvault approves, the tool runs. Cycles through tools.
+const flows = {
+  aws: {
+    ask: '"Check CloudWatch for errors"',
+    secret: 'AWS_SECRET_ACCESS_KEY',
+    icon: '☁️',
+    target: 'CloudWatch',
+    result: '12 errors in the last hour',
+    cmd: 'zv run --env AWS_SECRET_ACCESS_KEY=zv://infra/prod/aws/AWS_SECRET_ACCESS_KEY -- aws logs tail /ecs/api --since 1h',
+  },
+  azure: {
+    ask: '"Why is the web app restarting?"',
+    secret: 'AZURE_CLIENT_SECRET',
+    icon: '🔷',
+    target: 'Azure Monitor',
+    result: 'Out of memory at 09:42',
+    cmd: 'zv run --env-from zv://infra/prod/azure -- az webapp log tail -n web -g prod',
+  },
+  stripe: {
+    ask: '"Refund order #4821"',
+    secret: 'STRIPE_SECRET_KEY',
+    icon: '💳',
+    target: 'Stripe',
+    result: 'Refund issued',
+    cmd: 'zv run --env STRIPE_API_KEY=zv://payments-api/prod/STRIPE_SECRET_KEY -- stripe refunds create --charge ch_3Pq…',
+  },
+  jira: {
+    ask: '"File a bug for this crash"',
+    secret: 'JIRA_API_TOKEN',
+    icon: '📋',
+    target: 'Jira',
+    result: 'Created ZV-142',
+    cmd: 'zv run --env JIRA_API_TOKEN=zv://tools/shared/JIRA_API_TOKEN -- jira issue create -t Bug -s "Crash on unlock"',
+  },
+  gh: {
+    ask: '"Open a PR with the fix"',
+    secret: 'GITHUB_TOKEN',
+    icon: '🐙',
+    target: 'GitHub',
+    result: 'Pull request opened',
+    cmd: 'zv run --env GH_TOKEN=zv://tools/shared/GITHUB_TOKEN -- gh pr create --fill',
+  },
+};
+const af = document.getElementById('agentflow');
+if (af) {
+  const $ = (id) => document.getElementById(id);
+  const toolBtns = [...af.querySelectorAll('.tools button')];
+  const steps = [...af.querySelectorAll('.step')];
+  const pipes = [...af.querySelectorAll('.pipe')];
+  let run = 0;
+  let afVisible = false;
+  let afHover = false;
+  let touched = 0;
+  const show = async (key) => {
+    const my = ++run;
+    const f = flows[key];
+    toolBtns.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tool === key)));
+    $('af-ask').textContent = f.ask;
+    $('af-secret').textContent = f.secret;
+    $('af-icon').textContent = f.icon;
+    $('af-target').textContent = f.target;
+    $('af-result').textContent = f.result;
+    $('af-cmd').textContent = f.cmd;
+    if (reduced) return steps.forEach((s) => s.classList.add('on'));
+    steps.forEach((s) => s.classList.remove('on'));
+    pipes.forEach((p) => p.classList.remove('on'));
+    const seq = [
+      () => steps[0].classList.add('on'),
+      () => pipes[0].classList.add('on'),
+      () => steps[1].classList.add('on'),
+      () => pipes[1].classList.add('on'),
+      () => steps[2].classList.add('on'),
+    ];
+    for (const s of seq) {
+      await sleep(550);
+      if (my !== run) return;
+      s();
+    }
+  };
+  const keys = Object.keys(flows);
+  let at = 0;
+  toolBtns.forEach((b) =>
+    b.addEventListener('click', () => {
+      at = keys.indexOf(b.dataset.tool);
+      touched = Date.now();
+      void show(b.dataset.tool);
+    }),
+  );
+  af.addEventListener('mouseenter', () => (afHover = true));
+  af.addEventListener('mouseleave', () => (afHover = false));
+  new IntersectionObserver(([e]) => (afVisible = e.isIntersecting)).observe(af);
+  void show(keys[0]);
+  if (!reduced) {
+    setInterval(() => {
+      // Pause while pointed at, and for a while after someone picks a tool.
+      if (!afVisible || afHover || Date.now() - touched < 12000) return;
+      at = (at + 1) % keys.length;
+      void show(keys[at]);
+    }, 5200);
+  }
+}

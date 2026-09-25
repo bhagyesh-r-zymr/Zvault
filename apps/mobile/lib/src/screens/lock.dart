@@ -66,7 +66,7 @@ class _LockScreenState extends State<LockScreen> {
               Text(
                 app.account?.email ?? '',
                 textAlign: TextAlign.center,
-                style: t.bodyLarge?.copyWith(color: Zv.text2),
+                style: t.bodyLarge?.copyWith(color: context.zv.muted),
               ),
               const Spacer(flex: 2),
               Center(
@@ -77,20 +77,16 @@ class _LockScreenState extends State<LockScreen> {
                   child: Container(
                     width: 88,
                     height: 88,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Zv.irisRing,
-                      border: Border.all(color: Zv.lineStrong, width: 1.5),
-                    ),
-                    child: const Icon(Icons.fingerprint_rounded, size: 48, color: Zv.irisText),
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: context.zv.accentSoft),
+                    child: Icon(Icons.fingerprint_rounded, size: 48, color: context.zv.accent),
                   ),
                 ),
               ),
               const SizedBox(height: 14),
-              const Text(
+              Text(
                 'Touch the sensor to unlock',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Zv.text2, fontSize: 14),
+                style: TextStyle(color: context.zv.muted, fontSize: 14),
               ),
               if (_error != null) ...[const SizedBox(height: 20), ErrorBanner(_error!)],
               const Spacer(flex: 3),

@@ -2,6 +2,6 @@
 <!-- The splash before Flutter draws: the app background. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
-        <color android:color="#FFFFFF" />
+        <color android:color="#141C33" />
     </item>
 </layer-list>

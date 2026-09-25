@@ -75,85 +75,128 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.zv;
     final d = _detail;
     final title = d?.title ?? widget.item.summary.title;
+    final subtitle = d == null
+        ? widget.item.vaultName
+        : d.urls.isNotEmpty
+        ? _host(d.urls.first)
+        : widget.item.vaultName;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.item.vaultName, style: const TextStyle(fontSize: 16, color: Zv.text2)),
+        title: Text(
+          widget.item.vaultName,
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: c.muted),
+        ),
       ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
           children: [
-            Row(
-              children: [
-                LetterTile(title, size: 52),
-                const SizedBox(width: 16),
-                Expanded(child: Text(title, style: Theme.of(context).textTheme.headlineMedium)),
-              ],
+            Center(child: LetterTile(title, size: 58, radius: 16)),
+            const SizedBox(height: 10),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 13, color: c.muted),
+            ),
+            const SizedBox(height: 18),
             if (_error != null) ErrorBanner(_error!),
             if (d != null) ...[
-              OutlinedButton.icon(
-                key: const Key('share-item'),
-                onPressed: () => _share(title),
-                icon: const Icon(Icons.share_rounded, size: 20),
-                label: const Text('Share securely'),
+              Row(
+                children: [
+                  if (d.password.isNotEmpty) ...[
+                    Expanded(
+                      child: FilledButton(
+                        key: const Key('copy-password'),
+                        onPressed: () => _copy('Password', d.password),
+                        child: const Text('Copy password'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  Expanded(
+                    child: OutlinedButton(
+                      key: const Key('share-item'),
+                      onPressed: () => _share(title),
+                      child: const Text('Share'),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
             ],
             if (d == null && _error == null) const Center(child: CircularProgressIndicator()),
             if (d != null) ...[
-              Panel(
-                child: Column(
-                  children: [
-                    if (d.username.isNotEmpty)
-                      _Field(
-                        label: 'Username',
-                        child: Text(d.username, style: const TextStyle(fontSize: 16)),
-                        onCopy: () => _copy('Username', d.username),
-                      ),
-                    if (d.username.isNotEmpty && d.password.isNotEmpty) const Divider(),
-                    if (d.password.isNotEmpty)
-                      _Field(
-                        label: 'Password',
-                        trailing: IconButton(
-                          key: const Key('reveal-password'),
-                          tooltip: _reveal ? 'Hide' : 'Show',
-                          onPressed: () => setState(() => _reveal = !_reveal),
-                          icon: Icon(
-                            _reveal ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                            color: Zv.text2,
+              if (d.username.isNotEmpty || d.password.isNotEmpty || _code != null)
+                Panel(
+                  child: Column(
+                    children: [
+                      if (d.username.isNotEmpty)
+                        _Field(
+                          label: 'username',
+                          child: Text(
+                            d.username,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: c.ink,
+                            ),
                           ),
+                          onCopy: () => _copy('Username', d.username),
                         ),
-                        onCopy: () => _copy('Password', d.password),
-                        child: SecretText(d.password, masked: !_reveal),
-                      ),
-                    if (_code != null) ...[
-                      const Divider(),
-                      _Field(
-                        label: 'One-time code',
-                        child: _Totp(_code!),
-                        onCopy: () => _copy('Code', _code!.code),
-                      ),
+                      if (d.username.isNotEmpty && d.password.isNotEmpty) const Divider(),
+                      if (d.password.isNotEmpty)
+                        _Field(
+                          label: 'password',
+                          trailing: IconButton(
+                            key: const Key('reveal-password'),
+                            tooltip: _reveal ? 'Hide' : 'Show',
+                            onPressed: () => setState(() => _reveal = !_reveal),
+                            icon: Icon(
+                              _reveal ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                              size: 20,
+                            ),
+                          ),
+                          onCopy: () => _copy('Password', d.password),
+                          child: SecretText(d.password, masked: !_reveal, size: 15),
+                        ),
+                      if (_code != null) ...[
+                        if (d.username.isNotEmpty || d.password.isNotEmpty) const Divider(),
+                        _Field(
+                          label: 'one-time password',
+                          child: _Totp(_code!),
+                          onCopy: () => _copy('Code', _code!.code),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
               if (d.urls.isNotEmpty) ...[
-                const SizedBox(height: 24),
-                const SectionLabel('Websites'),
+                const SizedBox(height: 12),
                 Panel(
                   child: Column(
                     children: [
                       for (final (i, url) in d.urls.indexed) ...[
                         if (i > 0) const Divider(),
                         _Field(
-                          label: i == 0 ? 'Website' : 'Website ${i + 1}',
+                          label: i == 0 ? 'website' : 'website ${i + 1}',
                           child: Text(
                             url,
-                            style: const TextStyle(fontSize: 15, color: Zv.irisText),
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: c.accent,
+                            ),
                           ),
                           onCopy: () => _copy('Website', url),
                         ),
@@ -163,15 +206,21 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                 ),
               ],
               if (d.notes.isNotEmpty) ...[
-                const SizedBox(height: 24),
-                const SectionLabel('Notes'),
+                const SizedBox(height: 12),
                 Panel(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
                   child: SizedBox(
                     width: double.infinity,
-                    child: SelectableText(
-                      d.notes,
-                      style: const TextStyle(fontSize: 15, height: 1.5),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('notes', style: TextStyle(fontSize: 12, color: c.muted)),
+                        const SizedBox(height: 3),
+                        SelectableText(
+                          d.notes,
+                          style: TextStyle(fontSize: 15, height: 1.5, color: c.ink),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -182,8 +231,14 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
       ),
     );
   }
+
+  static String _host(String url) {
+    final u = Uri.tryParse(url.contains('://') ? url : 'https://$url');
+    return u?.host.isNotEmpty == true ? u!.host : url;
+  }
 }
 
+/// One field in a card: a small label above its value, tap to copy.
 class _Field extends StatelessWidget {
   const _Field({required this.label, required this.child, required this.onCopy, this.trailing});
 
@@ -194,18 +249,19 @@ class _Field extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.zv;
     return InkWell(
       onTap: onCopy,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 6, 12),
+        padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
         child: Row(
           children: [
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: const TextStyle(fontSize: 12, color: Zv.muted)),
-                  const SizedBox(height: 4),
+                  Text(label, style: TextStyle(fontSize: 12, color: c.muted)),
+                  const SizedBox(height: 3),
                   child,
                 ],
               ),
@@ -214,7 +270,7 @@ class _Field extends StatelessWidget {
             IconButton(
               tooltip: 'Copy $label',
               onPressed: onCopy,
-              icon: const Icon(Icons.copy_rounded, size: 20, color: Zv.text2),
+              icon: const Icon(Icons.copy_rounded, size: 19),
             ),
           ],
         ),
@@ -230,28 +286,42 @@ class _Totp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = code.code;
-    final grouped = c.length == 6 ? '${c.substring(0, 3)} ${c.substring(3)}' : c;
+    final c = context.zv;
+    final digits = code.code;
+    final grouped = digits.length == 6
+        ? '${digits.substring(0, 3)} ${digits.substring(3)}'
+        : digits;
     final low = code.remaining <= 5;
+    final ring = low ? c.attention : c.accent;
     return Row(
       children: [
         Text(
           grouped,
-          style: Zv.monoStyle.copyWith(fontSize: 24, color: Zv.irisText, letterSpacing: 2),
+          style: Zv.monoStyle.copyWith(
+            fontSize: 22,
+            fontWeight: FontWeight.w600,
+            color: c.ink,
+            letterSpacing: 2,
+          ),
         ),
-        const SizedBox(width: 14),
+        const Spacer(),
+        Text(
+          '${code.remaining}s',
+          style: TextStyle(color: low ? c.attention : c.muted, fontSize: 12),
+        ),
+        const SizedBox(width: 8),
         SizedBox(
           width: 22,
           height: 22,
           child: CircularProgressIndicator(
             value: code.remaining / code.period,
             strokeWidth: 3,
-            color: low ? Zv.attn : Zv.irisText,
-            backgroundColor: Zv.line,
+            strokeCap: StrokeCap.round,
+            color: ring,
+            backgroundColor: c.line,
           ),
         ),
-        const SizedBox(width: 8),
-        Text('${code.remaining}s', style: TextStyle(color: low ? Zv.attn : Zv.muted, fontSize: 13)),
+        const SizedBox(width: 4),
       ],
     );
   }

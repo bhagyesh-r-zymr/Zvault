@@ -20,6 +20,7 @@ class _ItemsTabState extends State<ItemsTab> {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
+    final c = context.zv;
     final q = _query.trim().toLowerCase();
     final items = q.isEmpty
         ? app.items
@@ -29,6 +30,10 @@ class _ItemsTabState extends State<ItemsTab> {
                 s.username.toLowerCase().contains(q) ||
                 (s.url ?? '').toLowerCase().contains(q);
           }).toList();
+    final pill = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(99),
+      borderSide: BorderSide(color: c.line),
+    );
     return SafeArea(
       bottom: false,
       child: RefreshIndicator(
@@ -38,18 +43,24 @@ class _ItemsTabState extends State<ItemsTab> {
           slivers: [
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
                       children: [
                         Text('Items', style: Theme.of(context).textTheme.headlineMedium),
                         const SizedBox(width: 10),
                         if (app.items.isNotEmpty)
                           Text(
                             '${app.items.length}',
-                            style: const TextStyle(color: Zv.muted, fontSize: 16),
+                            style: TextStyle(
+                              color: c.muted,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         const Spacer(),
                         if (app.syncing)
@@ -60,13 +71,20 @@ class _ItemsTabState extends State<ItemsTab> {
                           ),
                       ],
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 12),
                     TextField(
                       key: const Key('items-search'),
                       onChanged: (v) => setState(() => _query = v),
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         hintText: 'Search items',
-                        prefixIcon: Icon(Icons.search_rounded, color: Zv.muted),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                        border: pill,
+                        enabledBorder: pill,
+                        focusedBorder: pill.copyWith(
+                          borderSide: BorderSide(color: c.accent, width: 1.5),
+                        ),
                       ),
                     ),
                     if (app.syncError != null) ...[
@@ -91,12 +109,24 @@ class _ItemsTabState extends State<ItemsTab> {
                         body: 'Try a name, username or website.',
                       ),
               )
-            else
+            else if (items.isNotEmpty)
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
-                sliver: SliverList.builder(
-                  itemCount: items.length,
-                  itemBuilder: (context, i) => _ItemRow(items[i]),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                // One rounded card around the whole list, rows split by lines.
+                sliver: DecoratedSliver(
+                  decoration: ShapeDecoration(
+                    color: c.panel,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(Zv.radiusL),
+                      side: BorderSide(color: c.line),
+                    ),
+                  ),
+                  sliver: SliverList.separated(
+                    itemCount: items.length,
+                    separatorBuilder: (context, i) => const Divider(indent: 62),
+                    itemBuilder: (context, i) =>
+                        _ItemRow(items[i], first: i == 0, last: i == items.length - 1),
+                  ),
                 ),
               ),
           ],
@@ -107,52 +137,64 @@ class _ItemsTabState extends State<ItemsTab> {
 }
 
 class _ItemRow extends StatelessWidget {
-  const _ItemRow(this.item);
+  const _ItemRow(this.item, {required this.first, required this.last});
 
   final VaultItem item;
+  final bool first;
+  final bool last;
 
   @override
   Widget build(BuildContext context) {
+    final c = context.zv;
     final s = item.summary;
     final subtitle = s.username.isNotEmpty ? s.username : (s.url ?? item.vaultName);
-    return InkWell(
-      borderRadius: BorderRadius.circular(Zv.radiusM),
-      onTap: () =>
-          Navigator.of(context)
-              .push(MaterialPageRoute(builder: (_) => ItemDetailScreen(item: item))),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-        child: Row(
-          children: [
-            LetterTile(s.title),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    s.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 14, color: Zv.text2),
-                  ),
-                ],
+    const r = Radius.circular(Zv.radiusL);
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        customBorder: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: first ? r : Radius.zero,
+            bottom: last ? r : Radius.zero,
+          ),
+        ),
+        onTap: () =>
+            Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => ItemDetailScreen(item: item))),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 11, 8, 11),
+          child: Row(
+            children: [
+              LetterTile(s.title),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      s.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.ink),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 13, color: c.muted),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            if (s.hasTotp)
-              const Padding(
-                padding: EdgeInsets.only(left: 8),
-                child: Icon(Icons.timer_outlined, size: 18, color: Zv.irisText),
-              ),
-            const Icon(Icons.chevron_right_rounded, color: Zv.muted),
-          ],
+              if (s.hasTotp)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Icon(Icons.timer_outlined, size: 18, color: c.accent),
+                ),
+              Icon(Icons.chevron_right_rounded, color: c.muted),
+            ],
+          ),
         ),
       ),
     );

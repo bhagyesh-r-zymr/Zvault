@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'theme.dart';
 
-/// The Zvault mark: a Z on an iris tile.
+/// The Zvault mark: a Z on an accent tile.
 class BrandMark extends StatelessWidget {
   const BrandMark({super.key, this.size = 40, this.halo = false});
 
@@ -14,18 +14,14 @@ class BrandMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.zv;
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: Zv.iris,
+        color: c.accent,
         borderRadius: BorderRadius.circular(size * 0.29),
-        boxShadow: halo
-            ? const [
-                BoxShadow(color: Color(0xFF262C4A), spreadRadius: 9),
-                BoxShadow(color: Color(0xFF151A33), spreadRadius: 8),
-              ]
-            : null,
+        boxShadow: halo ? [BoxShadow(color: c.accentSoft, spreadRadius: 9)] : null,
       ),
       child: CustomPaint(painter: _ZPainter()),
     );
@@ -57,22 +53,28 @@ class _ZPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-const _tileColors = [
-  Color(0xFFE9EDF5),
+/// Brand-like tile colours, all readable under white. Null is the theme's navy.
+const _tileColors = <Color?>[
+  null,
   Color(0xFF635BFF),
-  Color(0xFFFF9900),
+  Color(0xFFF08C00),
   Color(0xFF4A154B),
-  Color(0xFF1E3B33),
-  Color(0xFF3A2A14),
-  Color(0xFF33203A),
+  Color(0xFFA259FF),
+  Color(0xFF336791),
+  Color(0xFF2F63D9),
+  Color(0xFFE0573F),
+  Color(0xFF0F8A6A),
 ];
 
 /// A letter tile for an item without an icon. The colour is stable per name.
 class LetterTile extends StatelessWidget {
-  const LetterTile(this.name, {super.key, this.size = 40});
+  const LetterTile(this.name, {super.key, this.size = 36, this.radius});
 
   final String name;
   final double size;
+
+  /// Corner radius. Defaults to 8 for list icons and rounder for big ones.
+  final double? radius;
 
   @override
   Widget build(BuildContext context) {
@@ -81,19 +83,23 @@ class LetterTile extends StatelessWidget {
     for (final c in name.codeUnits) {
       hash = (hash * 31 + c) & 0xFFFFFFFF;
     }
-    final bg = _tileColors[hash % _tileColors.length];
-    final light = bg == _tileColors[0] || bg == _tileColors[2];
+    final bg = _tileColors[hash % _tileColors.length] ?? context.zv.navy;
     return Container(
       width: size,
       height: size,
       alignment: Alignment.center,
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(size * 0.26)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(radius ?? (size >= 48 ? size * 0.28 : Zv.radiusS)),
+      ),
       child: Text(
         letter,
         style: TextStyle(
-          color: light ? Zv.bg : Colors.white,
-          fontWeight: FontWeight.w600,
-          fontSize: size * 0.42,
+          fontFamily: Zv.display,
+          color: Colors.white,
+          fontWeight: FontWeight.w800,
+          fontSize: size * 0.44,
+          height: 1,
         ),
       ),
     );
@@ -110,11 +116,12 @@ class SecretText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final base = Zv.monoStyle.copyWith(fontSize: size, height: 1.4);
+    final c = context.zv;
+    final base = Zv.monoStyle.copyWith(fontSize: size, height: 1.4, color: c.ink);
     if (masked) {
       return Text(
         '•' * value.length.clamp(12, 24),
-        style: base.copyWith(color: Zv.text2, letterSpacing: 1),
+        style: base.copyWith(color: c.muted, letterSpacing: 1),
         semanticsLabel: 'Hidden',
       );
     }
@@ -123,10 +130,10 @@ class SecretText extends StatelessWidget {
     final letter = RegExp(r'[\p{L}\s]', unicode: true);
     for (final ch in value.characters) {
       final color = digit.hasMatch(ch)
-          ? Zv.irisText
+          ? c.digits
           : letter.hasMatch(ch)
-          ? Zv.text
-          : Zv.attn;
+          ? c.ink
+          : c.symbols;
       spans.add(
         TextSpan(
           text: ch,
@@ -138,7 +145,7 @@ class SecretText extends StatelessWidget {
   }
 }
 
-/// A rounded panel, the Mac app's `.panel`.
+/// A rounded, bordered card that groups rows. Put dividers between the rows.
 class Panel extends StatelessWidget {
   const Panel({super.key, required this.child, this.padding = EdgeInsets.zero});
 
@@ -147,12 +154,13 @@ class Panel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.zv;
     // Material, not a decorated box, so row ink splashes show.
     return Material(
-      color: Zv.surface,
+      color: c.panel,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(Zv.radiusL),
-        side: const BorderSide(color: Zv.line),
+        side: BorderSide(color: c.line),
       ),
       clipBehavior: Clip.antiAlias,
       child: Padding(padding: padding, child: child),
@@ -160,6 +168,7 @@ class Panel extends StatelessWidget {
   }
 }
 
+/// A small bold heading above a card.
 class SectionLabel extends StatelessWidget {
   const SectionLabel(this.text, {super.key});
 
@@ -168,8 +177,51 @@ class SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-      child: Text(text.toUpperCase(), style: Theme.of(context).textTheme.labelSmall),
+      padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontFamily: Zv.display,
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+          color: context.zv.ink,
+        ),
+      ),
+    );
+  }
+}
+
+/// A coloured note with an icon: [ZvTone.ok], [ZvTone.attention] or [ZvTone.danger].
+enum ZvTone { ok, attention, danger }
+
+class Notice extends StatelessWidget {
+  const Notice({super.key, required this.tone, required this.text, this.icon});
+
+  final ZvTone tone;
+  final String text;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.zv;
+    final (fg, bg) = switch (tone) {
+      ZvTone.ok => (c.ok, c.okSoft),
+      ZvTone.attention => (c.attention, c.attentionSoft),
+      ZvTone.danger => (c.danger, c.dangerSoft),
+    };
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(Zv.radiusM)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (icon != null) ...[Icon(icon, size: 18, color: fg), const SizedBox(width: 10)],
+          Expanded(
+            child: Text(text, style: TextStyle(fontSize: 13.5, color: c.ink, height: 1.4)),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -204,15 +256,15 @@ class ErrorBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.zv;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Zv.dangerBg,
+        color: c.dangerSoft,
         borderRadius: BorderRadius.circular(Zv.radiusM),
-        border: Border.all(color: Zv.dangerLine),
       ),
-      child: Text(message, style: const TextStyle(color: Zv.danger, fontSize: 14)),
+      child: Text(message, style: TextStyle(color: c.danger, fontSize: 14)),
     );
   }
 }

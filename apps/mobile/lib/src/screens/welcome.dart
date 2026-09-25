@@ -42,7 +42,7 @@ class WelcomeScreen extends StatelessWidget {
               Text(
                 'Your passwords and project secrets,\nend-to-end encrypted.',
                 textAlign: TextAlign.center,
-                style: t.bodyLarge?.copyWith(color: Zv.text2),
+                style: t.bodyLarge?.copyWith(color: context.zv.muted),
               ),
               const Spacer(flex: 2),
               const _MacHint(),
@@ -73,33 +73,30 @@ class _MacHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.zv;
     Widget crumb(String s, {bool last = false}) => Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: last ? Zv.irisRing : Zv.raised,
+        color: last ? c.accentSoft : c.well,
         borderRadius: BorderRadius.circular(Zv.radiusS),
-        border: Border.all(color: last ? Zv.lineStrong : Zv.line),
+        border: Border.all(color: last ? c.accentSoft : c.line),
       ),
       child: Text(
         s,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-          color: last ? Zv.irisText : Zv.text,
-        ),
+        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: last ? c.accent : c.ink),
       ),
     );
-    const sep = Icon(Icons.chevron_right_rounded, size: 18, color: Zv.muted);
+    final sep = Icon(Icons.chevron_right_rounded, size: 18, color: c.muted);
     return Panel(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.laptop_mac_rounded, size: 18, color: Zv.text2),
-              SizedBox(width: 8),
-              Text('On your Mac, open', style: TextStyle(color: Zv.text2, fontSize: 14)),
+              Icon(Icons.laptop_mac_rounded, size: 18, color: c.muted),
+              const SizedBox(width: 8),
+              Text('On your Mac, open', style: TextStyle(color: c.muted, fontSize: 14)),
             ],
           ),
           const SizedBox(height: 12),
@@ -127,7 +124,6 @@ Future<String?> askForCode(BuildContext context) {
   return showModalBottomSheet<String>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: Zv.surface,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(Zv.radiusXl)),
     ),
@@ -150,7 +146,7 @@ Future<String?> askForCode(BuildContext context) {
             autofocus: true,
             minLines: 2,
             maxLines: 4,
-            style: Zv.monoStyle.copyWith(fontSize: 13),
+            style: Zv.monoStyle.copyWith(fontSize: 13, color: context.zv.ink),
             decoration: const InputDecoration(hintText: 'zvault://pair?…'),
           ),
           const SizedBox(height: 16),

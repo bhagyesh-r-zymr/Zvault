@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'src/app_state.dart';
@@ -19,9 +20,12 @@ Future<void> main() async {
 }
 
 class ZvaultApp extends StatefulWidget {
-  const ZvaultApp({super.key, required this.state});
+  const ZvaultApp({super.key, required this.state, this.themeMode = ThemeMode.system});
 
   final AppState state;
+
+  /// Follows the phone's light or dark setting unless set.
+  final ThemeMode themeMode;
 
   @override
   State<ZvaultApp> createState() => _ZvaultAppState();
@@ -52,7 +56,16 @@ class _ZvaultAppState extends State<ZvaultApp> {
       child: MaterialApp(
         title: 'Zvault',
         debugShowCheckedModeBanner: false,
-        theme: zvaultTheme(),
+        theme: zvaultTheme(ZvColors.light),
+        darkTheme: zvaultTheme(ZvColors.dark),
+        themeMode: widget.themeMode,
+        // Dark status bar icons on the light theme, light ones on the dark.
+        builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+          value: Theme.of(context).brightness == Brightness.dark
+              ? SystemUiOverlayStyle.light
+              : SystemUiOverlayStyle.dark,
+          child: child!,
+        ),
         home: const Root(),
       ),
     );

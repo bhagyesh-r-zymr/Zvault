@@ -37,7 +37,7 @@ export class WaitlistService {
     const [{ total } = { total: 0 }] = await this.db.select({ total: count() }).from(waitlist);
     // Don't make the visitor wait on (or learn from) the mail server.
     this.mailer
-      .send(waitlistJoinedEmail(owner, req, total))
+      .send(waitlistJoinedEmail(owner, req.email, total))
       .catch((e: unknown) => this.logger.error(`Could not send waitlist notice: ${String(e)}`));
   }
 }

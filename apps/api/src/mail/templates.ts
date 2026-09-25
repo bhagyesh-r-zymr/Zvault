@@ -89,34 +89,20 @@ export function orgInviteEmail(to: string, orgName: string, inviterEmail: string
   };
 }
 
-/** Tells the owner someone joined the waitlist. Name and note are whatever the visitor typed. */
-export function waitlistJoinedEmail(
-  to: string,
-  joiner: { name: string; email: string; note: string },
-  total: number,
-): MailMessage {
-  const note = joiner.note || '(none)';
+/** Tells the owner someone joined the waitlist. The email is whatever the visitor typed. */
+export function waitlistJoinedEmail(to: string, joinerEmail: string, total: number): MailMessage {
   return {
     to,
-    subject: `Zvault waitlist: ${joiner.name} joined (${total} total)`,
+    subject: `Zvault waitlist: ${joinerEmail} joined (${total} total)`,
     text: [
-      'Someone joined the Zvault waitlist from the landing page.',
-      '',
-      `Name: ${joiner.name}`,
-      `Email: ${joiner.email}`,
-      `Team or reason: ${note}`,
+      `${joinerEmail} joined the Zvault waitlist from the landing page.`,
       '',
       `There are ${total} people on the waitlist. Run deploy/ec2/waitlist.sh from your Mac to see them and let them receive Zvault email.`,
     ].join('\n'),
     html: `<!doctype html>
 <html><body style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#111;max-width:480px;margin:auto;padding:24px">
 <h2 style="margin-top:0">New waitlist sign-up</h2>
-<p>Someone joined the Zvault waitlist from the landing page.</p>
-<table style="border-collapse:collapse">
-<tr><td style="color:#666;padding:4px 12px 4px 0">Name</td><td>${escape(joiner.name)}</td></tr>
-<tr><td style="color:#666;padding:4px 12px 4px 0">Email</td><td>${escape(joiner.email)}</td></tr>
-<tr><td style="color:#666;padding:4px 12px 4px 0;vertical-align:top">Team or reason</td><td>${escape(note)}</td></tr>
-</table>
+<p><strong>${escape(joinerEmail)}</strong> joined the Zvault waitlist from the landing page.</p>
 <p>There are ${total} people on the waitlist. Run deploy/ec2/waitlist.sh from your Mac to see them and let them receive Zvault email.</p>
 </body></html>`,
   };

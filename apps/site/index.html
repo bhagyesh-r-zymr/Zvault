@@ -31,9 +31,9 @@
     <header class="nav">
       <a class="brand" href="#top"><span class="logo">Z</span>Zvault</a>
       <nav>
+        <a href="#problem">Why Zvault</a>
         <a href="#tour">Tour</a>
         <a href="#features">Features</a>
-        <a href="#how">How it works</a>
         <a href="#cli">CLI</a>
         <a href="#waitlist" class="btn btn-small">Join the waitlist</a>
       </nav>
@@ -86,6 +86,97 @@
               height="1000"
             />
           </figure>
+        </div>
+      </section>
+
+      <section id="problem" class="section">
+        <div class="section-head reveal">
+          <p class="eyebrow">The problem</p>
+          <h2>Secrets leak where they're shared.</h2>
+        </div>
+        <div class="versus">
+          <div class="side before reveal">
+            <span class="side-tag bad">Today</span>
+            <div
+              class="scatter"
+              aria-label="Secrets scattered across chat, files and agent configs"
+            >
+              <div class="leak l1">
+                <b>💬 #team-chat</b><span>prod db pass: <mark>Pg!9xK2…</mark></span>
+              </div>
+              <div class="leak l2">
+                <b>📄 ~/.aws/credentials</b><span>aws_secret_access_key = <mark>wJalr…</mark></span>
+              </div>
+              <div class="leak l3">
+                <b>📄 .env</b><span>STRIPE_KEY=<mark>sk_live_51H…</mark></span>
+              </div>
+              <div class="leak l4">
+                <b>🤖 agent config</b><span>JIRA_TOKEN: <mark>ATATT3x…</mark></span>
+              </div>
+            </div>
+            <p>Plain text in chats, dotfiles and agent configs.</p>
+          </div>
+          <div class="side after reveal">
+            <span class="side-tag good">With Zvault</span>
+            <div class="hub" aria-label="One encrypted vault shared with people and agents">
+              <svg class="hub-lines" viewBox="0 0 300 220" aria-hidden="true">
+                <path d="M150 110 L50 40" />
+                <path d="M150 110 L250 40" />
+                <path d="M150 110 L50 180" />
+                <path d="M150 110 L250 180" />
+              </svg>
+              <span class="hub-core"><span class="logo">Z</span></span>
+              <span class="node n1">👩‍💻<i>Team</i></span>
+              <span class="node n2">🤖<i>Agents</i></span>
+              <span class="node n3">🧪<i>QA</i></span>
+              <span class="node n4">✉️<i>Guests</i></span>
+            </div>
+            <p>One encrypted vault. Everyone gets only what they need.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="agents" class="section">
+        <div class="section-head reveal">
+          <p class="eyebrow">AI agents</p>
+          <h2>Let agents use your keys, without ever holding them.</h2>
+        </div>
+        <div class="agentflow reveal" id="agentflow">
+          <div class="tools" role="tablist" aria-label="Pick a tool">
+            <button type="button" aria-selected="true" data-tool="aws">AWS CLI</button>
+            <button type="button" aria-selected="false" data-tool="azure">Azure CLI</button>
+            <button type="button" aria-selected="false" data-tool="stripe">Stripe</button>
+            <button type="button" aria-selected="false" data-tool="jira">Jira</button>
+            <button type="button" aria-selected="false" data-tool="gh">GitHub</button>
+          </div>
+          <div class="lane">
+            <div class="step s-ask">
+              <span class="step-ico">🤖</span>
+              <b>Agent</b>
+              <span class="bubble" id="af-ask">"Check CloudWatch for errors"</span>
+            </div>
+            <div class="pipe"><i></i></div>
+            <div class="step s-vault">
+              <span class="step-ico"><span class="logo">Z</span></span>
+              <b>Zvault</b>
+              <span class="bubble approve"
+                ><span class="fp">👆</span> Approve
+                <em id="af-secret">AWS_SECRET_ACCESS_KEY</em>?</span
+              >
+            </div>
+            <div class="pipe"><i></i></div>
+            <div class="step s-run">
+              <span class="step-ico" id="af-icon">☁️</span>
+              <b id="af-target">CloudWatch</b>
+              <span class="bubble ok">✓ <span id="af-result">12 errors found</span></span>
+            </div>
+          </div>
+          <pre
+            class="af-cmd"
+          ><span class="p">$</span> <span id="af-cmd">zv run --env AWS_SECRET_ACCESS_KEY=zv://infra/prod/aws/AWS_SECRET_ACCESS_KEY -- aws logs tail /ecs/api --since 1h</span></pre>
+          <p class="af-note">
+            The key goes into the command, not the agent's memory. Output is masked.
+          </p>
         </div>
       </section>
 
@@ -352,6 +443,44 @@
             <h3>AI agents</h3>
             <p>They ask. You approve.</p>
           </article>
+        </div>
+      </section>
+
+      <section id="email-share" class="section">
+        <div class="section-head reveal">
+          <p class="eyebrow">Sharing <span class="soon">Coming soon</span></p>
+          <h2>Share with anyone. No account needed.</h2>
+        </div>
+        <div class="emailflow reveal">
+          <div class="ef-card">
+            <span class="ef-num">1</span>
+            <div class="ef-viz ef-mail">
+              <span class="env"><span class="flap"></span>✉️</span>
+              <span class="to">to: priya@acme.com</span>
+            </div>
+            <h3>Share to an email</h3>
+          </div>
+          <div class="ef-card">
+            <span class="ef-num">2</span>
+            <div class="ef-viz ef-otp">
+              <span class="ef-field">priya@acme.com</span>
+              <span class="ef-code"><i>4</i><i>8</i><i>1</i><i>9</i><i>0</i><i>2</i></span>
+            </div>
+            <h3>Verify with a code</h3>
+          </div>
+          <div class="ef-card">
+            <span class="ef-num">3</span>
+            <div class="ef-viz ef-open">
+              <span class="ef-row"
+                ><b>Jira</b
+                ><span class="ef-secret"
+                  ><span class="ef-dots">••••••••••</span
+                  ><span class="ef-pw">Tq7#vm42Lx</span></span
+                ></span
+              >
+            </div>
+            <h3>See the credential</h3>
+          </div>
         </div>
       </section>
 

@@ -8,6 +8,7 @@
 
 import 'api/pairing.dart';
 import 'api/session.dart';
+import 'api/sharing.dart';
 import 'api/vault.dart';
 
 import 'dart:async';
@@ -56,6 +57,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  NewShareLink dco_decode_new_share_link(dynamic raw);
+
+  @protected
+  NewUserShare dco_decode_new_user_share(dynamic raw);
+
+  @protected
   OneTimeCode dco_decode_one_time_code(dynamic raw);
 
   @protected
@@ -69,6 +76,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ScannedCode dco_decode_scanned_code(dynamic raw);
+
+  @protected
+  SharingIdentity dco_decode_sharing_identity(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
@@ -115,6 +125,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  NewShareLink sse_decode_new_share_link(SseDeserializer deserializer);
+
+  @protected
+  NewUserShare sse_decode_new_user_share(SseDeserializer deserializer);
+
+  @protected
   OneTimeCode sse_decode_one_time_code(SseDeserializer deserializer);
 
   @protected
@@ -130,6 +146,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ScannedCode sse_decode_scanned_code(SseDeserializer deserializer);
+
+  @protected
+  SharingIdentity sse_decode_sharing_identity(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -189,6 +208,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_new_share_link(NewShareLink self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_new_user_share(NewUserShare self, SseSerializer serializer);
+
+  @protected
   void sse_encode_one_time_code(OneTimeCode self, SseSerializer serializer);
 
   @protected
@@ -205,6 +230,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_scanned_code(ScannedCode self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_sharing_identity(
+    SharingIdentity self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);

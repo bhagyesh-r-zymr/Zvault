@@ -5,6 +5,7 @@
 
 import 'api/pairing.dart';
 import 'api/session.dart';
+import 'api/sharing.dart';
 import 'api/vault.dart';
 
 import 'dart:async';
@@ -71,7 +72,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -694301718;
+  int get rustContentHash => 618273093;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -137,6 +138,22 @@ abstract class RustLibApi extends BaseApi {
     required String environmentId,
     required String blobJson,
   });
+
+  Future<NewShareLink> crateApiSharingShareLinkCreate({
+    required String vaultId,
+    required String recordJson,
+    required String shareOrigin,
+  });
+
+  Future<NewUserShare> crateApiSharingShareSealTo({
+    required String vaultId,
+    required String recordJson,
+    required String recipientPublicKey,
+  });
+
+  Future<String> crateApiSharingSharingFingerprint({required String publicKey});
+
+  Future<SharingIdentity> crateApiSharingSharingIdentity();
 
   Future<void> crateApiSessionUnlock({
     required String email,
@@ -545,6 +562,139 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<NewShareLink> crateApiSharingShareLinkCreate({
+    required String vaultId,
+    required String recordJson,
+    required String shareOrigin,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(vaultId, serializer);
+          sse_encode_String(recordJson, serializer);
+          sse_encode_String(shareOrigin, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 13,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_new_share_link,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiSharingShareLinkCreateConstMeta,
+        argValues: [vaultId, recordJson, shareOrigin],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSharingShareLinkCreateConstMeta =>
+      const TaskConstMeta(
+        debugName: "share_link_create",
+        argNames: ["vaultId", "recordJson", "shareOrigin"],
+      );
+
+  @override
+  Future<NewUserShare> crateApiSharingShareSealTo({
+    required String vaultId,
+    required String recordJson,
+    required String recipientPublicKey,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(vaultId, serializer);
+          sse_encode_String(recordJson, serializer);
+          sse_encode_String(recipientPublicKey, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 14,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_new_user_share,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiSharingShareSealToConstMeta,
+        argValues: [vaultId, recordJson, recipientPublicKey],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSharingShareSealToConstMeta => const TaskConstMeta(
+    debugName: "share_seal_to",
+    argNames: ["vaultId", "recordJson", "recipientPublicKey"],
+  );
+
+  @override
+  Future<String> crateApiSharingSharingFingerprint({
+    required String publicKey,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(publicKey, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 15,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiSharingSharingFingerprintConstMeta,
+        argValues: [publicKey],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSharingSharingFingerprintConstMeta =>
+      const TaskConstMeta(
+        debugName: "sharing_fingerprint",
+        argNames: ["publicKey"],
+      );
+
+  @override
+  Future<SharingIdentity> crateApiSharingSharingIdentity() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 16,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_sharing_identity,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiSharingSharingIdentityConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSharingSharingIdentityConstMeta =>
+      const TaskConstMeta(debugName: "sharing_identity", argNames: []);
+
+  @override
   Future<void> crateApiSessionUnlock({
     required String email,
     required String keyset,
@@ -558,7 +708,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 17,
             port: port_,
           );
         },
@@ -582,7 +732,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 14)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 18)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_opt_String,
@@ -608,7 +758,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 19,
             port: port_,
           );
         },
@@ -711,6 +861,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  NewShareLink dco_decode_new_share_link(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return NewShareLink(
+      id: dco_decode_String(arr[0]),
+      verifier: dco_decode_String(arr[1]),
+      blobJson: dco_decode_String(arr[2]),
+      url: dco_decode_String(arr[3]),
+    );
+  }
+
+  @protected
+  NewUserShare dco_decode_new_user_share(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return NewUserShare(
+      id: dco_decode_String(arr[0]),
+      senderPublicKey: dco_decode_String(arr[1]),
+      ephemeralPublicKey: dco_decode_String(arr[2]),
+      blobJson: dco_decode_String(arr[3]),
+    );
+  }
+
+  @protected
   OneTimeCode dco_decode_one_time_code(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -759,6 +937,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       claimToken: dco_decode_String(arr[2]),
       publicKey: dco_decode_String(arr[3]),
       code: dco_decode_String(arr[4]),
+    );
+  }
+
+  @protected
+  SharingIdentity dco_decode_sharing_identity(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return SharingIdentity(
+      publicKey: dco_decode_String(arr[0]),
+      fingerprint: dco_decode_String(arr[1]),
     );
   }
 
@@ -888,6 +1078,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  NewShareLink sse_decode_new_share_link(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_verifier = sse_decode_String(deserializer);
+    var var_blobJson = sse_decode_String(deserializer);
+    var var_url = sse_decode_String(deserializer);
+    return NewShareLink(
+      id: var_id,
+      verifier: var_verifier,
+      blobJson: var_blobJson,
+      url: var_url,
+    );
+  }
+
+  @protected
+  NewUserShare sse_decode_new_user_share(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_senderPublicKey = sse_decode_String(deserializer);
+    var var_ephemeralPublicKey = sse_decode_String(deserializer);
+    var var_blobJson = sse_decode_String(deserializer);
+    return NewUserShare(
+      id: var_id,
+      senderPublicKey: var_senderPublicKey,
+      ephemeralPublicKey: var_ephemeralPublicKey,
+      blobJson: var_blobJson,
+    );
+  }
+
+  @protected
   OneTimeCode sse_decode_one_time_code(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_code = sse_decode_String(deserializer);
@@ -946,6 +1166,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       claimToken: var_claimToken,
       publicKey: var_publicKey,
       code: var_code,
+    );
+  }
+
+  @protected
+  SharingIdentity sse_decode_sharing_identity(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_publicKey = sse_decode_String(deserializer);
+    var var_fingerprint = sse_decode_String(deserializer);
+    return SharingIdentity(
+      publicKey: var_publicKey,
+      fingerprint: var_fingerprint,
     );
   }
 
@@ -1066,6 +1297,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_new_share_link(NewShareLink self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.verifier, serializer);
+    sse_encode_String(self.blobJson, serializer);
+    sse_encode_String(self.url, serializer);
+  }
+
+  @protected
+  void sse_encode_new_user_share(NewUserShare self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.senderPublicKey, serializer);
+    sse_encode_String(self.ephemeralPublicKey, serializer);
+    sse_encode_String(self.blobJson, serializer);
+  }
+
+  @protected
   void sse_encode_one_time_code(OneTimeCode self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.code, serializer);
@@ -1111,6 +1360,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.claimToken, serializer);
     sse_encode_String(self.publicKey, serializer);
     sse_encode_String(self.code, serializer);
+  }
+
+  @protected
+  void sse_encode_sharing_identity(
+    SharingIdentity self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.publicKey, serializer);
+    sse_encode_String(self.fingerprint, serializer);
   }
 
   @protected

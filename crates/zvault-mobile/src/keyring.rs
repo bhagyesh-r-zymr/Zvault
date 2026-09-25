@@ -128,6 +128,11 @@ impl Keyring {
         self.account.as_ref().map(|a| a.email.as_str())
     }
 
+    /// The account's sharing key pair, the same one the Mac derives.
+    pub fn sharing_key_pair(&self) -> Result<SharingKeyPair> {
+        Ok(SharingKeyPair::derive_from_keyset(self.keyset()?))
+    }
+
     fn keyset(&self) -> Result<&SymmetricKey> {
         self.account
             .as_ref()

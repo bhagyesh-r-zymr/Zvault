@@ -182,4 +182,25 @@ class ZvaultApi {
     return await _call('GET', '/access/projects/${Uri.encodeComponent(projectId)}/keys/me')
         as Map<String, dynamic>;
   }
+
+  // Sharing. Bodies carry ciphertext, verifiers and public keys only; a link's
+  // key stays in its URL on this phone.
+
+  /// Registers a link (`CreateShareLinkRequest`). Returns the allowed emails
+  /// that may not get the code while Zvault email is in test mode.
+  Future<List<String>> createShareLink(Map<String, Object> body) async {
+    final json = await _call('POST', '/shares/links', body);
+    return ((json as Map)['unverifiedEmails'] as List? ?? const []).cast<String>();
+  }
+
+  /// Someone's published sharing key (`SharingKeyResponse`).
+  Future<({String email, String publicKey})> sharingKey(String email) async {
+    final json = await _call('GET', '/shares/keys?email=${Uri.encodeQueryComponent(email)}');
+    return (email: json['email'] as String, publicKey: json['publicKey'] as String);
+  }
+
+  Future<void> publishSharingKey(String publicKey) =>
+      _call('PUT', '/shares/keys/me', {'publicKey': publicKey});
+
+  Future<void> shareWithUser(Map<String, Object> body) => _call('POST', '/shares/users', body);
 }

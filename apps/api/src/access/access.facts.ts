@@ -18,7 +18,6 @@ import {
 import { allLevels, effectiveLevel, holderKey, type GrantFacts, type OrgFacts } from './levels.js';
 
 export type EnvironmentRow = typeof environmentAccess.$inferSelect;
-export type MemberRow = typeof orgMembers.$inferSelect;
 
 /** A member or agent: the principals with keys of their own. */
 export interface KeyHolder {

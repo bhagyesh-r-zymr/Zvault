@@ -20,12 +20,6 @@ export interface LockSettings {
   stayUnlocked: boolean;
 }
 
-/** Must match the ranges in `session.rs`. */
-export const LOCK_LIMITS = {
-  idleTimeoutMins: { min: 0, max: 1440 },
-  clipboardClearSecs: { min: 10, max: 300 },
-} as const;
-
 export interface LockStatus {
   locked: boolean;
   accountId: string | null;

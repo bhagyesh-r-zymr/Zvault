@@ -29,10 +29,10 @@ import {
   type UserShareList,
 } from '@zvault/shared';
 import { z } from 'zod';
+import { ZodPipe } from '../common/zod.pipe.js';
 import { CurrentUser, RequireUser, type SharingUser } from './auth.js';
 import { ShareLinksService } from './share-links.service.js';
 import { UserSharesService } from './user-shares.service.js';
-import { ZodPipe } from './zod.pipe.js';
 
 const IdParam = new ZodPipe(ShareId);
 const EmailQuery = new ZodPipe(z.email().max(254));

@@ -249,29 +249,28 @@ export function AppShell(props: {
                 </button>
                 {open && (
                   <div className="nav-tree">
-                    {p.environments.map((env) => (
-                      <button
-                        key={env.id}
-                        type="button"
-                        className="nav-item sub"
-                        aria-current={
-                          route.name === 'project' &&
-                          route.projectId === p.id &&
-                          route.envId === env.id
-                            ? 'page'
-                            : undefined
-                        }
-                        onClick={() =>
-                          setRoute({ name: 'project', projectId: p.id, envId: env.id })
-                        }
-                      >
-                        <span className="dot" style={{ background: env.color }} />
-                        <span className="label">{env.name}</span>
-                        {env.locked && (
-                          <Icon name="lock" size={12} className="muted" aria-label="No access" />
-                        )}
-                      </button>
-                    ))}
+                    <button
+                      type="button"
+                      className="nav-item sub"
+                      aria-current={
+                        route.name === 'project' && route.projectId === p.id ? 'page' : undefined
+                      }
+                      onClick={() => {
+                        // Stay on the environment already open in this project.
+                        const env =
+                          route.name === 'project' && route.projectId === p.id
+                            ? route.envId
+                            : p.environments[0]?.id;
+                        setRoute(
+                          env
+                            ? { name: 'project', projectId: p.id, envId: env }
+                            : { name: 'environments', projectId: p.id },
+                        );
+                      }}
+                    >
+                      <Icon name="key" size={13} />
+                      <span className="label">Secrets</span>
+                    </button>
                     <button
                       type="button"
                       className="nav-item sub"
@@ -329,7 +328,10 @@ export function AppShell(props: {
         </nav>
 
         <main className="main">
-          <ErrorBoundary key={JSON.stringify(route)}>
+          {/* Switching environments keeps the open secret and list filter. */}
+          <ErrorBoundary
+            key={route.name === 'project' ? `project:${route.projectId}` : JSON.stringify(route)}
+          >
             {route.name === 'vault' && <VaultScreen api={vaultApi} sharing={sharing} />}
             {route.name === 'project' && (
               <TeamContext.Provider value={team}>

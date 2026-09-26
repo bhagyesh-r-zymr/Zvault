@@ -20,6 +20,7 @@ import {
   recipientsFor,
   releaseItems,
   rotationNeeded,
+  secretAccess,
   whoCanUse,
 } from './teamModel.js';
 
@@ -191,6 +192,14 @@ describe('access helpers', () => {
     expect(whoCanUse(rows, PROD!).map((u) => [u.name, u.level])).toEqual([
       ['me@acme.dev', 'manage'],
       ['Backend', 'needs_approval'],
+    ]);
+  });
+
+  it('lists everyone who reaches a secret, with their level where it is viewed', () => {
+    expect(secretAccess(rows, PROD!).map((u) => [u.name, u.level, u.envIds.length])).toEqual([
+      ['me@acme.dev', 'manage', 2],
+      ['Backend', 'needs_approval', 2],
+      ['riya@acme.dev', 'none', 1],
     ]);
   });
 

@@ -96,6 +96,7 @@ export function Sheet({
   onClose,
   children,
   width,
+  popover = false,
 }: {
   title: string;
   subtitle?: ReactNode;
@@ -103,6 +104,8 @@ export function Sheet({
   onClose: () => void;
   children: ReactNode;
   width?: number;
+  /** Float at the top right, under the toolbar, without dimming the window. */
+  popover?: boolean;
 }) {
   const titleId = useId();
   const ref = useRef<HTMLDivElement>(null);
@@ -129,14 +132,14 @@ export function Sheet({
 
   return (
     <div
-      className="sheet-backdrop"
+      className={popover ? 'sheet-backdrop popover' : 'sheet-backdrop'}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         ref={ref}
-        className="sheet"
+        className={popover ? 'sheet popover' : 'sheet'}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

@@ -258,6 +258,52 @@ export function whoCanUse(rows: MatrixRow[], envId: string): EnvUser[] {
     .sort((a, b) => rank[a.level] - rank[b.level] || a.name.localeCompare(b.name));
 }
 
+export interface SecretUser extends EnvUser {
+  /** Their grant here; `none` when they only reach other environments. */
+  level: AccessLevel;
+  detail: string;
+  /** Environments where they hold anything above "No access". */
+  envIds: string[];
+}
+
+/**
+ * Everyone who can reach a project's secrets, for the secret screen: their
+ * level in the environment being viewed, strongest first, and the other
+ * environments they can use.
+ */
+export function secretAccess(rows: MatrixRow[], envId: string): SecretUser[] {
+  const rank: Record<AccessLevel, number> = {
+    manage: 0,
+    edit: 1,
+    use: 2,
+    needs_approval: 3,
+    none: 4,
+  };
+  return rows
+    .flatMap((r) => {
+      const envIds = r.cells.filter((c) => c.level !== 'none').map((c) => c.environmentId);
+      if (envIds.length === 0) return [];
+      const level = r.cells.find((c) => c.environmentId === envId)?.level ?? 'none';
+      return [
+        {
+          key: r.key,
+          type: r.principal.type,
+          name: r.name,
+          detail: r.detail,
+          you: r.you,
+          level,
+          envIds,
+        },
+      ];
+    })
+    .sort(
+      (a, b) =>
+        rank[a.level] - rank[b.level] ||
+        Number(b.you) - Number(a.you) ||
+        a.name.localeCompare(b.name),
+    );
+}
+
 /** Whether the signed-in account can change grants in an environment. */
 export function canManageEnv(org: OrgDetail | null, env: EnvironmentAccess | undefined): boolean {
   if (org && (org.role === 'owner' || org.role === 'admin')) return true;

@@ -38,9 +38,6 @@ export type OrgRole = z.infer<typeof OrgRole>;
 export const AccessLevel = z.enum(['manage', 'edit', 'use', 'needs_approval', 'none']);
 export type AccessLevel = z.infer<typeof AccessLevel>;
 
-/** Levels that get a standing copy of the environment key (members only). */
-export const KEY_HOLDING_LEVELS = ['manage', 'edit', 'use'] as const satisfies AccessLevel[];
-
 const RANK: Record<AccessLevel, number> = {
   none: 0,
   needs_approval: 1,

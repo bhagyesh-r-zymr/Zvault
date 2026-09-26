@@ -53,15 +53,6 @@ export function ProjectTile({
   );
 }
 
-export function PreviewNote({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="preview-note">
-      <strong>Preview</strong>
-      <span>{children}</span>
-    </p>
-  );
-}
-
 /**
  * One project's secrets. The list can be narrowed to one environment; the
  * open secret shows its value in `envId` and who can use it.

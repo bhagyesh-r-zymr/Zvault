@@ -417,7 +417,6 @@ if (af) {
 const pair = document.getElementById('pair');
 const phoneImgs = [...document.querySelectorAll('.phone-screen img')];
 if (pair && phoneImgs.length) {
-  const stepFor = [0, 1, 2, 2, 2, 2, 2, 2];
   const pairSteps = [...pair.querySelectorAll('.pair-steps li')];
   let shot = 0;
   let phoneVisible = false;
@@ -426,7 +425,7 @@ if (pair && phoneImgs.length) {
       img.classList.toggle('show', i === shot);
       img.classList.toggle('gone', i < shot);
     });
-    const at = stepFor[shot];
+    const at = Math.min(shot, 2);
     pair.dataset.at = String(at);
     pairSteps.forEach((li, i) => li.classList.toggle('on', i === at));
   };

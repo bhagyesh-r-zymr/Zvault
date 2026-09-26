@@ -1,0 +1,104 @@
+/*
+ * "Frosted window": Porcelain under glass. On macOS the window is
+ * transparent and the system blurs the desktop behind it (under-window
+ * vibrancy, see tauri.conf.json); everything here is a light tint over that
+ * blur. Elsewhere (browser previews, Linux) `html[data-glass='painted']`
+ * paints a soft denim and coral field so the same tints still read as glass.
+ * Loaded after theme.css and layout.css, so these tokens win.
+ */
+
+:root {
+  --glass-tint: rgb(244 247 252 / 55%);
+  --glass-pane: rgb(255 255 255 / 22%);
+  --glass-rim: rgb(255 255 255 / 85%);
+  --glass-shadow: 0 1px 2px rgb(16 32 74 / 5%), 0 10px 26px -14px rgb(16 32 74 / 22%);
+  --glass-sheet: rgb(250 251 254 / 90%);
+  --glass-blur: blur(30px) saturate(170%);
+  --glass-field:
+    radial-gradient(1200px 700px at 88% -10%, #9fbaf2 0%, transparent 60%),
+    radial-gradient(900px 600px at -5% 105%, #f2b9a6 0%, transparent 60%),
+    radial-gradient(900px 500px at 60% 110%, #f3e3cf 0%, transparent 70%),
+    linear-gradient(160deg, #c9d8f5 0%, #eef1f8 45%, #f4dcd2 100%);
+
+  --bg: transparent;
+  --bg-sidebar: rgb(255 255 255 / 12%);
+  --toolbar: transparent;
+  --surface: rgb(255 255 255 / 64%);
+  --bg-sunken: rgb(255 255 255 / 50%);
+  --raised: rgb(16 32 74 / 6%);
+  --hover: rgb(255 255 255 / 45%);
+  --line: rgb(16 32 74 / 9%);
+  --line-soft: rgb(16 32 74 / 6%);
+  --sidebar-selected: rgb(47 99 217 / 15%);
+  --sidebar-hover: rgb(255 255 255 / 40%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --glass-tint: rgb(14 20 40 / 62%);
+    --glass-pane: rgb(255 255 255 / 2%);
+    --glass-rim: rgb(255 255 255 / 10%);
+    --glass-shadow: 0 12px 30px -16px rgb(0 0 0 / 60%);
+    --glass-sheet: rgb(26 34 60 / 94%);
+    --glass-field:
+      radial-gradient(1200px 700px at 88% -10%, #22377a 0%, transparent 60%),
+      radial-gradient(900px 600px at -5% 105%, #5a2a3e 0%, transparent 60%),
+      linear-gradient(160deg, #0b1330 0%, #121a3a 55%, #1d1634 100%);
+
+    --bg-sidebar: rgb(255 255 255 / 2%);
+    --surface: rgb(255 255 255 / 6%);
+    --bg-sunken: rgb(255 255 255 / 5%);
+    --raised: rgb(255 255 255 / 7%);
+    --hover: rgb(255 255 255 / 6%);
+    --line: rgb(255 255 255 / 8%);
+    --line-soft: rgb(255 255 255 / 5%);
+    --sidebar-selected: rgb(126 166 255 / 20%);
+    --sidebar-hover: rgb(255 255 255 / 5%);
+  }
+}
+
+html[data-glass='native'] {
+  background: transparent;
+}
+
+html[data-glass='painted'] {
+  background: var(--glass-field) fixed;
+}
+
+body {
+  background: var(--glass-tint);
+}
+
+/* Milk-glass cards: a white rim on top of the hairline and a soft lift. */
+.panel,
+.choice,
+.auth-card {
+  border-color: var(--glass-rim);
+  box-shadow: var(--glass-shadow);
+}
+
+.list-pane {
+  background: var(--glass-pane);
+}
+
+/* Sheets and popovers float above glass, so they blur what is under them. */
+.sheet {
+  background: var(--glass-sheet);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim),
+    var(--shadow-sheet);
+}
+
+.sheet-backdrop.popover {
+  background: transparent;
+  justify-content: flex-end;
+  padding: 52px 18px 18px;
+}
+
+.sheet.popover {
+  width: min(420px, 100%);
+  padding: 18px;
+  gap: 12px;
+}

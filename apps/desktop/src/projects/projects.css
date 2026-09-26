@@ -209,3 +209,202 @@
   font-size: 12px;
   text-align: right;
 }
+
+/* ---------- Secret screen: credential first ---------- */
+
+.list-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.list-title h2 {
+  font-size: 17px;
+}
+
+.env-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.env-filter .chip {
+  padding: 0 7px;
+  color: var(--text-2);
+  border-color: var(--line);
+  font-weight: 500;
+}
+
+.env-filter .chip[aria-pressed='true'] {
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--shadow-seg);
+  font-weight: 600;
+}
+
+.dot.hollow {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.4px currentColor;
+  opacity: 0.55;
+}
+
+.coverage {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.list-item[aria-current='true'] .dot.hollow {
+  color: var(--on-accent-2) !important;
+}
+
+.bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.env-switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.env-switch .seg {
+  display: inline-grid;
+}
+
+.env-switch .seg > button {
+  gap: 6px;
+  height: 24px;
+}
+
+.env-switch .seg > button[data-unset] {
+  color: var(--muted);
+}
+
+.value-card {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.value-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.value-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+
+.value-text .secret {
+  font-size: 20px;
+}
+
+.value-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.access-card {
+  padding: 14px 18px 8px;
+}
+
+.access-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 6px;
+}
+
+.access-head h3 {
+  font-size: 15px;
+}
+
+.access-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.access-row .avatar {
+  width: 30px;
+  height: 30px;
+  font-size: 12px;
+}
+
+.access-row .avatar[data-type='group'] {
+  background: var(--secure-bg);
+  color: var(--secure);
+}
+
+.access-row .avatar[data-type='agent'] {
+  background: var(--violet-bg);
+  color: var(--violet);
+}
+
+.access-row .row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.env-scope {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.env-scope .chip {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.access-row .level {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  flex-shrink: 0;
+}
+
+.command-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 14px;
+  border-radius: 999px;
+  background: var(--raised);
+  font-size: 12px;
+}
+
+.command-pill .mono {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-2);
+}
+
+.share-envs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.share-envs .row-label {
+  margin-right: 4px;
+}

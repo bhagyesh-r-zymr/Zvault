@@ -24,6 +24,7 @@ import {
   type UpdateProjectRequest,
 } from '@zvault/shared';
 import { ProjectPolicy } from '../access/project-policy.js';
+import { ActivityLog, type ActivityRecord } from '../activity/activity.log.js';
 import type { AuthenticatedUser } from '../vault/current-user.js';
 import { purgeAt, trashCutoff } from '../vault/vault.service.js';
 import {
@@ -50,6 +51,7 @@ export class ProjectsService {
   constructor(
     private readonly store: ProjectsStore,
     private readonly policy: ProjectPolicy,
+    private readonly activity: ActivityLog,
   ) {}
 
   async list(user: AuthenticatedUser): Promise<ProjectRecord[]> {
@@ -101,6 +103,11 @@ export class ProjectsService {
     ) {
       throw new ConflictException({ error: 'conflict', current: await this.get(user, projectId) });
     }
+    await this.activity.record({
+      projectId,
+      action: 'project.updated',
+      actor: { type: 'account', id: user.id },
+    });
     return this.get(user, projectId);
   }
 
@@ -237,6 +244,15 @@ export class ProjectsService {
     await this.policy.assertSecretWrite(projectId, user.id, []);
     const purged = await this.store.purgeTrash(projectId, secretId, new Date());
     if (secretId !== null && purged === 0) throw new NotFoundException();
+    if (purged > 0) {
+      await this.activity.record({
+        projectId,
+        action: 'secret.purged',
+        actor: { type: 'account', id: user.id },
+        targetId: secretId,
+        detail: { items: purged },
+      });
+    }
   }
 
   private async write(
@@ -249,7 +265,10 @@ export class ProjectsService {
       viewer: user.id,
       now: new Date(),
     });
-    if (result.ok) return result.entry;
+    if (result.ok) {
+      await this.activity.record(...writeEvents(user, w));
+      return result.entry;
+    }
     switch (result.reason) {
       case 'conflict': {
         const body: EntryConflictResponse = { error: 'conflict', current: result.current };
@@ -282,6 +301,24 @@ export class ProjectsService {
   ): Promise<void> {
     await this.policy.assertStructure(projectId, user.id, access.ownerId);
   }
+}
+
+/** One event per environment whose value a secret write changed. */
+function writeEvents(
+  user: AuthenticatedUser,
+  w: Pick<EntryWrite, 'projectId' | 'id' | 'type' | 'baseRevision' | 'encryptedMeta' | 'values'>,
+): ActivityRecord[] {
+  const verb = w.encryptedMeta === null ? 'deleted' : w.baseRevision === 0 ? 'created' : 'updated';
+  const base = {
+    projectId: w.projectId,
+    action: `${w.type}.${verb}` as const,
+    actor: { type: 'account' as const, id: user.id },
+    targetId: w.id,
+  };
+  if (w.type === 'environment') return [{ ...base, environmentId: w.id }];
+  const envIds = w.type === 'secret' && w.values ? Object.keys(w.values) : [];
+  if (envIds.length === 0) return [base];
+  return envIds.map((environmentId) => ({ ...base, environmentId }));
 }
 
 function toRecord({ row, wrappedKey }: StoredProject, user: AuthenticatedUser): ProjectRecord {

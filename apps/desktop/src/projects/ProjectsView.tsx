@@ -4,7 +4,13 @@ import type { SharingApi } from '../sharing/api.js';
 import { ShareItem } from '../sharing/ShareItem.js';
 import { CopyButton, ErrorLine, SecretText, Sheet } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
-import { useProjects, useProjectsSync, useProjectTeam, useTeamStore } from './context.js';
+import {
+  useActivityReporter,
+  useProjects,
+  useProjectsSync,
+  useProjectTeam,
+  useTeamStore,
+} from './context.js';
 import {
   secretRef,
   valueSource,
@@ -60,6 +66,8 @@ export function ProjectTile({
 export function ProjectsView(props: {
   projectId: string;
   envId: string;
+  /** The secret to open first. */
+  secretId?: string;
   onEnvChange: (envId: string) => void;
   onOpenProject: (projectId: string, envId: string) => void;
   onOpenAccess: () => void;
@@ -71,7 +79,7 @@ export function ProjectsView(props: {
   const project = projects.find((p) => p.id === props.projectId);
   const env = project?.environments.find((e) => e.id === props.envId) ?? project?.environments[0];
 
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(props.secretId ?? null);
   // `null` lists every secret in the project.
   const [only, setOnly] = useState<string | null>(null);
   const [tags, setTags] = useState<string[]>([]);
@@ -341,6 +349,7 @@ function SecretDetail(props: {
 }) {
   const { project, env, secret, sharing } = props;
   const sync = useProjectsSync();
+  const activity = useActivityReporter();
   const [revealed, setRevealed] = useState<string | null>(null);
   const [share, setShare] = useState<{ envId: string; payload: SharedItemPayload } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -362,6 +371,7 @@ function SecretDetail(props: {
     setError(null);
     try {
       setRevealed(await open());
+      activity?.viewed(project.id, secret.id, env.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'This value could not be decrypted.');
     }
@@ -515,7 +525,14 @@ function SecretDetail(props: {
                   <Icon name={revealed !== null ? 'eyeOff' : 'eye'} size={13} />
                   {revealed !== null ? 'Hide' : 'Reveal'}
                 </button>
-                <CopyButton value={() => open()} className="small primary" />
+                <CopyButton
+                  value={async () => {
+                    const value = await open();
+                    activity?.copied(project.id, secret.id, env.id);
+                    return value;
+                  }}
+                  className="small primary"
+                />
               </div>
             )}
           </div>
@@ -585,7 +602,12 @@ function SecretDetail(props: {
           {readable.length === 1 && sharedEnv && (
             <span className="row-sub">Shares the {sharedEnv.name} value.</span>
           )}
-          <ShareItem key={share.envId} api={sharing} item={share.payload} />
+          <ShareItem
+            key={share.envId}
+            api={sharing}
+            item={share.payload}
+            onShared={(channel) => activity?.shared(project.id, secret.id, share.envId, channel)}
+          />
         </Sheet>
       )}
       {historyOpen && (

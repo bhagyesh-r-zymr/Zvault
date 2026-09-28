@@ -55,7 +55,9 @@ export type PurposeKind =
   | 'signIn'
   | 'change'
   | 'readItem'
-  | 'changeItem';
+  | 'changeItem'
+  /** An SSH client asks Zvault's SSH agent to sign with a vault key. */
+  | 'sshSign';
 
 export interface Purpose {
   kind: PurposeKind;
@@ -98,7 +100,8 @@ export interface ActivityEntry {
 
 export interface ApprovalPrompt {
   requestId: string;
-  principal: 'agent' | 'user';
+  /** `ssh` is an SSH client using Zvault's SSH agent; `agentName` names its program. */
+  principal: 'agent' | 'user' | 'ssh';
   /** Null for the user. */
   agentId: string | null;
   agentName: string;
@@ -239,7 +242,9 @@ export type ItemOp =
   | { op: 'vault' }
   | { op: 'find'; item: string }
   | { op: 'upload'; vaultId: string; item: ItemCipher; created: boolean }
-  | { op: 'delete'; item: string };
+  | { op: 'delete'; item: string }
+  /** Every item holding an SSH key, for the SSH agent. */
+  | { op: 'sshKeys' };
 
 /** The answer to an {@link ItemOp}; only ciphertext and summaries, never a password. */
 export interface ItemReply {
@@ -247,9 +252,25 @@ export interface ItemReply {
   vaultId?: string;
   item?: ItemCipher;
   message?: string;
+  sshKeys?: ItemCipher[];
 }
 
 export type HandleItem = (op: ItemOp) => Promise<ItemReply>;
+
+/** Zvault's SSH agent, from `ssh_agent.rs`. */
+export interface SshAgentStatus {
+  enabled: boolean;
+  listening: boolean;
+  socketPath: string | null;
+  error: string | null;
+}
+
+export const sshAgent = {
+  status: () => invoke<SshAgentStatus>('ssh_agent_status'),
+  setEnabled: (enabled: boolean) => invoke<SshAgentStatus>('ssh_agent_set_enabled', { enabled }),
+  /** Recent signatures, newest first. */
+  activity: (limit = 8) => invoke<ActivityEntry[]>('agent_activity', { agentId: 'ssh', limit }),
+};
 
 export const agents = {
   accessStatus: () =>

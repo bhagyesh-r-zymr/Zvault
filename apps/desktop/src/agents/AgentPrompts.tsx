@@ -24,6 +24,7 @@ const WANTS: Record<PurposeKind, string> = {
   change: 'wants to make a change',
   readItem: 'wants to see a vault item',
   changeItem: 'wants to change your vault',
+  sshSign: 'wants to use an SSH key',
 };
 
 const MODES = Object.keys(APPROVAL_MODE_TEXT) as ApprovalMode[];
@@ -65,6 +66,7 @@ function initials(name: string): string {
 
 function ApprovalSheet({ prompt, onDone }: { prompt: ApprovalPrompt; onDone: () => void }) {
   const [error, setError] = useState<string | null>(null);
+  const ssh = prompt.principal === 'ssh';
   const who = prompt.principal === 'user' ? 'Your terminal' : prompt.agentName;
   const n = prompt.refs.length;
   const what = n === 0 ? '' : n === 1 ? ' 1 secret' : ` ${n} secrets`;
@@ -86,13 +88,15 @@ function ApprovalSheet({ prompt, onDone }: { prompt: ApprovalPrompt; onDone: () 
           <span style={{ color: 'var(--secure)', display: 'inline-flex', gap: 6 }}>
             <Icon name="check" size={12} strokeWidth={2.4} /> Paired agent, key matches
           </span>
+        ) : ssh ? (
+          'Through Zvault’s SSH agent on this Mac'
         ) : (
           'From zv in a terminal on this Mac'
         )
       }
       icon={
         <span className="tile agent-tile" style={{ width: 44, height: 44, borderRadius: 13 }}>
-          {prompt.principal === 'user' ? <Icon name="terminal" size={18} /> : initials(who)}
+          {prompt.principal !== 'agent' ? <Icon name="terminal" size={18} /> : initials(who)}
         </span>
       }
       onClose={() => void answer(false)}
@@ -100,7 +104,7 @@ function ApprovalSheet({ prompt, onDone }: { prompt: ApprovalPrompt; onDone: () 
     >
       {prompt.purpose.detail && (
         <p className={prompt.purpose.destructive ? 'notice danger' : 'notice'}>
-          <Icon name={prompt.purpose.destructive ? 'trash' : 'edit'} size={14} />
+          <Icon name={prompt.purpose.destructive ? 'trash' : ssh ? 'key' : 'edit'} size={14} />
           {prompt.purpose.detail}
           {prompt.purpose.destructive && ' This cannot be undone.'}
         </p>
@@ -119,8 +123,20 @@ function ApprovalSheet({ prompt, onDone }: { prompt: ApprovalPrompt; onDone: () 
           </>
         )}
         <dt>Process</dt>
-        <dd>{prompt.peerPid ? `pid ${prompt.peerPid} via zv` : 'zv'}</dd>
+        <dd>
+          {ssh
+            ? `${prompt.agentName}${prompt.peerPid ? `, pid ${prompt.peerPid}` : ''}`
+            : prompt.peerPid
+              ? `pid ${prompt.peerPid} via zv`
+              : 'zv'}
+        </dd>
       </dl>
+      {ssh && (
+        <p className="notice">
+          <Icon name="shield" size={14} />
+          Zvault signs this one request. The private key never leaves the app.
+        </p>
+      )}
       {n > 0 && (
         <div className="panel rows">
           {prompt.refs.map((r) => (

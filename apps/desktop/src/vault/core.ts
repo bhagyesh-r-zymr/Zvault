@@ -33,6 +33,31 @@ export interface ItemFields {
   totp: string;
   /** The item's passkey. Its private key never leaves Rust. */
   passkey?: PasskeyFields;
+  /** The item's SSH key. Its private key never leaves Rust. */
+  sshKey?: SshKeyFields;
+}
+
+/**
+ * An SSH key as the Rust core shows it. To create an Ed25519 key, send only
+ * `comment`; to import one, also send `privateKey` (OpenSSH format) and its
+ * `passphrase` if it has one. An existing key is kept while its
+ * `fingerprint` comes back unchanged; only the comment can be edited.
+ */
+export interface SshKeyFields {
+  /** The key's name, as `ssh-add -l` shows it. */
+  comment: string;
+  /** `SHA256:…`. Output only. */
+  fingerprint?: string;
+  /** One `authorized_keys` line. Output only. */
+  publicKey?: string;
+  /** Such as `Ed25519` or `RSA 4096`. Output only. */
+  keyType?: string;
+  /** Unix seconds. Output only. */
+  createdAt?: number;
+  /** Import only; never returned. */
+  privateKey?: string;
+  /** Import only; never returned or stored. */
+  passphrase?: string;
 }
 
 /**
@@ -61,6 +86,7 @@ export interface ItemSummary {
   url: string | null;
   hasTotp: boolean;
   hasPasskey: boolean;
+  hasSshKey: boolean;
 }
 
 /** A one-time password as computed in Rust. */

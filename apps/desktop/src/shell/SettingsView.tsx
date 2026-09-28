@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { AccountSecurity } from '../account/AccountSecurity.js';
 import { CliInstall, ClaudeSetup } from '../agents/CliSetup.js';
+import { SshAgentPanel } from '../agents/SshAgentPanel.js';
 import '../agents/agents.css';
 import type { Session } from '../auth.js';
 import { maskedSecretKey, type RememberedAccount } from '../core.js';
@@ -14,12 +15,13 @@ import { fetchTransport, twoFactorApi, TwoFactorSettings } from '../two-factor/i
 import { Icon } from '../ui/Icon.js';
 import { UpdatePanel } from '../updates/UpdatePanel.js';
 
-export type SettingsSection = 'security' | 'devices' | 'cli' | 'account';
+export type SettingsSection = 'security' | 'devices' | 'cli' | 'ssh' | 'account';
 
 const SECTIONS: { id: SettingsSection; label: string }[] = [
   { id: 'security', label: 'Security' },
   { id: 'devices', label: 'Devices' },
   { id: 'cli', label: 'Command line' },
+  { id: 'ssh', label: 'SSH agent' },
   { id: 'account', label: 'Account' },
 ];
 
@@ -102,6 +104,13 @@ export function SettingsView(props: {
               <ClaudeSetup />
             </section>
           </>
+        )}
+
+        {props.section === 'ssh' && (
+          <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <h2>SSH agent</h2>
+            <SshAgentPanel />
+          </section>
         )}
 
         {props.section === 'account' && (

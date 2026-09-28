@@ -17,6 +17,7 @@ import { ConflictError, type VaultApi } from './api.js';
 import { vaultCore, type ItemFields, type VaultCore } from './core.js';
 import { ItemHistory } from './ItemHistory.js';
 import { PasskeyEditor, PasskeyPanel } from './Passkey.js';
+import { SshKeyEditor, SshKeyPanel } from './SshKey.js';
 import { openDefaultVault, VaultSync } from './sync.js';
 import './vault.css';
 
@@ -42,7 +43,7 @@ const EMPTY: ItemFields = {
   totp: '',
 };
 
-export type NewItemKind = 'login' | 'passkey';
+export type NewItemKind = 'login' | 'passkey' | 'sshKey';
 
 type Pane =
   | { mode: 'view'; id: string }
@@ -184,6 +185,7 @@ function VaultView({ sync, sharing }: { sync: VaultSync; sharing?: SharingApi })
                 [
                   ['login', 'key', 'Login', 'Username, password, one-time code'],
                   ['passkey', 'passkey', 'Passkey', 'Create or import a passkey'],
+                  ['sshKey', 'terminal', 'SSH key', 'Generate or import a key for ssh and git'],
                 ] as const
               ).map(([kind, icon, label, detail]) => (
                 <button
@@ -242,6 +244,11 @@ function VaultView({ sync, sharing }: { sync: VaultSync; sharing?: SharingApi })
                   {summary.hasPasskey && (
                     <span className="passkey-badge" title="Has a passkey">
                       <Icon name="passkey" size={13} />
+                    </span>
+                  )}
+                  {summary.hasSshKey && (
+                    <span className="passkey-badge" title="SSH key">
+                      <Icon name="terminal" size={13} />
                     </span>
                   )}
                 </button>
@@ -377,55 +384,64 @@ function ItemDetail(props: {
         {fields.passkey && (
           <PasskeyPanel passkey={fields.passkey} onTest={() => sync.testPasskey(id)} />
         )}
-        <div className="panel rows">
-          <div className="row">
-            <div className="row-main">
-              <span className="row-label">username</span>
-              <span className="field-value">{fields.username || '—'}</span>
+        {fields.sshKey && <SshKeyPanel sshKey={fields.sshKey} />}
+        {!(
+          fields.sshKey &&
+          !fields.username &&
+          !fields.password &&
+          !fields.totp &&
+          !fields.urls.length
+        ) && (
+          <div className="panel rows">
+            <div className="row">
+              <div className="row-main">
+                <span className="row-label">username</span>
+                <span className="field-value">{fields.username || '—'}</span>
+              </div>
+              <CopyButton value={fields.username} secret={false} />
             </div>
-            <CopyButton value={fields.username} secret={false} />
+            {/* A passkey-only or SSH key item has no password to show. */}
+            {!((fields.passkey || fields.sshKey) && !fields.password) && (
+              <div className="row">
+                <div className="row-main">
+                  <span className="row-label">password</span>
+                  {fields.password ? (
+                    <SecretText value={fields.password} masked={!revealed} />
+                  ) : (
+                    <span className="muted">—</span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="small"
+                  onClick={() => setRevealed((r) => !r)}
+                  disabled={!fields.password}
+                >
+                  <Icon name={revealed ? 'eyeOff' : 'eye'} size={13} />
+                  {revealed ? 'Hide' : 'Reveal'}
+                </button>
+                <CopyButton value={fields.password} />
+              </div>
+            )}
+            {fields.totp && (
+              <div className="row">
+                <div className="row-main">
+                  <span className="row-label">one-time password</span>
+                  <OneTimePasswordCode getCode={totpCode} />
+                </div>
+              </div>
+            )}
+            {fields.urls.map((url) => (
+              <div key={url} className="row">
+                <div className="row-main">
+                  <span className="row-label">website</span>
+                  <span className="field-value link truncate">{url}</span>
+                </div>
+                <CopyButton value={url} secret={false} />
+              </div>
+            ))}
           </div>
-          {/* A passkey-only item has no password to show. */}
-          {!(fields.passkey && !fields.password) && (
-            <div className="row">
-              <div className="row-main">
-                <span className="row-label">password</span>
-                {fields.password ? (
-                  <SecretText value={fields.password} masked={!revealed} />
-                ) : (
-                  <span className="muted">—</span>
-                )}
-              </div>
-              <button
-                type="button"
-                className="small"
-                onClick={() => setRevealed((r) => !r)}
-                disabled={!fields.password}
-              >
-                <Icon name={revealed ? 'eyeOff' : 'eye'} size={13} />
-                {revealed ? 'Hide' : 'Reveal'}
-              </button>
-              <CopyButton value={fields.password} />
-            </div>
-          )}
-          {fields.totp && (
-            <div className="row">
-              <div className="row-main">
-                <span className="row-label">one-time password</span>
-                <OneTimePasswordCode getCode={totpCode} />
-              </div>
-            </div>
-          )}
-          {fields.urls.map((url) => (
-            <div key={url} className="row">
-              <div className="row-main">
-                <span className="row-label">website</span>
-                <span className="field-value link truncate">{url}</span>
-              </div>
-              <CopyButton value={url} secret={false} />
-            </div>
-          ))}
-        </div>
+        )}
         {fields.notes && (
           <div className="panel panel-pad">
             <div className="row-label" style={{ marginBottom: 6 }}>
@@ -478,6 +494,15 @@ function ItemDetail(props: {
           icon={<LetterTile name={title} />}
           onClose={() => setPayload(null)}
         >
+          {fields.sshKey && (
+            <p className="preview-note" style={{ marginBottom: 12 }}>
+              <Icon name="terminal" size={16} />
+              <span>
+                The SSH key is not shared, only this item&apos;s other details. Share its public key
+                by copying it instead.
+              </span>
+            </p>
+          )}
           {payload.passkey && (
             <p className="preview-note" style={{ marginBottom: 12 }}>
               <Icon name="passkey" size={16} />
@@ -502,6 +527,7 @@ function ItemEditor(props: {
 }) {
   const { sync, id, kind, onDone } = props;
   if (id === null && kind === 'passkey') return <PasskeyEditor sync={sync} onDone={onDone} />;
+  if (id === null && kind === 'sshKey') return <SshKeyEditor sync={sync} onDone={onDone} />;
   return <LoginEditor sync={sync} id={id} onDone={onDone} />;
 }
 
@@ -607,6 +633,39 @@ function LoginEditor(props: {
                 onClick={() => {
                   const rest = { ...fields };
                   delete rest.passkey;
+                  setFields(rest);
+                }}
+              >
+                <Icon name="trash" size={13} /> Remove
+              </button>
+            </div>
+          </div>
+        )}
+        {fields.sshKey && (
+          <div className="field">
+            <span>SSH key</span>
+            <div className="passkey-edit">
+              <Icon name="terminal" size={16} />
+              <span className="row-main">
+                <span className="row-title">{fields.sshKey.keyType}</span>
+                <span className="row-sub mono truncate">{fields.sshKey.fingerprint}</span>
+              </span>
+              <input
+                aria-label="SSH key name"
+                value={fields.sshKey.comment}
+                onChange={(e) =>
+                  setFields({
+                    ...fields,
+                    sshKey: { ...fields.sshKey!, comment: e.target.value },
+                  })
+                }
+              />
+              <button
+                type="button"
+                className="small ghost"
+                onClick={() => {
+                  const rest = { ...fields };
+                  delete rest.sshKey;
                   setFields(rest);
                 }}
               >

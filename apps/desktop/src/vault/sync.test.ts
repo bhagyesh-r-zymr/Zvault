@@ -32,6 +32,7 @@ const fakeCore: VaultCore = {
       url: f.urls[0] ?? null,
       hasTotp: f.totp !== '',
       hasPasskey: f.passkey !== undefined,
+      hasSshKey: f.sshKey !== undefined,
     });
   },
   totpCode: (_vaultId, item) =>

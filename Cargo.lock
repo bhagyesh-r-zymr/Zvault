@@ -3791,6 +3791,7 @@ dependencies = [
  "zvault-crypto",
  "zvault-otp",
  "zvault-passkeys",
+ "zvault-ssh",
 ]
 
 [[package]]

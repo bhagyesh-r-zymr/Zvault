@@ -19,6 +19,7 @@ pub struct ItemSummary {
     pub url: Option<String>,
     pub has_totp: bool,
     pub has_passkey: bool,
+    pub has_ssh_key: bool,
 }
 
 /// Everything in a login item, for the detail screen.
@@ -30,6 +31,21 @@ pub struct ItemDetail {
     pub notes: String,
     pub has_totp: bool,
     pub passkey: Option<PasskeyDetail>,
+    pub ssh_key: Option<SshKeyDetail>,
+}
+
+/// An item's SSH key without its private key, which stays in Rust. The
+/// phone only shows it; signing happens in the Mac app's SSH agent.
+pub struct SshKeyDetail {
+    /// One `authorized_keys` line: `ssh-ed25519 AAAA… comment`.
+    pub public_key: String,
+    /// `SHA256:…`.
+    pub fingerprint: String,
+    /// Such as `Ed25519` or `RSA 4096`.
+    pub key_type: String,
+    pub comment: String,
+    /// Unix seconds.
+    pub created_at: i64,
 }
 
 /// An item's passkey without its private key, which stays in Rust.
@@ -73,6 +89,7 @@ pub fn item_summary(vault_id: String, record_json: String) -> anyhow::Result<Ite
         url: f.urls.first().cloned(),
         has_totp: !f.totp.is_empty(),
         has_passkey: f.passkey.is_some(),
+        has_ssh_key: f.ssh_key.is_some(),
     })
 }
 
@@ -96,6 +113,20 @@ pub fn item_open(vault_id: String, record_json: String) -> anyhow::Result<ItemDe
                     credential_id: p.credential_id.clone(),
                     public_key: p.public_key()?,
                     created_at: p.created_at,
+                })
+            })
+            .transpose()?,
+        ssh_key: f
+            .ssh_key
+            .as_ref()
+            .map(|k| -> anyhow::Result<SshKeyDetail> {
+                let public = k.public()?;
+                Ok(SshKeyDetail {
+                    public_key: public.public_key,
+                    fingerprint: public.fingerprint,
+                    key_type: public.key_type,
+                    comment: public.comment,
+                    created_at: k.created_at,
                 })
             })
             .transpose()?,

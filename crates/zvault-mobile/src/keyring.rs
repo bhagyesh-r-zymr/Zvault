@@ -58,6 +58,9 @@ pub struct ItemFields {
     /// Set from [`ItemPlaintext::passkey`] when the item is opened.
     #[serde(skip)]
     pub passkey: Option<zvault_passkeys::Passkey>,
+    /// Set from [`ItemPlaintext::ssh_key`] when the item is opened.
+    #[serde(skip)]
+    pub ssh_key: Option<zvault_ssh::SshKey>,
 }
 
 impl std::fmt::Debug for ItemFields {
@@ -77,6 +80,9 @@ struct ItemPlaintext {
     /// A passkey is a field of a login item, as on the Mac.
     #[serde(default)]
     passkey: Option<zvault_passkeys::Passkey>,
+    /// An SSH key, stored the same way as a passkey.
+    #[serde(rename = "sshKey", default)]
+    ssh_key: Option<zvault_ssh::SshKey>,
 }
 
 #[derive(Deserialize, Zeroize, ZeroizeOnDrop)]
@@ -191,8 +197,12 @@ impl Keyring {
         if let Some(passkey) = &plaintext.passkey {
             passkey.validate().map_err(|_| Error::Decrypt)?;
         }
+        if let Some(ssh_key) = &plaintext.ssh_key {
+            ssh_key.validate().map_err(|_| Error::Decrypt)?;
+        }
         let mut fields = std::mem::take(&mut plaintext.fields);
         fields.passkey = plaintext.passkey.take();
+        fields.ssh_key = plaintext.ssh_key.take();
         Ok(fields)
     }
 
@@ -455,6 +465,32 @@ pub(crate) mod tests {
         let fields = k.open_item(VAULT, &item).unwrap();
         assert_eq!(fields.passkey.as_ref(), Some(&passkey));
         fields.passkey.as_ref().unwrap().self_test().unwrap();
+    }
+
+    #[test]
+    fn opens_an_item_with_an_ssh_key() {
+        let (mut k, keyset) = unlocked();
+        let vault_key = SymmetricKey::generate().unwrap();
+        let item_key = SymmetricKey::generate().unwrap();
+        let vault: VaultRecord = parse(json!({
+            "id": VAULT,
+            "encryptedKey": blob(ACCOUNT_KID, &wrap_key(&keyset, &vault_key, &vault::aad::vault_key(VAULT)).unwrap()),
+            "encryptedMeta": seal_json(&vault_key, &json!({"v": 1, "name": "Personal"}), &vault::aad::vault_meta(VAULT), VAULT),
+        }));
+        let ssh_key = zvault_ssh::SshKey::generate("laptop", 1).unwrap();
+        // The layout the Mac writes: the key next to the login fields.
+        let item: ItemRecord = parse(json!({
+            "id": ITEM,
+            "encryptedKey": blob(VAULT, &wrap_key(&vault_key, &item_key, &vault::aad::item_key(VAULT, ITEM)).unwrap()),
+            "encryptedData": seal_json(&item_key, &json!({
+                "v": 1, "kind": "login", "title": "GitHub", "username": "",
+                "password": "", "urls": [], "notes": "", "totp": "",
+                "sshKey": serde_json::to_value(&ssh_key).unwrap(),
+            }), &vault::aad::item_data(VAULT, ITEM), ITEM),
+        }));
+        k.open_vault(&vault).unwrap();
+        let fields = k.open_item(VAULT, &item).unwrap();
+        assert_eq!(fields.ssh_key.as_ref(), Some(&ssh_key));
     }
 
     #[test]

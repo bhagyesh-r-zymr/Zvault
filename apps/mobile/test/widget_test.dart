@@ -110,6 +110,45 @@ void main() {
     expect(find.textContaining('verified it'), findsOneWidget);
   });
 
+  testWidgets('an SSH key shows its public key and fingerprint only', (tester) async {
+    final core = FakeCore(
+      details: {
+        'i2': const ItemDetail(
+          title: 'GitHub deploy key',
+          username: '',
+          password: '',
+          urls: [],
+          notes: '',
+          hasTotp: false,
+          sshKey: SshKeyDetail(
+            publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAEHnaG5 deploy',
+            fingerprint: 'SHA256:La1g/MrGP+xR7lzOYcLMtfdONYM9+AFjOC2ik17hETo',
+            keyType: 'Ed25519',
+            comment: 'deploy',
+            createdAt: 1790000000,
+          ),
+        ),
+      },
+    );
+    final state = unlockedState(core);
+    state.items = [
+      item('i1', 'GitHub', 'meet-oza', totp: true),
+      item('i2', 'GitHub deploy key', '', sshKey: true),
+    ];
+    await tester.pumpWidget(ZvaultApp(state: state));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ssh-key-i2')), findsOneWidget);
+    expect(find.byKey(const Key('ssh-key-i1')), findsNothing);
+
+    await tester.tap(find.text('GitHub deploy key'));
+    await tester.pumpAndSettle();
+    expect(find.text('SSH key · Ed25519'), findsOneWidget);
+    expect(find.textContaining('ssh-ed25519 AAAA'), findsOneWidget);
+    expect(find.textContaining('SHA256:La1g'), findsOneWidget);
+    expect(find.textContaining('Private key encrypted'), findsOneWidget);
+    expect(find.byKey(const Key('copy-password')), findsNothing);
+  });
+
   testWidgets('a project opens values only where this account has access', (tester) async {
     final core = FakeCore(values: {'blob-db-dev': 'postgres://dev'});
     await tester.pumpWidget(ZvaultApp(state: unlockedState(core)));

@@ -6,7 +6,14 @@ import 'rust/api/vault.dart' as vault;
 export 'rust/api/pairing.dart' show PairedAccount, ScannedCode;
 export 'rust/api/sharing.dart' show NewShareLink, NewUserShare, SecretShare, SharingIdentity;
 export 'rust/api/vault.dart'
-    show EnvironmentView, ItemDetail, ItemSummary, OneTimeCode, PasskeyDetail, VaultSummary;
+    show
+        EnvironmentView,
+        ItemDetail,
+        ItemSummary,
+        OneTimeCode,
+        PasskeyDetail,
+        SshKeyDetail,
+        VaultSummary;
 
 /// The Rust core, behind an interface so screens can be tested without it.
 /// Keys never cross into Dart except the keyset handed to the biometric store.

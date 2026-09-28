@@ -100,6 +100,7 @@ VaultItem item(
   String username, {
   bool totp = false,
   bool passkey = false,
+  bool sshKey = false,
 }) => VaultItem(
   vaultId: 'v1',
   vaultName: 'Personal',
@@ -111,6 +112,7 @@ VaultItem item(
     url: null,
     hasTotp: totp,
     hasPasskey: passkey,
+    hasSshKey: sshKey,
   ),
 );
 

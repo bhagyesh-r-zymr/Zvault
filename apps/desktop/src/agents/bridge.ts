@@ -144,6 +144,7 @@ export function serveZv(
             title: i.summary.title,
             username: i.summary.username,
             url: i.summary.url,
+            urls: i.summary.urls,
             hasTotp: i.summary.hasTotp,
           })),
         };

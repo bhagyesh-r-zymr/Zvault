@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ErrorLine, Sheet } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import { agents, type ActivityEntry, type Agent, type ApprovalMode } from './api.js';
+import { BrowserSetup } from './BrowserSetup.js';
 import { ClaudeSetup, CliInstall } from './CliSetup.js';
 import './agents.css';
 
@@ -15,6 +16,12 @@ const POLICIES: { value: ApprovalMode; title: string; detail: string }[] = [
   { value: 'askEveryTime', title: 'Ask me each time', detail: 'Touch ID on every use' },
   { value: 'session15m', title: 'Allow for a session', detail: 'Ask again after 15 min' },
   { value: 'whileUnlocked', title: 'Allow while unlocked', detail: 'No prompt, still logged' },
+];
+
+/** The browser extension has no session mode: it fills while unlocked or asks. */
+const BROWSER_POLICIES: { value: ApprovalMode; title: string; detail: string }[] = [
+  { value: 'whileUnlocked', title: 'Fill while unlocked', detail: 'Only on each login’s website' },
+  { value: 'askEveryTime', title: 'Ask me each time', detail: 'Touch ID on every fill' },
 ];
 
 const POLICY_SHORT: Record<ApprovalMode, string> = {
@@ -62,8 +69,10 @@ export function AgentsView() {
   const [newScope, setNewScope] = useState('');
   const [pairing, setPairing] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const [addingBrowser, setAddingBrowser] = useState(false);
 
   const agent = list?.find((a) => a.id === selected) ?? list?.[0] ?? null;
+  const isBrowser = agent?.kind === 'browser';
 
   const reload = useCallback(async () => {
     try {
@@ -112,14 +121,23 @@ export function AgentsView() {
               <button type="button" onClick={() => setInstalling(true)}>
                 <Icon name="terminal" size={13} /> Install CLI
               </button>
+              <button
+                type="button"
+                className="icon"
+                title="Add the browser extension"
+                aria-label="Add the browser extension"
+                onClick={() => setAddingBrowser(true)}
+              >
+                <Icon name="globe" size={14} />
+              </button>
               <button type="button" className="primary" onClick={() => setPairing(true)}>
                 Pair an agent
               </button>
             </div>
           </div>
           <p className="hint" style={{ lineHeight: 1.5 }}>
-            AI tools on this Mac that can use secrets through the <code>zv</code> command. They only
-            get what you allow.
+            AI tools on this Mac that can use secrets through the <code>zv</code> command, and the
+            browser extension that fills your logins. They only get what you allow.
           </p>
         </div>
         <div className="list-body">
@@ -131,12 +149,19 @@ export function AgentsView() {
               aria-current={a.id === agent?.id}
               onClick={() => setSelected(a.id)}
             >
-              <span className="tile agent-tile">{initials(a.name)}</span>
+              <span className="tile agent-tile">
+                {a.kind === 'browser' ? <Icon name="globe" size={15} /> : initials(a.name)}
+              </span>
               <span className="row-main">
                 <span className="row-title">{a.name}</span>
                 <span className="row-sub">
-                  {a.scopes.length} scope{a.scopes.length === 1 ? '' : 's'} ·{' '}
-                  {a.paused ? 'paused' : POLICY_SHORT[a.approval]}
+                  {a.kind === 'browser'
+                    ? a.paused
+                      ? 'Paused'
+                      : 'Fills logins'
+                    : `${a.scopes.length} scope${a.scopes.length === 1 ? '' : 's'} · ${
+                        a.paused ? 'paused' : POLICY_SHORT[a.approval]
+                      }`}
                 </span>
               </span>
               <span className={`agent-status ${a.paused ? 'paused' : 'active'}`}>
@@ -161,11 +186,15 @@ export function AgentsView() {
               <h1>Connect an agent</h1>
               <CliInstall />
               <ClaudeSetup />
+              <h1 style={{ marginTop: 12 }}>Fill logins in your browser</h1>
+              <BrowserSetup />
             </>
           ) : (
             <>
               <div className="item-head">
-                <span className="tile large agent-tile">{initials(agent.name)}</span>
+                <span className="tile large agent-tile">
+                  {isBrowser ? <Icon name="globe" size={22} /> : initials(agent.name)}
+                </span>
                 <div style={{ flexGrow: 1 }}>
                   <h1>{agent.name}</h1>
                   <span className="mono muted" style={{ fontSize: 12 }}>
@@ -180,10 +209,10 @@ export function AgentsView() {
 
               <div>
                 <div className="section-label">
-                  <span>When it asks for a secret</span>
+                  <span>{isBrowser ? 'When it fills a login' : 'When it asks for a secret'}</span>
                 </div>
                 <div className="choices" role="radiogroup" aria-label="Approval policy">
-                  {POLICIES.map((p) => (
+                  {(isBrowser ? BROWSER_POLICIES : POLICIES).map((p) => (
                     <button
                       key={p.value}
                       type="button"
@@ -199,54 +228,64 @@ export function AgentsView() {
                 </div>
               </div>
 
-              <div>
-                <div className="section-label">
-                  <span>Secrets it can use</span>
-                </div>
-                <div className="panel rows">
-                  {agent.scopes.map((s) => (
-                    <div key={s} className="row">
-                      <div className="row-main">
-                        <span className="mono truncate" style={{ fontSize: 12 }}>
-                          {s}
-                        </span>
+              {isBrowser ? (
+                <p className="notice">
+                  <Icon name="shield" size={14} />
+                  The browser extension sees a login only on the website it is saved for, checked
+                  here in Zvault. It cannot read project secrets.
+                </p>
+              ) : (
+                <div>
+                  <div className="section-label">
+                    <span>Secrets it can use</span>
+                  </div>
+                  <div className="panel rows">
+                    {agent.scopes.map((s) => (
+                      <div key={s} className="row">
+                        <div className="row-main">
+                          <span className="mono truncate" style={{ fontSize: 12 }}>
+                            {s}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="icon ghost small"
+                          aria-label={`Remove ${s}`}
+                          onClick={() =>
+                            void update({ scopes: agent.scopes.filter((x) => x !== s) })
+                          }
+                        >
+                          <Icon name="close" size={13} />
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        className="icon ghost small"
-                        aria-label={`Remove ${s}`}
-                        onClick={() => void update({ scopes: agent.scopes.filter((x) => x !== s) })}
-                      >
-                        <Icon name="close" size={13} />
+                    ))}
+                    {agent.scopes.length === 0 && (
+                      <div className="row muted">
+                        No secrets. This agent can&apos;t read anything.
+                      </div>
+                    )}
+                    <form
+                      className="row"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        addScope();
+                      }}
+                    >
+                      <input
+                        className="mono"
+                        style={{ flexGrow: 1 }}
+                        value={newScope}
+                        placeholder="zv://web/development/*"
+                        aria-label="Add a scope"
+                        onChange={(e) => setNewScope(e.target.value)}
+                      />
+                      <button type="submit" disabled={!newScope.trim()}>
+                        Add
                       </button>
-                    </div>
-                  ))}
-                  {agent.scopes.length === 0 && (
-                    <div className="row muted">
-                      No secrets. This agent can&apos;t read anything.
-                    </div>
-                  )}
-                  <form
-                    className="row"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      addScope();
-                    }}
-                  >
-                    <input
-                      className="mono"
-                      style={{ flexGrow: 1 }}
-                      value={newScope}
-                      placeholder="zv://web/development/*"
-                      aria-label="Add a scope"
-                      onChange={(e) => setNewScope(e.target.value)}
-                    />
-                    <button type="submit" disabled={!newScope.trim()}>
-                      Add
-                    </button>
-                  </form>
+                    </form>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div>
                 <div className="section-label">
@@ -311,6 +350,16 @@ export function AgentsView() {
               </li>
             </ol>
           </div>
+        </Sheet>
+      )}
+      {addingBrowser && (
+        <Sheet
+          title="Add the browser extension"
+          subtitle="Fill logins and 2FA codes in Chrome, Brave, Edge and Arc"
+          onClose={() => setAddingBrowser(false)}
+          width={520}
+        >
+          <BrowserSetup />
         </Sheet>
       )}
       {installing && (

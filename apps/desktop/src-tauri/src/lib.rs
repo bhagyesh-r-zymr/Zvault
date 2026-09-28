@@ -6,6 +6,7 @@ mod agents;
 mod auth;
 mod autolock;
 mod biometric;
+mod browser_host;
 mod cli_install;
 mod clipboard;
 mod commands;
@@ -70,10 +71,12 @@ pub fn run() {
             autolock::start(app.handle());
             agents::start(app.handle());
             ssh_agent::start(app.handle());
+            browser_host::register();
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             core_info,
+            browser_host::browser_extension_status,
             auth::create_account,
             auth::login_prove,
             auth::login_verify_server,

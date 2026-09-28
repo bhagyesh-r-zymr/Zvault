@@ -24,6 +24,7 @@ const WANTS: Record<PurposeKind, string> = {
   change: 'wants to make a change',
   readItem: 'wants to see a vault item',
   changeItem: 'wants to change your vault',
+  fill: 'wants to fill a login',
   sshSign: 'wants to use an SSH key',
 };
 
@@ -68,6 +69,7 @@ function ApprovalSheet({ prompt, onDone }: { prompt: ApprovalPrompt; onDone: () 
   const [error, setError] = useState<string | null>(null);
   const ssh = prompt.principal === 'ssh';
   const who = prompt.principal === 'user' ? 'Your terminal' : prompt.agentName;
+  const browser = prompt.purpose.kind === 'fill';
   const n = prompt.refs.length;
   const what = n === 0 ? '' : n === 1 ? ' 1 secret' : ` ${n} secrets`;
 
@@ -86,7 +88,8 @@ function ApprovalSheet({ prompt, onDone }: { prompt: ApprovalPrompt; onDone: () 
       subtitle={
         prompt.principal === 'agent' ? (
           <span style={{ color: 'var(--secure)', display: 'inline-flex', gap: 6 }}>
-            <Icon name="check" size={12} strokeWidth={2.4} /> Paired agent, key matches
+            <Icon name="check" size={12} strokeWidth={2.4} />{' '}
+            {browser ? 'Paired browser extension, key matches' : 'Paired agent, key matches'}
           </span>
         ) : ssh ? (
           'Through Zvault’s SSH agent on this Mac'
@@ -96,7 +99,13 @@ function ApprovalSheet({ prompt, onDone }: { prompt: ApprovalPrompt; onDone: () 
       }
       icon={
         <span className="tile agent-tile" style={{ width: 44, height: 44, borderRadius: 13 }}>
-          {prompt.principal !== 'agent' ? <Icon name="terminal" size={18} /> : initials(who)}
+          {prompt.principal !== 'agent' ? (
+            <Icon name="terminal" size={18} />
+          ) : browser ? (
+            <Icon name="globe" size={18} />
+          ) : (
+            initials(who)
+          )}
         </span>
       }
       onClose={() => void answer(false)}
@@ -135,6 +144,12 @@ function ApprovalSheet({ prompt, onDone }: { prompt: ApprovalPrompt; onDone: () 
         <p className="notice">
           <Icon name="shield" size={14} />
           Zvault signs this one request. The private key never leaves the app.
+        </p>
+      )}
+      {browser && (
+        <p className="notice">
+          <Icon name="shield" size={14} />
+          Zvault checked this login is saved for the website asking for it.
         </p>
       )}
       {n > 0 && (
@@ -182,6 +197,88 @@ function parseScopes(text: string): { scopes: string[]; bad: string | null } {
 }
 
 function PairingSheet({ prompt, onDone }: { prompt: PairingPrompt; onDone: () => void }) {
+  if (prompt.kind === 'browser') return <BrowserPairingSheet prompt={prompt} onDone={onDone} />;
+  return <AgentPairingSheet prompt={prompt} onDone={onDone} />;
+}
+
+const BROWSER_MODES: { value: ApprovalMode; title: string; detail: string }[] = [
+  {
+    value: 'whileUnlocked',
+    title: 'Fill while Zvault is unlocked',
+    detail: 'Only on the website each login is saved for',
+  },
+  { value: 'askEveryTime', title: 'Ask me each time', detail: 'Touch ID on every fill' },
+];
+
+/** The browser extension asks to pair: no secrets to choose, only how fills are approved. */
+function BrowserPairingSheet({ prompt, onDone }: { prompt: PairingPrompt; onDone: () => void }) {
+  const [mode, setMode] = useState<ApprovalMode>('whileUnlocked');
+  const [error, setError] = useState<string | null>(null);
+
+  const answer = async (approve: boolean) => {
+    try {
+      await agents.answerPairing(
+        prompt.requestId,
+        approve,
+        approve ? { approval: mode, scopes: [] } : undefined,
+      );
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  return (
+    <Sheet
+      title={`Connect ${prompt.name}?`}
+      subtitle="The Zvault browser extension wants to fill your logins"
+      icon={
+        <span className="tile agent-tile" style={{ width: 44, height: 44, borderRadius: 13 }}>
+          <Icon name="globe" size={18} />
+        </span>
+      }
+      onClose={() => void answer(false)}
+      width={480}
+    >
+      <dl className="request-facts">
+        <dt>Code</dt>
+        <dd style={{ fontSize: 16, letterSpacing: 2 }}>{prompt.code}</dd>
+      </dl>
+      <p className="hint">Check that the extension shows the same code before you connect it.</p>
+      <p className="notice">
+        <Icon name="shield" size={14} />
+        It sees a login only on the website it is saved for, and never your master password or keys.
+        It cannot read project secrets.
+      </p>
+      <div className="choices" role="radiogroup" aria-label="Filling">
+        {BROWSER_MODES.map((m) => (
+          <button
+            key={m.value}
+            type="button"
+            role="radio"
+            className="choice"
+            aria-checked={mode === m.value}
+            onClick={() => setMode(m.value)}
+          >
+            <strong>{m.title}</strong>
+            <span>{m.detail}</span>
+          </button>
+        ))}
+      </div>
+      <ErrorLine error={error} />
+      <div className="grid-2" style={{ gap: 8 }}>
+        <button type="button" className="danger block" onClick={() => void answer(false)}>
+          Decline
+        </button>
+        <button type="button" className="primary block" onClick={() => void answer(true)}>
+          Connect browser
+        </button>
+      </div>
+    </Sheet>
+  );
+}
+
+function AgentPairingSheet({ prompt, onDone }: { prompt: PairingPrompt; onDone: () => void }) {
   const [mode, setMode] = useState<ApprovalMode>('askEveryTime');
   const [scopeText, setScopeText] = useState('');
   const [error, setError] = useState<string | null>(null);

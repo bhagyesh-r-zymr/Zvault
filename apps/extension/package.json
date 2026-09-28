@@ -1,0 +1,19 @@
+{
+  "name": "@zvault/extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome extension that fills logins and 2FA codes from the Zvault Mac app over native messaging. Holds no keys.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && vite build && vite build --config vite.content.config.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.3.3",
+    "happy-dom": "^20.14.5",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.1"
+  }
+}

@@ -14,8 +14,9 @@ use tauri::{AppHandle, Emitter, Manager};
 use uuid::Uuid;
 use zeroize::Zeroize;
 use zvault_agent::activity::{ActivityEntry, Outcome, Verification};
+use zvault_agent::browser::{self, FillContents, LoginInfo};
 use zvault_agent::manage::{self, Change, ItemContents, ItemInfo, ItemPatch, ProjectInfo};
-use zvault_agent::policy::{AgentRecord, ApprovalMode, Decision};
+use zvault_agent::policy::{AgentKind, AgentRecord, ApprovalMode, Decision};
 use zvault_agent::protocol::{
     self, ErrorCode, MAX_REFS, PROTOCOL_VERSION, Purpose, PurposeKind, Request, RequestBody,
     Response, SecretValue,
@@ -245,7 +246,35 @@ fn handle(app: &AppHandle, req: Request, peer: Peer) -> Response {
         }
         (RequestBody::Status | RequestBody::Unpair, Who::User) => Err(ErrorCode::AgentsOnly),
 
-        (RequestBody::Pair { name, code }, Who::User) => pair(app, hub, &name, &code, peer),
+        (RequestBody::Pair { name, code }, Who::User) => {
+            pair(app, hub, AgentKind::Agent, &name, &code, peer)
+        }
+        (RequestBody::BrowserPair { name, code }, Who::User) => {
+            pair(app, hub, AgentKind::Browser, &name, &code, peer)
+        }
+        (RequestBody::BrowserLogins { url, top_url }, Who::Agent(a))
+            if a.kind == AgentKind::Browser =>
+        {
+            browser_logins(app, hub, a, &url, top_url.as_deref())
+        }
+        (
+            RequestBody::BrowserFill {
+                item,
+                url,
+                top_url,
+                otp_only,
+            },
+            Who::Agent(a),
+        ) if a.kind == AgentKind::Browser => {
+            let page = Page {
+                url: &url,
+                top_url: top_url.as_deref(),
+            };
+            browser_fill(app, hub, a, &item, page, otp_only, peer)
+        }
+        (RequestBody::BrowserLogins { .. } | RequestBody::BrowserFill { .. }, _) => {
+            Err(ErrorCode::BrowserOnly)
+        }
         (RequestBody::SignIn, Who::User) => sign_in(app, hub, peer),
         (RequestBody::SignOut, Who::User) => {
             if let Some(sid) = peer.sid {
@@ -266,6 +295,7 @@ fn handle(app: &AppHandle, req: Request, peer: Peer) -> Response {
         (RequestBody::ItemDelete { item }, Who::User) => item_delete(app, hub, &item, peer),
         (
             RequestBody::Pair { .. }
+            | RequestBody::BrowserPair { .. }
             | RequestBody::SignIn
             | RequestBody::SignOut
             | RequestBody::Copy { .. }
@@ -318,6 +348,7 @@ pub(crate) fn wait_unlocked(app: &AppHandle) -> Result<(), ErrorCode> {
 fn pair(
     app: &AppHandle,
     hub: &AgentHub,
+    kind: AgentKind,
     name: &str,
     code: &str,
     peer: Peer,
@@ -340,6 +371,7 @@ fn pair(
         PAIRING_EVENT,
         PairingPrompt {
             request_id: &request_id,
+            kind,
             name: &name,
             code,
             peer_pid: peer.pid,
@@ -355,10 +387,15 @@ fn pair(
     };
 
     let mut inner = hub.guard();
-    let (record, token) = inner
-        .registry
-        .pair(&name, answer.approval, answer.scopes, now_secs())
-        .map_err(|_| ErrorCode::BadRequest)?;
+    let paired = match kind {
+        AgentKind::Agent => inner
+            .registry
+            .pair(&name, answer.approval, answer.scopes, now_secs()),
+        AgentKind::Browser => inner
+            .registry
+            .pair_browser(&name, answer.approval, now_secs()),
+    };
+    let (record, token) = paired.map_err(|_| ErrorCode::BadRequest)?;
     let who = Who::Agent(record.clone());
     let entry = entry(&who, Outcome::Paired, vec![], None, None, None, peer);
     hub.log(app, &mut inner, entry);
@@ -884,6 +921,173 @@ fn item_delete(
 }
 
 // ---------------------------------------------------------------------------
+// The browser extension
+
+/// The page a browser request is for: the frame holding the login form and,
+/// when that is a frame inside another page, the tab's own address. A login
+/// is offered only when its website matches both, so a site cannot embed
+/// another site's login form to have it filled.
+#[derive(Clone, Copy)]
+struct Page<'a> {
+    url: &'a str,
+    top_url: Option<&'a str>,
+}
+
+impl Page<'_> {
+    /// The saved website that matches this page, if any.
+    fn matching(self, saved: &[String]) -> Option<String> {
+        let found = browser::first_match(saved, self.url)?;
+        if let Some(top) = self.top_url {
+            browser::first_match(saved, top)?;
+        }
+        Some(found.to_owned())
+    }
+}
+
+/// A paused extension or a locked Zvault gets nothing, without a prompt: the
+/// extension shows the reason and offers to bring Zvault forward.
+fn browser_gate(app: &AppHandle, agent: &AgentRecord) -> Result<(), ErrorCode> {
+    if agent.paused {
+        return Err(ErrorCode::Paused);
+    }
+    if app.state::<AppState>().session().is_locked() {
+        return Err(ErrorCode::Locked);
+    }
+    Ok(())
+}
+
+/// The logins saved for a page: titles and user names only. The UI's list is
+/// used to find candidates; a fill checks the decrypted item again.
+fn browser_logins(
+    app: &AppHandle,
+    hub: &AgentHub,
+    agent: &AgentRecord,
+    url: &str,
+    top_url: Option<&str>,
+) -> Result<Response, ErrorCode> {
+    browser_gate(app, agent)?;
+    let page = Page { url, top_url };
+    let mut why = None;
+    let reply = item_request(app, hub, ItemOp::List, &mut why)?;
+    let logins = reply
+        .items
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|i| {
+            let mut saved = i.urls;
+            if saved.is_empty() {
+                saved.extend(i.url);
+            }
+            Some(LoginInfo {
+                url: page.matching(&saved)?,
+                id: i.id,
+                title: i.title,
+                username: i.username,
+                has_totp: i.has_totp,
+            })
+        })
+        .collect();
+    hub.guard().registry.touch(&agent.id, now_secs());
+    Ok(Response::Logins { logins })
+}
+
+/// One login's user name, password and current one-time code, after
+/// checking in Rust, on the decrypted item, that it is saved for the page.
+/// Asks first unless the extension may fill while Zvault is unlocked, and
+/// logs every fill.
+fn browser_fill(
+    app: &AppHandle,
+    hub: &AgentHub,
+    agent: &AgentRecord,
+    item: &str,
+    page: Page<'_>,
+    otp_only: bool,
+    peer: Peer,
+) -> Result<Response, ErrorCode> {
+    browser_gate(app, agent)?;
+    let host = browser::host_of(page.url).ok_or(ErrorCode::BadRequest)?;
+    let who = Who::Agent(agent.clone());
+    let mut purpose = Purpose::app(PurposeKind::Fill, Some(format!("Fill a login on {host}")));
+    let mut verified = None;
+    let mut work = || -> Result<FillContents, ErrorCode> {
+        let mut why = None;
+        let (vault_id, cipher) = find_item(app, hub, item, &mut why)?;
+        // The extension names items by id; a title that happens to match is
+        // not the item it was offered.
+        if cipher.id != item {
+            return Err(ErrorCode::NotFound);
+        }
+        let fields = app
+            .state::<Keyring>()
+            .open_item(&vault_id, &cipher)
+            .map_err(vault_error)?;
+        page.matching(&fields.urls).ok_or(ErrorCode::WrongSite)?;
+        let what = if otp_only {
+            "the one-time code of"
+        } else {
+            "the login"
+        };
+        purpose.detail = Some(format!("Fill {what} “{}” on {host}", fields.title.trim()));
+        if agent.approval != ApprovalMode::WhileUnlocked {
+            let touch_id = agent.approval == ApprovalMode::AskEveryTime;
+            verified = Some(ask(app, hub, &who, &[], &purpose, peer, touch_id)?);
+        }
+        let otp = if fields.totp.is_empty() {
+            None
+        } else {
+            zvault_otp::Totp::parse(&fields.totp)
+                .ok()
+                .map(|t| crate::otp::OtpCode::now(&t))
+        };
+        Ok(FillContents {
+            username: if otp_only {
+                String::new()
+            } else {
+                fields.username.clone()
+            },
+            password: if otp_only {
+                zeroize::Zeroizing::new(String::new())
+            } else {
+                fields.password.clone().into()
+            },
+            otp_remaining: otp.as_ref().map(|o| o.remaining),
+            otp: otp.map(|o| o.code),
+        })
+    };
+    let result = work();
+    let now = now_secs();
+    let mut inner = hub.guard();
+    inner.registry.touch(&agent.id, now);
+    let e = match &result {
+        Ok(_) => entry(
+            &who,
+            if verified.is_some() {
+                Outcome::Approved
+            } else {
+                Outcome::Allowed
+            },
+            vec![],
+            Some(purpose.clone()),
+            None,
+            verified,
+            peer,
+        ),
+        Err(code) => entry(
+            &who,
+            Outcome::Denied,
+            vec![],
+            Some(purpose.clone()),
+            Some(*code),
+            None,
+            peer,
+        ),
+    };
+    hub.log(app, &mut inner, e);
+    drop(inner);
+    result.map(Response::Fill)
+}
+
+// ---------------------------------------------------------------------------
 // Deciding
 
 /// Decides whether `who` may do this, asking the user when needed. Returns
@@ -1213,6 +1417,8 @@ fn entry(
 #[serde(rename_all = "camelCase")]
 struct PairingPrompt<'a> {
     request_id: &'a str,
+    /// An AI tool (`zv agent pair`) or the browser extension.
+    kind: AgentKind,
     name: &'a str,
     /// Shown in the terminal too, so the user knows which `zv` is asking.
     code: &'a str,

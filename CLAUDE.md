@@ -15,6 +15,7 @@ pnpm workspaces + Turborepo drive the TypeScript side; a Cargo workspace at the 
 | `apps/api`                              | NestJS backend (TypeScript, ESM, Drizzle + PostgreSQL). Stores only ciphertext and verifiers. |
 | `apps/desktop`                          | macOS app: Tauri 2, React/Vite UI in `src/`, Rust in `src-tauri/`.                            |
 | `apps/share-web`                        | Static page (served at `/share/`) that opens share links and decrypts them in the browser.    |
+| `apps/extension`                        | Chrome extension (MV3): fills logins and 2FA codes through `zv` as its native host.           |
 | `apps/site`                             | Plain HTML/CSS/JS landing page (served at `/`). No build step.                                |
 | `apps/mobile`                           | Android app in Flutter; Rust core via flutter_rust_bridge (`crates/zvault-mobile`).           |
 | `crates/zvault-crypto`                  | All crypto: Argon2id + Secret Key (2SKD), XChaCha20-Poly1305, SRP. Keys stay in Rust.         |
@@ -24,7 +25,7 @@ pnpm workspaces + Turborepo drive the TypeScript side; a Cargo workspace at the 
 | `packages/shared`                       | Wire contracts (zod schemas + types). KDF floors here must match `zvault-crypto`.             |
 | `infra`                                 | AWS CDK app (not what runs the demo).                                                         |
 | `deploy/ec2`                            | The single-box demo deploy: compose, nginx, setup and deploy scripts.                         |
-| `docs`                                  | Agent CLI, auto-update and macOS release notes.                                               |
+| `docs`                                  | Agent CLI, browser extension, auto-update and macOS release notes.                            |
 
 ## Build and test
 

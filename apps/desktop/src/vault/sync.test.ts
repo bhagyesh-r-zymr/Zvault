@@ -30,6 +30,7 @@ const fakeCore: VaultCore = {
       title: f.title,
       username: f.username,
       url: f.urls[0] ?? null,
+      urls: f.urls,
       hasTotp: f.totp !== '',
       hasPasskey: f.passkey !== undefined,
       hasSshKey: f.sshKey !== undefined,

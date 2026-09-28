@@ -34,11 +34,23 @@ pub enum ApprovalMode {
     WhileUnlocked,
 }
 
+/// What was paired: an AI tool or script using `zv`, or the browser
+/// extension, which fills logins and never reads `zv://` secrets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum AgentKind {
+    #[default]
+    Agent,
+    Browser,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentRecord {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub kind: AgentKind,
     /// SHA-256 of the bearer token, base64url.
     pub token_hash: String,
     pub created_at: u64,
@@ -151,6 +163,28 @@ impl Registry {
         scopes: Vec<ScopePattern>,
         now: u64,
     ) -> Result<(AgentRecord, Zeroizing<String>), &'static str> {
+        self.pair_kind(AgentKind::Agent, name, approval, scopes, now)
+    }
+
+    /// Adds the browser extension. It has no `zv://` scopes: it can only ask
+    /// for logins saved for the page it is on.
+    pub fn pair_browser(
+        &mut self,
+        name: &str,
+        approval: ApprovalMode,
+        now: u64,
+    ) -> Result<(AgentRecord, Zeroizing<String>), &'static str> {
+        self.pair_kind(AgentKind::Browser, name, approval, vec![], now)
+    }
+
+    fn pair_kind(
+        &mut self,
+        kind: AgentKind,
+        name: &str,
+        approval: ApprovalMode,
+        scopes: Vec<ScopePattern>,
+        now: u64,
+    ) -> Result<(AgentRecord, Zeroizing<String>), &'static str> {
         let name = clean_name(name).ok_or("an agent needs a name")?;
         if self.agents.len() >= MAX_AGENTS {
             return Err("too many paired agents; unpair one first");
@@ -162,6 +196,7 @@ impl Registry {
         let record = AgentRecord {
             id: new_agent_id(),
             name,
+            kind,
             token_hash: hash_token(&token),
             created_at: now,
             last_used_at: None,
@@ -434,6 +469,25 @@ mod tests {
         )
         .unwrap();
         assert_ne!(reg.decide(&id, &db, true, T0 + 1), Decision::Allow);
+    }
+
+    #[test]
+    fn a_paired_browser_has_no_secret_scopes() {
+        let mut reg = Registry::default();
+        let (rec, token) = reg
+            .pair_browser("Zvault for Chrome", ApprovalMode::WhileUnlocked, 100)
+            .unwrap();
+        assert_eq!(rec.kind, AgentKind::Browser);
+        assert!(rec.scopes.is_empty());
+        assert!(reg.authenticate(&rec.id, &token).is_some());
+        assert_eq!(
+            reg.decide(&rec.id, &[r("zv://web/dev/DB")], true, 100),
+            Decision::Deny(ErrorCode::OutOfScope)
+        );
+        // Records saved before browsers existed read back as agents.
+        let old: AgentRecord =
+            serde_json::from_str(r#"{"id":"a","name":"n","tokenHash":"h","createdAt":1}"#).unwrap();
+        assert_eq!(old.kind, AgentKind::Agent);
     }
 
     #[test]

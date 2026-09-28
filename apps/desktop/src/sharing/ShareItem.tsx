@@ -5,7 +5,7 @@ import {
   type SharingKeyResponse,
 } from '@zvault/shared';
 import { useState } from 'react';
-import { ErrorLine, Segmented } from '../ui/controls.js';
+import { ErrorLine, Segmented, SwitchRow } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import { SHARE_ORIGIN, type SharingApi } from './api.js';
 import { sharingCore } from './core.js';
@@ -29,12 +29,20 @@ const noun = (item: SharedItemPayload) => (item.secret ? 'secret' : 'item');
 const label = (item: SharedItemPayload) =>
   item.secret ? `${item.secret.key} (${item.secret.environment})` : item.title;
 
+/** The payload without its one-time password setup. */
+export function withoutTotp(item: SharedItemPayload): SharedItemPayload {
+  const rest = { ...item };
+  delete rest.totp;
+  return rest;
+}
+
 /**
- * Share one item or project secret by link or with another Zvault user.
+ * Share one item or project secret by link or with another Zvault user. A
+ * login's 2FA setup goes along only when the person turns it on.
  * `onShared` hears about each share made, for the activity log.
  */
 export function ShareItem({
-  item,
+  item: full,
   api,
   onShared,
 }: {
@@ -43,8 +51,24 @@ export function ShareItem({
   onShared?: (channel: ShareChannel) => void;
 }) {
   const [mode, setMode] = useState<'link' | 'person'>('link');
+  const [includeTotp, setIncludeTotp] = useState(false);
+  const item = includeTotp ? full : withoutTotp(full);
   return (
     <section className="share">
+      {full.totp && (
+        <div className="panel rows">
+          <SwitchRow
+            title="Include 2FA code"
+            detail={
+              includeTotp
+                ? 'They will see live one-time codes and can sign in without you.'
+                : 'Off: they get the password but still need you for the one-time code.'
+            }
+            checked={includeTotp}
+            onChange={setIncludeTotp}
+          />
+        </div>
+      )}
       <Segmented
         large
         label="Share with"

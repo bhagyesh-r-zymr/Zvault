@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'core.dart' show OneTimeCode;
 import 'theme.dart';
 
 /// The Zvault mark: a Z on an accent tile.
@@ -273,4 +274,53 @@ class ErrorBanner extends StatelessWidget {
 Color? hexColor(String? hex) {
   if (hex == null || !RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(hex)) return null;
   return Color(int.parse(hex.substring(1), radix: 16) | 0xFF000000);
+}
+
+/// A live one-time code with the seconds left and a ring that empties.
+class OneTimeCodeView extends StatelessWidget {
+  const OneTimeCodeView(this.code, {super.key});
+
+  final OneTimeCode code;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.zv;
+    final digits = code.code;
+    final grouped = digits.length == 6
+        ? '${digits.substring(0, 3)} ${digits.substring(3)}'
+        : digits;
+    final low = code.remaining <= 5;
+    final ring = low ? c.attention : c.accent;
+    return Row(
+      children: [
+        Text(
+          grouped,
+          style: Zv.monoStyle.copyWith(
+            fontSize: 22,
+            fontWeight: FontWeight.w600,
+            color: c.ink,
+            letterSpacing: 2,
+          ),
+        ),
+        const Spacer(),
+        Text(
+          '${code.remaining}s',
+          style: TextStyle(color: low ? c.attention : c.muted, fontSize: 12),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(
+            value: code.remaining / code.period,
+            strokeWidth: 3,
+            strokeCap: StrokeCap.round,
+            color: ring,
+            backgroundColor: c.line,
+          ),
+        ),
+        const SizedBox(width: 4),
+      ],
+    );
+  }
 }

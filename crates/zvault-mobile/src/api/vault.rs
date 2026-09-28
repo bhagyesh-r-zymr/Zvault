@@ -6,6 +6,7 @@ use crate::records::{
 };
 
 use super::keyring;
+use super::sharing::blob_json;
 
 pub struct VaultSummary {
     pub id: String,
@@ -126,12 +127,64 @@ pub fn item_totp(
     if f.totp.is_empty() {
         return Ok(None);
     }
-    let c = zvault_otp::Totp::parse(&f.totp)?.code_at(u64::try_from(unix_secs)?);
-    Ok(Some(OneTimeCode {
+    code_of(&zvault_otp::Totp::parse(&f.totp)?, unix_secs).map(Some)
+}
+
+/// Codes from a one-time password setup that isn't in a vault item: one a
+/// person is about to save, or one someone shared with them.
+fn code_of(totp: &zvault_otp::Totp, unix_secs: i64) -> anyhow::Result<OneTimeCode> {
+    let c = totp.code_at(u64::try_from(unix_secs)?);
+    Ok(OneTimeCode {
         code: c.code,
         period: u32::try_from(c.period)?,
         remaining: u32::try_from(c.remaining)?,
-    }))
+    })
+}
+
+/// A 2FA setup that was scanned or pasted, checked but not saved yet.
+pub struct TotpSetup {
+    pub issuer: String,
+    pub account: String,
+    /// The first code, so the person can compare it with the website.
+    pub current: OneTimeCode,
+}
+
+/// Checks a scanned `otpauth://` QR code, a pasted link or a typed setup key.
+pub fn totp_check(input: String, unix_secs: i64) -> anyhow::Result<TotpSetup> {
+    let input = zeroize::Zeroizing::new(input);
+    let totp = zvault_otp::Totp::parse(&input)?;
+    Ok(TotpSetup {
+        issuer: totp.issuer().to_owned(),
+        account: totp.account().to_owned(),
+        current: code_of(&totp, unix_secs)?,
+    })
+}
+
+/// The current code for a setup someone shared (`SharedItemPayload.totp`).
+pub fn totp_code(uri: String, unix_secs: i64) -> anyhow::Result<OneTimeCode> {
+    let uri = zeroize::Zeroizing::new(uri);
+    code_of(&zvault_otp::Totp::parse(&uri)?, unix_secs)
+}
+
+/// Adds, replaces or (with an empty `totp`) removes a login's 2FA setup.
+/// `totp` is what [`totp_check`] accepted; it is stored as the canonical
+/// `otpauth://` URI, as the Mac stores it. Returns the item's new
+/// `encryptedData` as `EncryptedBlob` JSON for `PUT /vaults/:id/items/:id`;
+/// its `encryptedKey` does not change.
+pub fn item_set_totp(
+    vault_id: String,
+    record_json: String,
+    totp: String,
+) -> anyhow::Result<String> {
+    let totp = zeroize::Zeroizing::new(totp);
+    let canonical = if totp.trim().is_empty() {
+        zeroize::Zeroizing::new(String::new())
+    } else {
+        zvault_otp::Totp::parse(&totp)?.to_uri()
+    };
+    let record: ItemRecord = records::parse(&record_json)?;
+    let sealed = keyring().reseal_item_totp(&vault_id, &record, &canonical)?;
+    blob_json(&record.id, &sealed)
 }
 
 /// Opens a project and returns its `ProjectMeta` as JSON. `member_wrap_json`

@@ -90,6 +90,15 @@ pub fn otp_parse(input: String) -> Result<OtpSetup, ScanError> {
     Ok(OtpSetup::from_totp(&Totp::parse(&input)?))
 }
 
+/// The current code for a setup someone shared with this person. Items in a
+/// vault use `item_totp_code` instead, so their key never leaves Rust.
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub fn otp_code(uri: String) -> Result<OtpCode, ScanError> {
+    let uri = Zeroizing::new(uri);
+    Ok(OtpCode::now(&Totp::parse(&uri)?))
+}
+
 /// Lets the person pick an image (a screenshot of a setup page, say) and reads
 /// the QR code in it. Resolves to None if they cancel.
 #[tauri::command]
@@ -272,6 +281,12 @@ mod tests {
             "otpauth://totp/?secret=JBSWY3DPEHPK3PXP"
         );
         assert!(otp_parse("nope!".into()).is_err());
+    }
+
+    #[test]
+    fn codes_for_a_shared_setup() {
+        assert_eq!(otp_code(URI.into()).unwrap().code.len(), 6);
+        assert!(otp_code("https://example.com".into()).is_err());
     }
 
     #[test]

@@ -72,7 +72,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -1827355528;
+  int get rustContentHash => -154461657;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -107,6 +107,12 @@ abstract class RustLibApi extends BaseApi {
   Future<void> crateApiVaultItemPasskeyTest({
     required String vaultId,
     required String recordJson,
+  });
+
+  Future<String> crateApiVaultItemSetTotp({
+    required String vaultId,
+    required String recordJson,
+    required String totp,
   });
 
   Future<ItemSummary> crateApiVaultItemSummary({
@@ -158,17 +164,36 @@ abstract class RustLibApi extends BaseApi {
     required String vaultId,
     required String recordJson,
     required String shareOrigin,
+    required bool includeTotp,
+  });
+
+  Future<String> crateApiSharingShareOpen({
+    required String id,
+    required String senderPublicKey,
+    required String ephemeralPublicKey,
+    required String blobJson,
   });
 
   Future<NewUserShare> crateApiSharingShareSealTo({
     required String vaultId,
     required String recordJson,
     required String recipientPublicKey,
+    required bool includeTotp,
   });
 
   Future<String> crateApiSharingSharingFingerprint({required String publicKey});
 
   Future<SharingIdentity> crateApiSharingSharingIdentity();
+
+  Future<TotpSetup> crateApiVaultTotpCheck({
+    required String input,
+    required PlatformInt64 unixSecs,
+  });
+
+  Future<OneTimeCode> crateApiVaultTotpCode({
+    required String uri,
+    required PlatformInt64 unixSecs,
+  });
 
   Future<void> crateApiSessionUnlock({
     required String email,
@@ -360,6 +385,42 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<String> crateApiVaultItemSetTotp({
+    required String vaultId,
+    required String recordJson,
+    required String totp,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(vaultId, serializer);
+          sse_encode_String(recordJson, serializer);
+          sse_encode_String(totp, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiVaultItemSetTotpConstMeta,
+        argValues: [vaultId, recordJson, totp],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiVaultItemSetTotpConstMeta => const TaskConstMeta(
+    debugName: "item_set_totp",
+    argNames: ["vaultId", "recordJson", "totp"],
+  );
+
+  @override
   Future<ItemSummary> crateApiVaultItemSummary({
     required String vaultId,
     required String recordJson,
@@ -373,7 +434,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 7,
             port: port_,
           );
         },
@@ -409,7 +470,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 8,
             port: port_,
           );
         },
@@ -435,7 +496,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -457,7 +518,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -489,7 +550,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 11,
             port: port_,
           );
         },
@@ -520,7 +581,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 12,
             port: port_,
           );
         },
@@ -552,7 +613,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 13,
             port: port_,
           );
         },
@@ -586,7 +647,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 14,
             port: port_,
           );
         },
@@ -621,7 +682,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 15,
             port: port_,
           );
         },
@@ -660,7 +721,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 16,
             port: port_,
           );
         },
@@ -686,6 +747,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required String vaultId,
     required String recordJson,
     required String shareOrigin,
+    required bool includeTotp,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -694,43 +756,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_String(vaultId, serializer);
           sse_encode_String(recordJson, serializer);
           sse_encode_String(shareOrigin, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 16,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_new_share_link,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kCrateApiSharingShareLinkCreateConstMeta,
-        argValues: [vaultId, recordJson, shareOrigin],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiSharingShareLinkCreateConstMeta =>
-      const TaskConstMeta(
-        debugName: "share_link_create",
-        argNames: ["vaultId", "recordJson", "shareOrigin"],
-      );
-
-  @override
-  Future<NewUserShare> crateApiSharingShareSealTo({
-    required String vaultId,
-    required String recordJson,
-    required String recipientPublicKey,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_String(vaultId, serializer);
-          sse_encode_String(recordJson, serializer);
-          sse_encode_String(recipientPublicKey, serializer);
+          sse_encode_bool(includeTotp, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -739,11 +765,88 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
+          decodeSuccessData: sse_decode_new_share_link,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiSharingShareLinkCreateConstMeta,
+        argValues: [vaultId, recordJson, shareOrigin, includeTotp],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSharingShareLinkCreateConstMeta =>
+      const TaskConstMeta(
+        debugName: "share_link_create",
+        argNames: ["vaultId", "recordJson", "shareOrigin", "includeTotp"],
+      );
+
+  @override
+  Future<String> crateApiSharingShareOpen({
+    required String id,
+    required String senderPublicKey,
+    required String ephemeralPublicKey,
+    required String blobJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(id, serializer);
+          sse_encode_String(senderPublicKey, serializer);
+          sse_encode_String(ephemeralPublicKey, serializer);
+          sse_encode_String(blobJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 18,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiSharingShareOpenConstMeta,
+        argValues: [id, senderPublicKey, ephemeralPublicKey, blobJson],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSharingShareOpenConstMeta => const TaskConstMeta(
+    debugName: "share_open",
+    argNames: ["id", "senderPublicKey", "ephemeralPublicKey", "blobJson"],
+  );
+
+  @override
+  Future<NewUserShare> crateApiSharingShareSealTo({
+    required String vaultId,
+    required String recordJson,
+    required String recipientPublicKey,
+    required bool includeTotp,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(vaultId, serializer);
+          sse_encode_String(recordJson, serializer);
+          sse_encode_String(recipientPublicKey, serializer);
+          sse_encode_bool(includeTotp, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 19,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_new_user_share,
           decodeErrorData: sse_decode_AnyhowException,
         ),
         constMeta: kCrateApiSharingShareSealToConstMeta,
-        argValues: [vaultId, recordJson, recipientPublicKey],
+        argValues: [vaultId, recordJson, recipientPublicKey, includeTotp],
         apiImpl: this,
       ),
     );
@@ -751,7 +854,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiSharingShareSealToConstMeta => const TaskConstMeta(
     debugName: "share_seal_to",
-    argNames: ["vaultId", "recordJson", "recipientPublicKey"],
+    argNames: ["vaultId", "recordJson", "recipientPublicKey", "includeTotp"],
   );
 
   @override
@@ -766,7 +869,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 18,
+            funcId: 20,
             port: port_,
           );
         },
@@ -796,7 +899,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 19,
+            funcId: 21,
             port: port_,
           );
         },
@@ -815,6 +918,74 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "sharing_identity", argNames: []);
 
   @override
+  Future<TotpSetup> crateApiVaultTotpCheck({
+    required String input,
+    required PlatformInt64 unixSecs,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(input, serializer);
+          sse_encode_i_64(unixSecs, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 22,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_totp_setup,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiVaultTotpCheckConstMeta,
+        argValues: [input, unixSecs],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiVaultTotpCheckConstMeta => const TaskConstMeta(
+    debugName: "totp_check",
+    argNames: ["input", "unixSecs"],
+  );
+
+  @override
+  Future<OneTimeCode> crateApiVaultTotpCode({
+    required String uri,
+    required PlatformInt64 unixSecs,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(uri, serializer);
+          sse_encode_i_64(unixSecs, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 23,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_one_time_code,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiVaultTotpCodeConstMeta,
+        argValues: [uri, unixSecs],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiVaultTotpCodeConstMeta => const TaskConstMeta(
+    debugName: "totp_code",
+    argNames: ["uri", "unixSecs"],
+  );
+
+  @override
   Future<void> crateApiSessionUnlock({
     required String email,
     required String keyset,
@@ -828,7 +999,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 20,
+            funcId: 24,
             port: port_,
           );
         },
@@ -852,7 +1023,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 21)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 25)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_opt_String,
@@ -878,7 +1049,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 22,
+            funcId: 26,
             port: port_,
           );
         },
@@ -1123,6 +1294,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return SharingIdentity(
       publicKey: dco_decode_String(arr[0]),
       fingerprint: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
+  TotpSetup dco_decode_totp_setup(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return TotpSetup(
+      issuer: dco_decode_String(arr[0]),
+      account: dco_decode_String(arr[1]),
+      current: dco_decode_one_time_code(arr[2]),
     );
   }
 
@@ -1430,6 +1614,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  TotpSetup sse_decode_totp_setup(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_issuer = sse_decode_String(deserializer);
+    var var_account = sse_decode_String(deserializer);
+    var var_current = sse_decode_one_time_code(deserializer);
+    return TotpSetup(
+      issuer: var_issuer,
+      account: var_account,
+      current: var_current,
+    );
+  }
+
+  @protected
   int sse_decode_u_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint32();
@@ -1676,6 +1873,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.publicKey, serializer);
     sse_encode_String(self.fingerprint, serializer);
+  }
+
+  @protected
+  void sse_encode_totp_setup(TotpSetup self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.issuer, serializer);
+    sse_encode_String(self.account, serializer);
+    sse_encode_one_time_code(self.current, serializer);
   }
 
   @protected

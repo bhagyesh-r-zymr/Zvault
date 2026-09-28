@@ -10,9 +10,9 @@ use std::collections::HashMap;
 use serde::Deserialize;
 use serde_json::Value;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
-use zvault_crypto::vault::{open_padded, unwrap_key};
+use zvault_crypto::vault::{open_padded, seal_padded, unwrap_key};
 use zvault_crypto::{
-    BoxedShare, SharingKeyPair, SymmetricKey, environment_key_wrap_aad, project,
+    BoxedShare, Sealed, SharingKeyPair, SymmetricKey, environment_key_wrap_aad, project,
     project_key_wrap_aad, unwrap_key_from_member, vault,
 };
 
@@ -30,6 +30,8 @@ pub enum Error {
     NotOpen,
     #[error("this item could not be decrypted")]
     Decrypt,
+    #[error("this item could not be encrypted")]
+    Encrypt,
     #[error("invalid record")]
     InvalidRecord,
 }
@@ -196,6 +198,37 @@ impl Keyring {
         Ok(fields)
     }
 
+    /// Sets or clears (`totp` empty) a login's one-time password setup and
+    /// seals the item again under its own key. Every other field, the passkey
+    /// and any field this app doesn't know yet are kept exactly as they were.
+    /// Returns the new `encryptedData` blob; `encryptedKey` is unchanged.
+    pub fn reseal_item_totp(
+        &self,
+        vault_id: &str,
+        record: &ItemRecord,
+        totp: &str,
+    ) -> Result<Sealed> {
+        let vault_id = canonical_id(vault_id)?;
+        let item_id = canonical_id(&record.id)?;
+        self.keyset()?;
+        let vault_key = self.vaults.get(&vault_id).ok_or(Error::NotOpen)?;
+        let item_key = unwrap_key(
+            vault_key,
+            &record.encrypted_key.sealed(&vault_id)?,
+            &vault::aad::item_key(&vault_id, &item_id),
+        )
+        .map_err(|_| Error::Decrypt)?;
+        let aad = vault::aad::item_data(&vault_id, &item_id);
+        let mut plaintext = open_json(&item_key, &record.encrypted_data, &aad, &item_id)?;
+        if plaintext["v"] != 1 || plaintext["kind"] != ITEM_KIND_LOGIN {
+            return Err(Error::Decrypt);
+        }
+        plaintext["totp"] = Value::String(totp.to_owned());
+        let json = Zeroizing::new(serde_json::to_vec(&plaintext).map_err(|_| Error::Encrypt)?);
+        wipe(&mut plaintext);
+        seal_padded(&item_key, &json, &aad).map_err(|_| Error::Encrypt)
+    }
+
     /// Unwraps a project key and returns its metadata. `wrap` is this
     /// account's member wrap, for a project someone else shared.
     pub fn open_project(
@@ -336,6 +369,16 @@ fn open_json(key: &SymmetricKey, blob: &Blob, aad: &[u8], kid: &str) -> Result<V
         Ok(value)
     } else {
         Err(Error::Decrypt)
+    }
+}
+
+/// Overwrites every string in a JSON value before it is dropped.
+fn wipe(value: &mut Value) {
+    match value {
+        Value::String(s) => s.zeroize(),
+        Value::Array(a) => a.iter_mut().for_each(wipe),
+        Value::Object(o) => o.values_mut().for_each(wipe),
+        _ => {}
     }
 }
 
@@ -589,6 +632,65 @@ pub(crate) mod tests {
                 .unwrap()
                 .1
         );
+    }
+
+    #[test]
+    fn reseals_an_item_with_a_new_totp_and_keeps_everything_else() {
+        let (mut k, keyset) = unlocked();
+        let vault_key = SymmetricKey::generate().unwrap();
+        let item_key = SymmetricKey::generate().unwrap();
+        let vault: VaultRecord = parse(json!({
+            "id": VAULT,
+            "encryptedKey": blob(ACCOUNT_KID, &wrap_key(&keyset, &vault_key, &vault::aad::vault_key(VAULT)).unwrap()),
+            "encryptedMeta": seal_json(&vault_key, &json!({"v": 1, "name": "Personal"}), &vault::aad::vault_meta(VAULT), VAULT),
+        }));
+        let passkey = zvault_passkeys::Passkey::generate("github.com", "octo", 0).unwrap();
+        let encrypted_key = blob(
+            VAULT,
+            &wrap_key(&vault_key, &item_key, &vault::aad::item_key(VAULT, ITEM)).unwrap(),
+        );
+        let item: ItemRecord = parse(json!({
+            "id": ITEM,
+            "encryptedKey": encrypted_key,
+            "encryptedData": seal_json(&item_key, &json!({
+                "v": 1, "kind": "login", "title": "GitHub", "username": "octo",
+                "password": "hunter2", "urls": ["https://github.com"], "notes": "n", "totp": "",
+                "passkey": passkey, "futureField": {"kept": true}
+            }), &vault::aad::item_data(VAULT, ITEM), ITEM),
+        }));
+        k.open_vault(&vault).unwrap();
+
+        let uri = "otpauth://totp/GitHub:octo?secret=JBSWY3DPEHPK3PXP&issuer=GitHub";
+        let sealed = k.reseal_item_totp(VAULT, &item, uri).unwrap();
+        let updated: ItemRecord = parse(json!({
+            "id": ITEM,
+            "encryptedKey": encrypted_key,
+            "encryptedData": blob(ITEM, &sealed),
+        }));
+        let fields = k.open_item(VAULT, &updated).unwrap();
+        assert_eq!(fields.totp, uri);
+        assert_eq!(fields.password, "hunter2");
+        assert_eq!(fields.notes, "n");
+        assert_eq!(
+            fields.passkey.as_ref().unwrap().credential_id,
+            passkey.credential_id
+        );
+        let raw = open_json(
+            &item_key,
+            &updated.encrypted_data,
+            &vault::aad::item_data(VAULT, ITEM),
+            ITEM,
+        )
+        .unwrap();
+        assert_eq!(raw["futureField"]["kept"], true);
+
+        let cleared = k.reseal_item_totp(VAULT, &updated, "").unwrap();
+        let cleared: ItemRecord = parse(json!({
+            "id": ITEM,
+            "encryptedKey": encrypted_key,
+            "encryptedData": blob(ITEM, &cleared),
+        }));
+        assert!(k.open_item(VAULT, &cleared).unwrap().totp.is_empty());
     }
 
     #[test]

@@ -6,6 +6,7 @@ import {
   SharedItemPayload,
 } from '@zvault/shared';
 import { accessToken, openBlob, parseFragment, toBase64Url, type ParsedLink } from './link.js';
+import { codeAt, formatCode, parseTotp } from './totp.js';
 import './styles.css';
 
 const app = document.getElementById('app');
@@ -77,6 +78,43 @@ function field(label: string, value: string, secret = false): HTMLElement {
   return row;
 }
 
+/**
+ * The live one-time code from a 2FA setup the sender chose to include, with
+ * a ring counting down to the next code. The setup key itself is never shown.
+ */
+function totpField(uri: string): HTMLElement | null {
+  const totp = parseTotp(uri);
+  if (!totp) return null;
+  const row = el('div', undefined, { className: 'field totp' });
+  const shown = el('code', undefined, { ariaLive: 'polite' });
+  const ring = el('span', undefined, { className: 'ring', role: 'img' });
+  const value = el('span', undefined, { className: 'totp-value' });
+  value.append(shown, ring);
+  let current = '';
+  const tick = () => {
+    const c = codeAt(totp, Math.floor(Date.now() / 1000));
+    current = c.code;
+    shown.textContent = formatCode(c.code);
+    ring.textContent = String(c.remaining);
+    ring.ariaLabel = `${c.remaining} seconds left`;
+    ring.style.setProperty('--left', String(c.remaining / c.period));
+    ring.classList.toggle('low', c.remaining <= 5);
+  };
+  tick();
+  setInterval(tick, 1000);
+  const copy = el('button', 'Copy', { type: 'button' });
+  copy.addEventListener('click', () => {
+    void navigator.clipboard.writeText(current).then(() => {
+      copy.textContent = 'Copied';
+      setTimeout(() => (copy.textContent = 'Copy'), 1500);
+    });
+  });
+  const actions = el('span', undefined, { className: 'actions' });
+  actions.append(copy);
+  row.append(el('span', '2FA code', { className: 'label' }), value, actions);
+  return row;
+}
+
 function showItem(link: ParsedLink, meta: OpenShareLinkResponse) {
   let item: SharedItemPayload;
   try {
@@ -90,6 +128,7 @@ function showItem(link: ParsedLink, meta: OpenShareLinkResponse) {
     secret && field('Variable', secret.key),
     item.username && field('Username', item.username),
     item.password && field(secret ? 'Value' : 'Password', item.password, true),
+    item.totp && totpField(item.totp),
     item.url && field('Website', item.url),
   ].filter((r): r is HTMLElement => Boolean(r));
   const notes = item.notes ? [el('h3', 'Notes'), el('pre', item.notes)] : [];

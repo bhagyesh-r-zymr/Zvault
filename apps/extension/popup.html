@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Zvault</title>
+    <link rel="stylesheet" href="./src/popup.css" />
+  </head>
+  <body>
+    <header>
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="16" height="16">
+          <path
+            fill="currentColor"
+            d="M12 3.5a4.5 4.5 0 0 0-2.3 8.37L8.6 19.2a1 1 0 0 0 1 1.3h4.8a1 1 0 0 0 1-1.3l-1.1-7.33A4.5 4.5 0 0 0 12 3.5Z"
+          />
+        </svg>
+      </span>
+      <strong>Zvault</strong>
+      <span id="state" class="state"></span>
+    </header>
+    <main id="app" aria-live="polite"></main>
+    <script type="module" src="./src/popup.ts"></script>
+  </body>
+</html>

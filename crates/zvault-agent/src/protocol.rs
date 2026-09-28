@@ -10,6 +10,7 @@ use std::io::{BufRead, Write};
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
+use crate::browser::{FillContents, LoginInfo};
 use crate::manage::{Change, ItemContents, ItemInfo, ItemPatch, ProjectInfo};
 use crate::policy::ApprovalMode;
 use crate::reference::{ScopePattern, SecretRef};
@@ -93,6 +94,8 @@ pub enum PurposeKind {
     ReadItem,
     /// `zv item create`, `edit` or `delete`.
     ChangeItem,
+    /// The browser extension fills a login on a website.
+    Fill,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -165,6 +168,32 @@ pub enum RequestBody {
     /// Deletes an item. User only, and always approved in the app.
     #[serde(rename_all = "camelCase")]
     ItemDelete { item: String },
+    /// Asks the user to pair the browser extension. Like `Pair`, `code` is
+    /// shown in the extension and in the app. User only (the extension has
+    /// no token yet).
+    #[serde(rename_all = "camelCase")]
+    BrowserPair { name: String, code: String },
+    /// The logins saved for the page at `url`, without passwords. Needs the
+    /// browser extension's `auth`. `top_url` is the tab's address when the
+    /// login form is in a frame; both must match a login's website.
+    #[serde(rename_all = "camelCase")]
+    BrowserLogins {
+        url: String,
+        #[serde(default)]
+        top_url: Option<String>,
+    },
+    /// One login's user name, password and current one-time code, for
+    /// filling the page at `url`. The app checks the login is saved for that
+    /// site. With `otp_only`, the password is left out.
+    #[serde(rename_all = "camelCase")]
+    BrowserFill {
+        item: String,
+        url: String,
+        #[serde(default)]
+        top_url: Option<String>,
+        #[serde(default)]
+        otp_only: bool,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -223,6 +252,12 @@ pub enum Response {
         items: Vec<ItemInfo>,
     },
     Item(ItemContents),
+    /// Logins saved for a page.
+    Logins {
+        logins: Vec<LoginInfo>,
+    },
+    /// What to fill.
+    Fill(FillContents),
     Ok,
     Error {
         code: ErrorCode,
@@ -258,6 +293,10 @@ pub enum ErrorCode {
     UserOnly,
     /// The app turned the change down; the message says why.
     Rejected,
+    /// Only the browser extension may ask for that.
+    BrowserOnly,
+    /// The login is not saved for the page asking for it.
+    WrongSite,
     Internal,
 }
 
@@ -277,6 +316,8 @@ impl ErrorCode {
             Self::AgentsOnly => "that command is for paired agents; pass --agent",
             Self::UserOnly => "agents cannot do that; run it yourself without --agent",
             Self::Rejected => "Zvault could not make that change",
+            Self::BrowserOnly => "only the Zvault browser extension can ask for that",
+            Self::WrongSite => "that login is not saved for this website",
             Self::Internal => "Zvault could not complete the request",
         }
     }
@@ -417,6 +458,27 @@ mod tests {
                 change: Change::CreateEnvironment { .. }
             }
         ));
+    }
+
+    #[test]
+    fn browser_requests_round_trip() {
+        let line = br#"{"v":1,"auth":{"agentId":"a","token":"t"},"body":{"type":"browserFill","item":"i1","url":"https://github.com/login","otpOnly":true}}"#;
+        let mut line = line.to_vec();
+        line.push(b'\n');
+        let req: Request = read_message(&mut Cursor::new(line)).unwrap();
+        assert!(matches!(
+            req.body,
+            RequestBody::BrowserFill { ref item, otp_only: true, top_url: None, .. } if item == "i1"
+        ));
+        let json = serde_json::to_string(&Response::Fill(FillContents {
+            username: "me".into(),
+            password: Zeroizing::new(String::new()),
+            otp: Some("123456".into()),
+            otp_remaining: Some(12),
+        }))
+        .unwrap();
+        assert!(json.contains(r#""type":"fill""#), "{json}");
+        assert!(json.contains(r#""otpRemaining":12"#), "{json}");
     }
 
     #[test]

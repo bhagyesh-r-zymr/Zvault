@@ -9,9 +9,10 @@
 //!
 //! This crate holds what both sides share and can be tested without either:
 //! the `zv://` reference format, the wire protocol, per-agent policy, the
-//! activity log and output masking.
+//! activity log, output masking, and the browser extension's site matching.
 
 pub mod activity;
+pub mod browser;
 pub mod manage;
 pub mod mask;
 pub mod paths;

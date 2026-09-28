@@ -33,9 +33,13 @@ export const APPROVAL_MODE_TEXT: Record<ApprovalMode, string> = {
   whileUnlocked: 'Allow while Zvault is unlocked',
 };
 
+/** An AI tool using `zv`, or the browser extension (which only fills logins). */
+export type AgentKind = 'agent' | 'browser';
+
 export interface Agent {
   id: string;
   name: string;
+  kind: AgentKind;
   /** Unix seconds. */
   createdAt: number;
   lastUsedAt: number | null;
@@ -55,7 +59,8 @@ export type PurposeKind =
   | 'signIn'
   | 'change'
   | 'readItem'
-  | 'changeItem';
+  | 'changeItem'
+  | 'fill';
 
 export interface Purpose {
   kind: PurposeKind;
@@ -82,6 +87,8 @@ export type ErrorCode =
   | 'agentsOnly'
   | 'userOnly'
   | 'rejected'
+  | 'browserOnly'
+  | 'wrongSite'
   | 'internal';
 
 export interface ActivityEntry {
@@ -115,6 +122,7 @@ export interface ApprovalPrompt {
 
 export interface PairingPrompt {
   requestId: string;
+  kind: AgentKind;
   name: string;
   /** Also printed in the terminal that ran `zv agent pair`. */
   code: string;
@@ -230,6 +238,8 @@ export interface ItemInfo {
   title: string;
   username: string;
   url: string | null;
+  /** Every saved website, so the browser extension can match pages. */
+  urls: string[];
   hasTotp: boolean;
 }
 
@@ -292,6 +302,11 @@ export const agents = {
    */
   installCli: (admin = false) =>
     invoke<{ path: string; onPath: boolean; pathLine: string | null }>('cli_install', { admin }),
+  /** Whether the browser extension can reach this app, and from which browsers. */
+  browserExtensionStatus: () =>
+    invoke<{ bundled: boolean; browsers: string[]; extensionId: string }>(
+      'browser_extension_status',
+    ),
 
   /** Answers Rust's `zv ls` / `zv env` lookups. Register once, while the vault is loaded. */
   serveLists: (list: ListSecrets): Promise<UnlistenFn> =>

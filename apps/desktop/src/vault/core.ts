@@ -59,6 +59,7 @@ export interface ItemSummary {
   title: string;
   username: string;
   url: string | null;
+  urls: string[];
   hasTotp: boolean;
   hasPasskey: boolean;
 }

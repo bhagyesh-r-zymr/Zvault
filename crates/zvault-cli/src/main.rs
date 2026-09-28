@@ -9,6 +9,7 @@
 //! `env` and `run` read one environment straight from the server; see
 //! [`cloud`].
 
+mod browser_host;
 mod client;
 mod cloud;
 mod credentials;
@@ -261,6 +262,11 @@ fn usage(what: &str, e: impl std::fmt::Display) -> Error {
 }
 
 fn main() -> ExitCode {
+    // Chrome starts `zv` as the extension's native messaging host.
+    let first = std::env::args().nth(1);
+    if browser_host::started_by_browser(first.as_deref()) {
+        return ExitCode::from(browser_host::run(first.as_deref().unwrap_or_default()));
+    }
     // `zv help agents` reads more naturally than `zv guide`.
     let args: Vec<String> = std::env::args().skip(1).take(3).collect();
     if matches!(args.as_slice(), [h, g] if h == "help" && (g == "agents" || g == "guide")) {

@@ -13,6 +13,7 @@ const env = (id: string, inheritsFrom: string | null, locked = false): Environme
   position: 0,
   inheritsFrom,
   locked,
+  sync: [],
 });
 
 describe('tokenChain', () => {

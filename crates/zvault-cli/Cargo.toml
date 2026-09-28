@@ -21,6 +21,7 @@ serde_json = "1"
 thiserror = "2"
 zeroize = { version = "1.8", features = ["serde"] }
 zvault-agent = { path = "../zvault-agent" }
+zvault-crypto = { path = "../zvault-crypto" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "3"

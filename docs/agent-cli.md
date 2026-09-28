@@ -3,7 +3,9 @@
 `zv` lets you, your scripts and the coding agents you approve (Claude Code,
 Cursor, CI scripts on your Mac) use Zvault secrets. It never holds your master
 password or a vault key: every command asks the running Zvault app, which
-decides and decrypts.
+decides and decrypts. Where there is no app (CI, cloud AI agents), a read-only
+token in `ZVAULT_TOKEN` lets it read one environment; see
+[Cloud agents and CI](#cloud-agents-and-ci).
 
 ## Install
 
@@ -93,6 +95,59 @@ cannot copy, sign in or change anything (set, rm, project, environment, folder,
 item); those run as you. `zv projects` as an agent shows only what its scopes
 reach. `zv guide` (or `zv help agents`) prints the full guide an agent needs.
 
+## Cloud agents and CI
+
+A CI job or a cloud AI agent has no Zvault app to ask. Give it a token
+instead: in Zvault, open the project, then **Access > Tokens for CI and cloud
+agents > New token**, pick the environment and how long it lasts (1 day to a
+year), and copy the `zvt_…` token it shows once.
+
+```sh
+# Linux (static binary, x86_64); macOS uses the zv inside Zvault.app
+curl -fsSL -o zv https://github.com/bhagyesh-r-zymr/Zvault/releases/latest/download/zv-linux-x86_64
+chmod +x zv
+export ZVAULT_TOKEN=zvt_…               # from your CI's secret store
+./zv status                             # which place the token reads
+./zv run --env-from zv://web/production -- ./deploy.sh
+./zv read zv://web/production/DATABASE_URL
+eval "$(./zv env zv://web/production --format shell)"
+```
+
+GitHub Actions:
+
+```yaml
+- run: zv run --env-from zv://web/production -- ./deploy.sh
+  env:
+    ZVAULT_TOKEN: ${{ secrets.ZVAULT_TOKEN }}
+```
+
+With `ZVAULT_TOKEN` set, `status`, `ls`, `read`, `env` and `run` read from the
+server, without approvals; everything else still needs the app. `zv` talks to
+the server it was built for; set `ZVAULT_SERVER` to use another one. It needs
+`curl`.
+
+What a token can do:
+
+- Read one environment of one project, plus the environments it inherits
+  from (a secret with no value there falls back, as in the app). It cannot
+  change anything, and it cannot read other environments.
+- It expires (at most a year), and anyone who manages the environment can
+  revoke it on the same screen; revoking works at once.
+- It stops working when its creator loses access to the environment, when the
+  environment is deleted, or when the environment's key is rotated (the app
+  then shows "Re-issue needed").
+
+How it stays zero-knowledge: the token is made on your Mac, and it is itself
+the key. From its secret, `zv` derives an auth key (sent to prove the token;
+the server stores only its SHA-256) and a wrap key (never sent). The Mac wraps
+the project key and the environment keys with the wrap key; the server stores
+those wraps, bound to the token id, the environment and its key version. `zv`
+unwraps them and decrypts the values locally, so the server still sees only
+ciphertext. Treat the token like the secrets it opens. The scheme is in
+`crates/zvault-crypto/src/token.rs` and `packages/shared/src/tokens.ts`; the
+API is `apps/api/src/tokens` (its `TokenActivity` provider reports issued,
+used, denied and revoked tokens).
+
 ## Paths
 
 `zv://<project>/<environment>/[<folder>/]<KEY>`, as in the app and
@@ -168,6 +223,6 @@ as Development") is decrypted with that environment's key.
 
 - `crates/zvault-agent`: reference format, wire protocol, policy, terminal
   sign-ins, activity log, output masking.
-- `crates/zvault-cli`: the `zv` binary.
+- `crates/zvault-cli`: the `zv` binary (`cloud.rs`: `ZVAULT_TOKEN`).
 - `apps/desktop/src-tauri/src/agents/`: socket server and Tauri commands.
 - `apps/desktop/src-tauri/src/cli_install.rs`: Install command-line tool.

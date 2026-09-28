@@ -9,10 +9,15 @@ encrypts and asks the person to approve. Never print secret values into the
 conversation, into files you create, or into logs.
 
 WHERE IT WORKS
-  zv only works on a computer where the Zvault app is running and unlocked.
-  It cannot reach Zvault from a cloud or remote agent yet. If `zv status`
-  says "not running", ask the person to open Zvault; do not look for another
-  way in.
+  On the person's computer, zv talks to the Zvault app, which must be running
+  and unlocked. If `zv status` says "not running", ask the person to open
+  Zvault; do not look for another way in.
+  In CI or a cloud agent (no app), the person can give you a read-only token
+  as ZVAULT_TOKEN (made in Zvault > project > Access > Tokens). With it,
+  `zv status`, `zv ls`, `zv read`, `zv env` and `zv run` read that one
+  environment straight from the server, with no approvals; nothing can be
+  changed. `zv status` shows which place the token reads. Never print the
+  token.
 
 PATHS
   Every secret has a path:

@@ -30,6 +30,24 @@ export class ProjectPolicy {
   }
 
   /**
+   * Issuing, listing and revoking access tokens for an environment: the
+   * project's owner, or (in an org) whoever has Manage there.
+   */
+  async canManageTokens(
+    projectId: string,
+    accountId: string,
+    ownerId: string,
+    environmentId: string,
+  ): Promise<boolean> {
+    if (accountId === ownerId) return true;
+    const project = await this.facts.linkedProject(projectId);
+    if (!project) return false;
+    const { byEnv } = await this.facts.projectLevels(project, this.now());
+    const level = byEnv.get(environmentId)?.get(holderKey('account', accountId)) ?? 'none';
+    return levelAtLeast(level, 'manage');
+  }
+
+  /**
    * Writing a secret needs Edit in every environment whose value it changes,
    * and Edit somewhere for a metadata-only write or a delete.
    */

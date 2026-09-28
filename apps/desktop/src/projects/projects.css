@@ -409,6 +409,46 @@
   margin-right: 4px;
 }
 
+/* Access tokens for CI and cloud agents */
+.token-empty {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  color: var(--text-2);
+}
+
+.token-avatar {
+  background: var(--accent-soft);
+  color: var(--iris-text);
+}
+
+.token-secret {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.token-secret code {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.token-snippet {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--hover);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
 /* Secret sync */
 .sync-sheet {
   display: flex;

@@ -125,6 +125,8 @@ jobs:
         env:
           ZV_VERSION: ${{ env.VERSION }}
           ZVAULT_UPDATER_PUBKEY: ${{ env.UPDATER_PUBKEY }}
+          # The server `zv` reads from with ZVAULT_TOKEN.
+          ZVAULT_API_URL: ${{ env.VITE_API_URL }}
         run: |
           cargo build -p zvault-cli --release --locked --target aarch64-apple-darwin
           cargo build -p zvault-cli --release --locked --target x86_64-apple-darwin
@@ -240,3 +242,37 @@ jobs:
     with:
       release_tag: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_tag }}
     secrets: inherit
+
+  # zv for Linux, for CI runners and cloud agents that read secrets with
+  # ZVAULT_TOKEN. Static (musl), so it runs on any distribution.
+  zv-linux:
+    name: Attach zv for Linux
+    needs: dmg
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_tag }}
+      ZVAULT_API_URL: ${{ vars.ZVAULT_API_URL || 'https://52-66-189-120.sslip.io' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build zv
+        run: |
+          version="${RELEASE_TAG#v}"
+          ZV_VERSION="${version:-0.0.0}" \
+            cargo build -p zvault-cli --release --locked --target x86_64-unknown-linux-musl
+          cp target/x86_64-unknown-linux-musl/release/zv zv-linux-x86_64
+          ./zv-linux-x86_64 --version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zv-linux
+          path: zv-linux-x86_64
+          if-no-files-found: error
+      - name: Attach zv to the release
+        if: env.RELEASE_TAG != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$RELEASE_TAG" zv-linux-x86_64 --clobber

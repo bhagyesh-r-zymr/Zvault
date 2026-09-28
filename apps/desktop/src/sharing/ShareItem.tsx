@@ -1,4 +1,9 @@
-import { SHARE_LIMITS, type SharedItemPayload, type SharingKeyResponse } from '@zvault/shared';
+import {
+  SHARE_LIMITS,
+  type ShareChannel,
+  type SharedItemPayload,
+  type SharingKeyResponse,
+} from '@zvault/shared';
 import { useState } from 'react';
 import { ErrorLine, Segmented } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
@@ -24,8 +29,19 @@ const noun = (item: SharedItemPayload) => (item.secret ? 'secret' : 'item');
 const label = (item: SharedItemPayload) =>
   item.secret ? `${item.secret.key} (${item.secret.environment})` : item.title;
 
-/** Share one item or project secret by link or with another Zvault user. */
-export function ShareItem({ item, api }: { item: SharedItemPayload; api: SharingApi }) {
+/**
+ * Share one item or project secret by link or with another Zvault user.
+ * `onShared` hears about each share made, for the activity log.
+ */
+export function ShareItem({
+  item,
+  api,
+  onShared,
+}: {
+  item: SharedItemPayload;
+  api: SharingApi;
+  onShared?: (channel: ShareChannel) => void;
+}) {
   const [mode, setMode] = useState<'link' | 'person'>('link');
   return (
     <section className="share">
@@ -40,15 +56,21 @@ export function ShareItem({ item, api }: { item: SharedItemPayload; api: Sharing
         ]}
       />
       {mode === 'link' ? (
-        <ShareByLink item={item} api={api} />
+        <ShareByLink item={item} api={api} onShared={() => onShared?.('link')} />
       ) : (
-        <ShareWithPerson item={item} api={api} />
+        <ShareWithPerson item={item} api={api} onShared={() => onShared?.('person')} />
       )}
     </section>
   );
 }
 
-function ShareByLink({ item, api }: { item: SharedItemPayload; api: SharingApi }) {
+interface ShareProps {
+  item: SharedItemPayload;
+  api: SharingApi;
+  onShared: () => void;
+}
+
+function ShareByLink({ item, api, onShared }: ShareProps) {
   const [expiresInSeconds, setExpiry] = useState<number>(7 * DAY);
   const [maxViews, setMaxViews] = useState(1);
   const [audience, setAudience] = useState<'anyone' | 'emails'>('anyone');
@@ -81,6 +103,7 @@ function ShareByLink({ item, api }: { item: SharedItemPayload; api: SharingApi }
         allowedEmails,
       });
       setUrl(link.url);
+      onShared();
       setAllowed(allowedEmails ?? null);
       setUnverified(created.unverifiedEmails);
     } catch (e) {
@@ -226,7 +249,7 @@ function ShareByLink({ item, api }: { item: SharedItemPayload; api: SharingApi }
   );
 }
 
-function ShareWithPerson({ item, api }: { item: SharedItemPayload; api: SharingApi }) {
+function ShareWithPerson({ item, api, onShared }: ShareProps) {
   const [email, setEmail] = useState('');
   const [recipient, setRecipient] = useState<
     (SharingKeyResponse & { fingerprint: string; pin: PinCheck }) | null
@@ -272,6 +295,7 @@ function ShareWithPerson({ item, api }: { item: SharedItemPayload; api: SharingA
         blob: sealed.blob,
       });
       pinKey(recipient.email, recipient.publicKey);
+      onShared();
       setSentTo(recipient.email);
       setRecipient(null);
       setEmail('');

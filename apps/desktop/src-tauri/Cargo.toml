@@ -34,6 +34,7 @@ zvault-emergency-kit = { path = "../../../crates/zvault-emergency-kit" }
 zvault-otp = { path = "../../../crates/zvault-otp" }
 zvault-passkeys = { path = "../../../crates/zvault-passkeys" }
 zvault-passwords = { path = "../../../crates/zvault-passwords" }
+zvault-ssh = { path = "../../../crates/zvault-ssh" }
 tauri-plugin-updater = "2"
 
 [dev-dependencies]

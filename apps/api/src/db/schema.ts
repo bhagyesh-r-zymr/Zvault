@@ -689,3 +689,40 @@ export const userShares = pgTable(
     index('user_shares_sender_idx').on(t.senderId, t.createdAt),
   ],
 );
+
+// ---------------------------------------------------------------- agent tokens
+
+/** One environment key a token holds, wrapped with the token's wrap key. */
+export interface StoredTokenEnvironment {
+  environmentId: string;
+  keyVersion: number;
+  encryptedKey: EncryptedBlob;
+}
+
+/**
+ * Read-only access tokens for cloud agents and CI. The server keeps
+ * `SHA-256(auth key)` and keys wrapped with a key derived from the token
+ * secret, which it never sees; see `packages/shared/src/tokens.ts`.
+ */
+export const agentTokens = pgTable(
+  'agent_tokens',
+  {
+    id: uuid('id').primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    /** The token acts with (at most) its creator's access, and dies with the account. */
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    verifier: bytea('verifier').notNull(),
+    encryptedProjectKey: jsonb('encrypted_project_key').$type<EncryptedBlob>().notNull(),
+    /** The environment it reads, then the ones it falls back to. */
+    environments: jsonb('environments').$type<StoredTokenEnvironment[]>().notNull(),
+    expiresAt: ts('expires_at').notNull(),
+    lastUsedAt: ts('last_used_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('agent_tokens_project_idx').on(t.projectId, t.createdAt)],
+);

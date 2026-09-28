@@ -35,7 +35,7 @@ const ASSET: &str = "zv-macos-universal";
 pub enum UpdateError {
     #[error("this zv was built without an update key; download it again from {RELEASES}/latest")]
     NoKey,
-    #[error("zv update only works on macOS for now")]
+    #[error("zv update only works on macOS; download zv-linux-x86_64 again from {RELEASES}/latest")]
     Unsupported,
     #[error("could not download {0}: {1}")]
     Download(String, String),

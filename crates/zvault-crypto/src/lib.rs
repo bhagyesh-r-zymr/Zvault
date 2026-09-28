@@ -23,7 +23,8 @@
 //! so a person who forgets the master password can still get back in.
 //!
 //! Vault and item encryption (per-item keys, padding, record binding) lives in
-//! [`vault`]; projects, environments and secrets in [`project`].
+//! [`vault`]; projects, environments and secrets in [`project`]; tokens for
+//! cloud agents and CI in [`AgentToken`].
 
 mod access;
 mod aead;
@@ -38,6 +39,7 @@ mod recovery;
 mod secret_key;
 mod share;
 pub mod srp;
+mod token;
 pub mod vault;
 
 pub use access::{
@@ -57,3 +59,4 @@ pub use share::{
     BoxedShare, LinkShare, PUBLIC_KEY_LEN, SHARE_ID_LEN, SharingKeyPair, fingerprint, open_from,
     seal_to,
 };
+pub use token::{AgentToken, TOKEN_ID_LEN, TOKEN_PREFIX, token_verifier};

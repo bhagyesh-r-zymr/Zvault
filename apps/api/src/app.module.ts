@@ -14,6 +14,7 @@ import { MetaController } from './meta/meta.controller.js';
 import { PairingModule } from './pairing/pairing.module.js';
 import { ProjectsModule } from './projects/projects.module.js';
 import { SharingModule } from './sharing/sharing.module.js';
+import { TokensModule } from './tokens/tokens.module.js';
 import { DrizzleTwoFactorRepository } from './two-factor/drizzle-two-factor.repository.js';
 import { TwoFactorModule } from './two-factor/two-factor.module.js';
 import { VaultModule } from './vault/vault.module.js';
@@ -38,6 +39,7 @@ import { WaitlistModule } from './waitlist/waitlist.module.js';
     SharingModule,
     AccessModule,
     PairingModule,
+    TokensModule,
     WaitlistModule,
   ],
   controllers: [HealthController, MetaController],

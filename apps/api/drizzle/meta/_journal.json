@@ -64,6 +64,13 @@
       "when": 1790366226172,
       "tag": "0008_account_recovery",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790635354026,
+      "tag": "0009_agent_tokens",
+      "breakpoints": true
     }
   ]
 }

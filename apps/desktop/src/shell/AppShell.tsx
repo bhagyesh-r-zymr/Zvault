@@ -11,7 +11,9 @@ import { ProjectsContext, TeamContext } from '../projects/context.js';
 import { projectsCore, teamKeysCore } from '../projects/core.js';
 import { EnvironmentsView } from '../projects/EnvironmentsView.js';
 import { NewProjectSheet } from '../projects/NewProjectSheet.js';
+import { TokensContext } from '../projects/AgentTokens.js';
 import { ProjectAccess } from '../projects/ProjectAccess.js';
+import { TokensApi } from '../projects/tokensApi.js';
 import { ProjectsView, ProjectTile } from '../projects/ProjectsView.js';
 import { ProjectsSync } from '../projects/sync.js';
 import { TeamStore } from '../projects/team.js';
@@ -86,6 +88,10 @@ export function AppShell(props: {
       ),
     }),
     [session.token, session.email, projectsSync],
+  );
+  const tokens = useMemo(
+    () => ({ api: new TokensApi({ baseUrl: API_URL, accessToken: () => session.token }) }),
+    [session.token],
   );
   const expanded = openProjects ?? (projects[0] ? [projects[0].id] : []);
 
@@ -360,7 +366,9 @@ export function AppShell(props: {
             )}
             {route.name === 'access' && (
               <TeamContext.Provider value={team}>
-                <ProjectAccess projectId={route.projectId} />
+                <TokensContext.Provider value={tokens}>
+                  <ProjectAccess projectId={route.projectId} />
+                </TokensContext.Provider>
               </TeamContext.Provider>
             )}
             {route.name === 'agents' && <AgentsView />}

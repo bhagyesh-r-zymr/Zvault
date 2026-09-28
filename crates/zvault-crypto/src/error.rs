@@ -7,6 +7,8 @@ pub enum Error {
     InvalidSecretKey,
     #[error("invalid recovery code")]
     InvalidRecoveryCode,
+    #[error("invalid access token")]
+    InvalidToken,
     #[error("invalid public key")]
     InvalidPublicKey,
     #[error("decryption failed")]

@@ -4,8 +4,13 @@
 //! decides: for you, it asks for approval in the app (or lets a terminal that
 //! ran `zv signin` go ahead for a while); for a paired agent (`--agent` or
 //! `ZV_AGENT`), it applies that agent's scopes and approval mode.
+//!
+//! Where there is no app (CI, cloud agents), `ZVAULT_TOKEN` lets `ls`, `read`,
+//! `env` and `run` read one environment straight from the server; see
+//! [`cloud`].
 
 mod client;
+mod cloud;
 mod credentials;
 mod format;
 mod guide;
@@ -31,8 +36,9 @@ const AFTER_HELP: &str = "\
 Secrets are named zv://project/environment/[folder/]KEY, for example
 zv://payments-api/production/STRIPE_SECRET_KEY.
 
-zv needs the Zvault app running and unlocked on this computer; cloud agents
-cannot use it yet. Every change is approved by you in the app.
+zv needs the Zvault app running and unlocked on this computer. Every change
+is approved by you in the app. CI and cloud agents without the app set
+ZVAULT_TOKEN (Zvault > project > Access > Tokens) to read one environment.
 
 AI agents: run `zv guide` (or `zv help agents`) for the workflow, path
 syntax, approvals and examples. `zv <command> --help` shows each command.";
@@ -233,6 +239,8 @@ enum Error {
     Input(std::io::Error),
     #[error(transparent)]
     Update(#[from] update::UpdateError),
+    #[error(transparent)]
+    Cloud(#[from] cloud::CloudError),
 }
 
 impl Error {
@@ -242,6 +250,7 @@ impl Error {
             Self::Cred(CredError::NonePaired | CredError::Unknown(_)) => 3,
             Self::Usage(_) => 64,
             Self::Spawn(_) => 127,
+            Self::Cloud(e) => e.exit_code(),
             Self::Cred(_) | Self::Input(_) | Self::Update(_) => 1,
         }
     }
@@ -334,6 +343,18 @@ fn purpose(kind: PurposeKind, command: &[String]) -> Purpose {
 }
 
 fn dispatch(cmd: Cmd) -> Result<u8, Error> {
+    if let Some(token) = cloud::token_from_env() {
+        if matches!(
+            cmd,
+            Cmd::Status { .. }
+                | Cmd::Ls { .. }
+                | Cmd::Read { .. }
+                | Cmd::Env { .. }
+                | Cmd::Run { .. }
+        ) {
+            return with_token(&token, cmd);
+        }
+    }
     let store_path = credentials::default_path()?;
     match cmd {
         Cmd::Status { json } => status(&store_path, json),
@@ -532,6 +553,123 @@ fn dispatch(cmd: Cmd) -> Result<u8, Error> {
         Cmd::Agent(cmd) => agent(&store_path, cmd),
         Cmd::Update { check } => Ok(update::run(check)?),
     }
+}
+
+/// `status`, `ls`, `read`, `env` and `run` with `ZVAULT_TOKEN`: no app, no
+/// approvals, one environment, read-only.
+fn with_token(token: &str, cmd: Cmd) -> Result<u8, Error> {
+    let snap = cloud::load(token)?;
+    match cmd {
+        Cmd::Status { json } => {
+            let count = snap.refs().len();
+            if json {
+                let value = serde_json::json!({
+                    "token": snap.token_name,
+                    "reads": snap.place(),
+                    "expiresAt": snap.expires_at,
+                    "secrets": count,
+                });
+                println!("{value}");
+            } else {
+                println!("Token:     {} ({})", snap.token_name, cloud::TOKEN_ENV);
+                println!("Reads:     {} (read-only)", snap.place());
+                println!("Expires:   {}", snap.expires_at);
+                println!("Secrets:   {count}");
+            }
+            Ok(0)
+        }
+        Cmd::Ls {
+            place,
+            recursive,
+            json,
+            ..
+        } => {
+            let prefix = place.as_deref().map(parse_place).transpose()?;
+            let refs: Vec<SecretRef> = snap
+                .refs()
+                .into_iter()
+                .filter(|r| prefix.as_ref().is_none_or(|p| p.allows(r)))
+                .collect();
+            if json {
+                let all = format::listing(prefix.as_ref(), &refs, true);
+                println!("{}", serde_json::to_string_pretty(&all).unwrap_or_default());
+            } else {
+                for line in format::listing(prefix.as_ref(), &refs, recursive) {
+                    println!("{line}");
+                }
+            }
+            Ok(0)
+        }
+        Cmd::Read {
+            reference,
+            no_newline,
+            ..
+        } => {
+            let value = snap.read(&parse_ref(&reference)?)?;
+            let mut out = std::io::stdout().lock();
+            let _ = out.write_all(value.as_bytes());
+            if !no_newline {
+                let _ = out.write_all(b"\n");
+            }
+            let _ = out.flush();
+            Ok(0)
+        }
+        Cmd::Env { place, format, .. } => {
+            let values = token_export(&snap, &parse_place(&place)?)?;
+            let vars: Vec<(String, &str)> = values
+                .iter()
+                .map(|(k, v)| (k.clone(), v.as_str()))
+                .collect();
+            let text = Zeroizing::new(format::env(&vars, format));
+            let mut out = std::io::stdout().lock();
+            let _ = out.write_all(text.as_bytes());
+            let _ = out.flush();
+            Ok(0)
+        }
+        Cmd::Run {
+            env,
+            env_from,
+            no_mask,
+            command,
+            ..
+        } => {
+            let pairs = parse_env_specs(&env)?;
+            if pairs.is_empty() && env_from.is_none() {
+                return Err(Error::Usage(
+                    "give --env NAME=PATH or --env-from PLACE".into(),
+                ));
+            }
+            let mut vars = match env_from.as_deref().map(parse_place).transpose()? {
+                Some(p) => token_export(&snap, &p)?,
+                None => vec![],
+            };
+            for (key, r) in pairs {
+                let value = snap.read(&r)?;
+                vars.retain(|(k, _)| *k != key);
+                vars.push((key, value));
+            }
+            let status = run::run(&command, &vars, !no_mask).map_err(Error::Spawn)?;
+            Ok(run::exit_code(status))
+        }
+        _ => Err(Error::Usage(format!(
+            "this command does not work with {}",
+            cloud::TOKEN_ENV
+        ))),
+    }
+}
+
+fn token_export(
+    snap: &cloud::Snapshot,
+    prefix: &ScopePattern,
+) -> Result<Vec<(String, Zeroizing<String>)>, Error> {
+    let values = snap.export(prefix)?;
+    let refs: Vec<SecretRef> = values.iter().map(|(r, _)| r.clone()).collect();
+    let names = format::env_names(&refs).map_err(Error::Usage)?;
+    Ok(names
+        .into_iter()
+        .zip(values)
+        .map(|(n, (_, v))| (n, v))
+        .collect())
 }
 
 fn status(store_path: &Path, json: bool) -> Result<u8, Error> {

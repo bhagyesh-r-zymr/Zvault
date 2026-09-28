@@ -1,0 +1,272 @@
+/* Porcelain, as in the Mac app: navy ink on white, one denim accent. */
+@font-face {
+  font-family: 'Onest';
+  src: url('/fonts/onest-latin.woff2') format('woff2');
+  font-weight: 100 900;
+}
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  src: url('/fonts/plus-jakarta-sans-latin.woff2') format('woff2');
+  font-weight: 200 800;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono-latin.woff2') format('woff2');
+  font-weight: 100 800;
+}
+
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --sunken: #f7f9fc;
+  --hover: #f2f5fa;
+  --line: #e4e8f0;
+  --text: #10204a;
+  --muted: #65718c;
+  --iris: #2f63d9;
+  --iris-hover: #2757c4;
+  --accent-soft: #e6eefc;
+  --secure: #0f8a6a;
+  --secure-bg: #e2f4ed;
+  --warn: #b25b00;
+  --warn-bg: #fff3e3;
+  --danger: #d63a4a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141c33;
+    --sunken: #1a2440;
+    --hover: #202b4a;
+    --line: #26324f;
+    --text: #e9eefa;
+    --muted: #8e9ab8;
+    --iris: #5b8bf5;
+    --iris-hover: #6d98f7;
+    --accent-soft: #1f2f5c;
+    --secure: #4cc79f;
+    --secure-bg: #173a33;
+    --warn: #f0a24a;
+    --warn-bg: #3a2c19;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  width: 340px;
+  min-height: 180px;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    13px/1.4 Onest,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+header strong {
+  font-family: 'Plus Jakarta Sans', Onest, sans-serif;
+  font-size: 14px;
+}
+
+.logo {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: #10204a;
+  color: #fff;
+}
+
+.state {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.state::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.state.ready::before {
+  background: var(--secure);
+}
+
+.state.locked::before {
+  background: var(--warn);
+}
+
+main {
+  padding: 10px 8px 12px;
+}
+
+.site {
+  padding: 2px 8px 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.site b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.login {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 10px;
+}
+
+.login:hover {
+  background: var(--hover);
+}
+
+.tile {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: var(--iris);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.main {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+
+.title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 1px;
+  color: var(--text);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  padding: 6px 10px;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+button:hover {
+  background: var(--hover);
+}
+
+button.primary {
+  background: var(--iris);
+  border-color: var(--iris);
+  color: #fff;
+}
+
+button.primary:hover {
+  background: var(--iris-hover);
+}
+
+button.link {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-weight: 500;
+  padding: 4px 8px;
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+
+.empty {
+  padding: 16px 12px 8px;
+  text-align: center;
+}
+
+.empty h2 {
+  margin: 0 0 6px;
+  font:
+    600 15px 'Plus Jakarta Sans',
+    Onest,
+    sans-serif;
+}
+
+.empty p {
+  margin: 0 0 14px;
+  color: var(--muted);
+}
+
+.pair-code {
+  font:
+    600 24px 'JetBrains Mono',
+    ui-monospace,
+    monospace;
+  letter-spacing: 4px;
+  margin: 4px 0 10px;
+  color: var(--iris);
+}
+
+.error {
+  margin: 4px 8px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 12px;
+}
+
+footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  padding: 8px 8px 0;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11.5px;
+}

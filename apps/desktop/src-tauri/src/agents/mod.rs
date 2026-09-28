@@ -22,6 +22,11 @@
 //!    UI only finds and uploads their ciphertext ([`ITEM_EVENT`]);
 //! 6. logs the use or denial and answers over the socket.
 //!
+//! The browser extension pairs the same way (through `zv`, which Chrome
+//! starts as its native messaging host) but has no `zv://` scopes: it may
+//! only list and fill the logins saved for the page it is on, which Rust
+//! checks on the decrypted item. See `docs/browser-extension.md`.
+//!
 //! Only the values asked for, and allowed, leave the app.
 
 use std::collections::HashMap;
@@ -35,7 +40,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 use zvault_agent::activity::{ActivityEntry, ActivityLog};
-use zvault_agent::policy::{AgentRecord, ApprovalMode, Registry, TerminalGrants};
+use zvault_agent::policy::{AgentKind, AgentRecord, ApprovalMode, Registry, TerminalGrants};
 use zvault_agent::{ScopePattern, SecretRef};
 
 use crate::autolock::AppState;
@@ -192,6 +197,7 @@ pub use server::start;
 pub struct AgentView {
     id: String,
     name: String,
+    kind: AgentKind,
     created_at: u64,
     last_used_at: Option<u64>,
     paused: bool,
@@ -204,6 +210,7 @@ impl From<&AgentRecord> for AgentView {
         Self {
             id: a.id.clone(),
             name: a.name.clone(),
+            kind: a.kind,
             created_at: a.created_at,
             last_used_at: a.last_used_at,
             paused: a.paused,
@@ -272,6 +279,13 @@ pub fn agent_update(
     require_unlocked(&state)?;
     let scopes = scopes.map(parse_scopes).transpose()?;
     let mut inner = hub.guard();
+    let is_browser = inner
+        .registry
+        .get(&agent_id)
+        .is_some_and(|a| a.kind == AgentKind::Browser);
+    if is_browser && scopes.as_ref().is_some_and(|s| !s.is_empty()) {
+        return Err("the browser extension fills logins; it cannot use zv:// secrets".into());
+    }
     let record = inner
         .registry
         .update(&agent_id, name.as_deref(), paused, approval, scopes)

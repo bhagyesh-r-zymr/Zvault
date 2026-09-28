@@ -40,7 +40,7 @@ pub struct CliInstalled {
     path_line: Option<String>,
 }
 
-fn bundled() -> Option<PathBuf> {
+pub fn bundled() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let zv = exe.parent()?.join(NAME);
     zv.is_file().then_some(zv)

@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "Zvault",
+  "short_name": "Zvault",
+  "version": "0.1.0",
+  "description": "Fill logins and 2FA codes from the Zvault app on your Mac. Keys stay in the app.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA29Lp/G//rNZ/EPaVcZuwKqFne97d5wyFOpxJ9Z5DkEB7yKznvXmsdfdyNf/ISTfQxvCEGo5mS4fbAaElfFKxaDNUWQ4OE5RGXaqy0NY4hnDrSG9rUDoDvKxqJMa/JZ9TKIh1R+4i2WgwCTuPZF1pzT9NhOuZ678Zlm5txY4jYS8I4MreoRa+LPx8Us3Ys4lSn9+4aBpuRbVKpNW3nNvXFotm51/NstYmFSOdSUhUd35DoVxExJrWUDjxQv8iMMv0+K3hvOfLLNxcG8vt2f99fMeLW7noZAuAdpITbx+ljL/Q4clNUw+WNLMO4iaf42gPIco4Ut0d4yH+3TO4w+y7AQIDAQAB",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Zvault",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": ["nativeMessaging", "activeTab", "storage", "clipboardWrite"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "commands": {
+    "fill-login": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
+      },
+      "description": "Fill the login saved for this page"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+  }
+}

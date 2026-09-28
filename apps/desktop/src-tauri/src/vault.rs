@@ -194,6 +194,8 @@ pub struct ItemSummary {
     pub title: String,
     pub username: String,
     pub url: Option<String>,
+    /// Every saved website, for the browser extension to match pages.
+    pub urls: Vec<String>,
     /// Whether the item holds a one-time password.
     pub has_totp: bool,
     /// Whether the item holds a passkey.
@@ -206,6 +208,7 @@ impl From<&ItemFields> for ItemSummary {
             title: f.title.clone(),
             username: f.username.clone(),
             url: f.urls.first().cloned(),
+            urls: f.urls.clone(),
             has_totp: !f.totp.is_empty(),
             has_passkey: f.passkey.is_some(),
         }

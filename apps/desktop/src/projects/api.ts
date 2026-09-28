@@ -1,5 +1,7 @@
 import {
+  ACTIVITY_PAGE_SIZE,
   API_VERSION,
+  ActivityPageResponse,
   EntryConflictResponse,
   EnvironmentAccess,
   ListProjectsResponse,
@@ -9,6 +11,7 @@ import {
   ProjectTrashResponse,
   SecretHistoryResponse,
   SyncProjectResponse,
+  type ReportedEvent,
   type AddEnvironmentWrapsRequest,
   type AddProjectWrapsRequest,
   type ApproveAccessRequest,
@@ -154,6 +157,24 @@ export class ProjectsApi {
 
   async approveRequest(requestId: string, body: ApproveAccessRequest): Promise<void> {
     await this.request('POST', `/access/requests/${requestId}/approve`, body);
+  }
+
+  /** A page of the project's activity log, newest first (owners, admins and managers). */
+  async activity(
+    projectId: string,
+    opts: { before?: number; secretId?: string } = {},
+  ): Promise<ActivityPageResponse> {
+    const q = new URLSearchParams({ limit: String(ACTIVITY_PAGE_SIZE) });
+    if (opts.before !== undefined) q.set('before', String(opts.before));
+    if (opts.secretId) q.set('secretId', opts.secretId);
+    return ActivityPageResponse.parse(
+      await this.request('GET', `/projects/${projectId}/activity?${q.toString()}`),
+    );
+  }
+
+  /** Reports views, copies, shares and agent use made on this Mac (ids only). */
+  async reportActivity(projectId: string, events: ReportedEvent[]): Promise<void> {
+    await this.request('POST', `/projects/${projectId}/activity`, { events });
   }
 
   private async putEntry(

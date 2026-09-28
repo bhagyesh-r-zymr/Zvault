@@ -1,0 +1,90 @@
+/* The team activity log of a project. */
+
+.activity-filters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.activity-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.activity-row {
+  min-height: 48px;
+  font-size: 13px;
+}
+
+.activity-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--accent-soft);
+  color: var(--iris-text);
+}
+
+.activity-icon[data-kind='change'] {
+  background: var(--violet-bg);
+  color: var(--violet);
+}
+
+.activity-icon[data-kind='access'] {
+  background: var(--secure-bg);
+  color: var(--secure);
+}
+
+.activity-row[data-tone='negative'] .activity-icon {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.activity-line {
+  display: block;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+.activity-line .actor,
+.activity-line .subject {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.activity-line .subject.mono {
+  font-size: 12.5px;
+}
+
+.activity-line button.subject {
+  border: 0;
+  background: none;
+  padding: 0;
+  height: auto;
+  min-height: 0;
+  cursor: pointer;
+  color: var(--iris-text);
+}
+
+.activity-line button.subject:hover {
+  text-decoration: underline;
+}
+
+.activity-row .env-chip {
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.activity-row time {
+  flex-shrink: 0;
+  min-width: 64px;
+  white-space: nowrap;
+  text-align: right;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}

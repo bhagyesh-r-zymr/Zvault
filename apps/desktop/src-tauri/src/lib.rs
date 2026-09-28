@@ -18,6 +18,7 @@ mod platform;
 mod projects;
 mod recovery;
 mod remembered;
+mod secret_sync;
 mod session;
 mod sharing;
 mod stay_unlocked;
@@ -124,6 +125,10 @@ pub fn run() {
             projects::entry_open,
             projects::secret_value_seal,
             projects::secret_value_open,
+            secret_sync::sync_connections,
+            secret_sync::sync_connect,
+            secret_sync::sync_disconnect,
+            secret_sync::sync_push,
             generator::generate_password,
             generator::generate_passphrase,
             generator::check_password_strength,

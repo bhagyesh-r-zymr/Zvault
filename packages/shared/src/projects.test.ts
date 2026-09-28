@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   EnvironmentMeta,
+  SyncTarget,
   formatSecretPath,
   parseSecretPath,
   ProjectEntry,
@@ -73,6 +74,24 @@ describe('plaintext metadata', () => {
     });
     const env = EnvironmentMeta.parse({ name: 'QA', slug: 'qa', kind: 'custom', position: 3 });
     expect(env.inheritsFrom).toBeNull();
+  });
+
+  it('keeps sync targets inside the environment', () => {
+    const env = EnvironmentMeta.parse({
+      name: 'Production',
+      slug: 'production',
+      kind: 'production',
+      position: 1,
+      sync: [
+        { provider: 'github', id: 'a', repo: 'acme/web', environment: 'production' },
+        { provider: 'aws', id: 'b', region: 'ap-south-1', secretName: 'web/production' },
+      ],
+    });
+    expect(env.sync).toHaveLength(2);
+    expect(SyncTarget.safeParse({ provider: 'github', id: 'a', repo: 'acme' }).success).toBe(false);
+    expect(
+      SyncTarget.safeParse({ provider: 'aws', id: 'b', region: 'mars', secretName: 'x' }).success,
+    ).toBe(false);
   });
 
   it('rejects tags with a leading #', () => {

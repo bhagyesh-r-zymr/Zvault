@@ -177,6 +177,12 @@ pub enum Change {
         #[serde(default)]
         all_environments: bool,
     },
+    /// Pushes the environment's secrets to every GitHub and AWS target it
+    /// syncs to, from the app, with the credentials on that Mac.
+    SyncEnvironment {
+        project: String,
+        environment: String,
+    },
 }
 
 fn check_name(what: &str, name: &str, max: usize) -> Result<(), String> {
@@ -310,6 +316,13 @@ impl Change {
                 check_slug(folder)
             }
             Self::DeleteSecret { .. } => Ok(()),
+            Self::SyncEnvironment {
+                project,
+                environment,
+            } => {
+                check_slug(project)?;
+                check_slug(environment)
+            }
         }
     }
 
@@ -412,6 +425,12 @@ impl Change {
             } => format!(
                 "Move {} in {SCHEME}{} to Trash (restorable for 30 days)",
                 reference.key, reference.project
+            ),
+            Self::SyncEnvironment {
+                project,
+                environment,
+            } => format!(
+                "Push the secrets in {SCHEME}{project}/{environment} to the GitHub and AWS targets it syncs to"
             ),
         }
     }
@@ -684,6 +703,18 @@ mod tests {
         };
         assert!(!trashed.destructive());
         assert!(trashed.describe().contains("Trash"));
+        let sync = Change::SyncEnvironment {
+            project: "web".into(),
+            environment: "production".into(),
+        };
+        let json = serde_json::to_string(&sync).unwrap();
+        assert_eq!(
+            json,
+            r#"{"op":"syncEnvironment","project":"web","environment":"production"}"#
+        );
+        assert!(!sync.destructive());
+        assert!(sync.validate().is_ok());
+        assert!(sync.describe().contains("zv://web/production"));
     }
 
     #[test]

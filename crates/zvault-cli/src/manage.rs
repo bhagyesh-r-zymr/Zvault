@@ -324,6 +324,15 @@ pub fn change(change: Change) -> Result<u8, Error> {
     }
 }
 
+/// Asks Zvault to push an environment to its sync targets.
+pub fn sync(environment: &str) -> Result<u8, Error> {
+    let (project, environment) = environment_slugs(environment)?;
+    change(Change::SyncEnvironment {
+        project,
+        environment,
+    })
+}
+
 /// Every project with its environments and folders, as Zvault reports them.
 pub fn structure(conn: &Conn) -> Result<Vec<ProjectInfo>, Error> {
     match send_new(conn, RequestBody::Structure)? {

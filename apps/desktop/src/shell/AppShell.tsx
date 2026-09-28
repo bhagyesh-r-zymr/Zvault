@@ -7,12 +7,13 @@ import { Generator } from '../generator/Generator.js';
 import { StrengthChecker } from '../generator/StrengthChecker.js';
 import { lock, type LockStatus } from '../lock.js';
 import { ProjectsApi } from '../projects/api.js';
-import { ProjectsContext, TeamContext } from '../projects/context.js';
+import { ProjectsContext, SecretSyncContext, TeamContext } from '../projects/context.js';
 import { projectsCore, teamKeysCore } from '../projects/core.js';
 import { EnvironmentsView } from '../projects/EnvironmentsView.js';
 import { NewProjectSheet } from '../projects/NewProjectSheet.js';
 import { ProjectAccess } from '../projects/ProjectAccess.js';
 import { ProjectsView, ProjectTile } from '../projects/ProjectsView.js';
+import { SecretSyncer } from '../projects/secretSync.js';
 import { ProjectsSync } from '../projects/sync.js';
 import { TeamStore } from '../projects/team.js';
 import { TeamApi } from '../projects/teamApi.js';
@@ -96,10 +97,13 @@ export function AppShell(props: {
   useEffect(() => {
     void team.store.loadOrgs();
   }, [team]);
+  // Push environments to GitHub and AWS when they change.
+  const secretSync = useMemo(() => new SecretSyncer(projectsSync), [projectsSync]);
+  useEffect(() => secretSync.start(), [secretSync]);
   // Answer `zv` lookups from these projects while the vault is unlocked.
   useEffect(
-    () => serveZv(projectsSync, { api: vaultApi, core: vaultCore }),
-    [projectsSync, vaultApi],
+    () => serveZv(projectsSync, { api: vaultApi, core: vaultCore }, secretSync),
+    [projectsSync, vaultApi, secretSync],
   );
   const sharing = useMemo(
     () => sharingApi(() => ({ authorization: `Bearer ${session.token}` })),
@@ -161,250 +165,252 @@ export function AppShell(props: {
 
   return (
     <ProjectsContext.Provider value={projectsSync}>
-      <div className="shell">
-        <nav className="sidebar" aria-label="Sidebar">
-          <div className="sidebar-account">
-            <span className="brand-mark" style={{ width: 30, height: 30, borderRadius: 9 }}>
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M5 6h14L5 18h14" />
-              </svg>
-            </span>
-            <span className="who">
-              <strong>Zvault</strong>
-              <span className="truncate">{session.email}</span>
-            </span>
-          </div>
+      <SecretSyncContext.Provider value={secretSync}>
+        <div className="shell">
+          <nav className="sidebar" aria-label="Sidebar">
+            <div className="sidebar-account">
+              <span className="brand-mark" style={{ width: 30, height: 30, borderRadius: 9 }}>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M5 6h14L5 18h14" />
+                </svg>
+              </span>
+              <span className="who">
+                <strong>Zvault</strong>
+                <span className="truncate">{session.email}</span>
+              </span>
+            </div>
 
-          <button
-            type="button"
-            className="search-trigger"
-            onClick={() => {
-              setRoute({ name: 'vault' });
-              setTimeout(() => window.dispatchEvent(new Event(FOCUS_SEARCH_EVENT)), 0);
-            }}
-          >
-            <Icon name="search" size={14} />
-            <span>Search</span>
-            <kbd>{MOD}K</kbd>
-          </button>
-
-          {nav({ name: 'vault' }, 'items', 'Personal')}
-
-          <div className="nav-section">
-            <span className="eyebrow">Projects</span>
             <button
               type="button"
-              className="icon ghost"
-              style={{ width: 22, height: 22, borderRadius: 6 }}
-              aria-label="New project"
-              title="New project"
-              onClick={() => setCreatingProject(true)}
+              className="search-trigger"
+              onClick={() => {
+                setRoute({ name: 'vault' });
+                setTimeout(() => window.dispatchEvent(new Event(FOCUS_SEARCH_EVENT)), 0);
+              }}
             >
-              <Icon name="plus" size={13} strokeWidth={2.4} />
+              <Icon name="search" size={14} />
+              <span>Search</span>
+              <kbd>{MOD}K</kbd>
             </button>
-          </div>
-          <TeamInvites store={team.store} onAccepted={() => void projectsSync.load()} />
-          {projectsStatus === 'ready' && projects.length === 0 && (
-            <button type="button" className="nav-item" onClick={() => setCreatingProject(true)}>
-              <Icon name="plus" size={15} />
-              <span className="label">Create your first project</span>
-            </button>
-          )}
-          {projectsStatus === 'failed' && (
-            <button type="button" className="nav-item" onClick={() => void projectsSync.load()}>
-              <Icon name="refresh" size={15} />
-              <span className="label">Couldn&apos;t load · Retry</span>
-            </button>
-          )}
-          {projects.map((p) => {
-            const open = expanded.includes(p.id);
-            return (
-              <div key={p.id} style={{ display: 'contents' }}>
-                <button
-                  type="button"
-                  className="nav-item"
-                  aria-expanded={open}
-                  onClick={() => toggleProject(p.id)}
-                >
-                  <Icon
-                    name={open ? 'chevronDown' : 'chevronRight'}
-                    size={11}
-                    strokeWidth={3}
-                    className="nav-caret"
-                  />
-                  <ProjectTile project={p} />
-                  <span className="label" style={{ color: 'var(--text)' }}>
-                    {p.name}
-                  </span>
-                </button>
-                {open && (
-                  <div className="nav-tree">
-                    <button
-                      type="button"
-                      className="nav-item sub"
-                      aria-current={
-                        route.name === 'project' && route.projectId === p.id ? 'page' : undefined
-                      }
-                      onClick={() => {
-                        // Stay on the environment already open in this project.
-                        const env =
-                          route.name === 'project' && route.projectId === p.id
-                            ? route.envId
-                            : p.environments[0]?.id;
-                        setRoute(
-                          env
-                            ? { name: 'project', projectId: p.id, envId: env }
-                            : { name: 'environments', projectId: p.id },
-                        );
-                      }}
-                    >
-                      <Icon name="key" size={13} />
-                      <span className="label">Secrets</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="nav-item sub"
-                      aria-current={
-                        route.name === 'environments' && route.projectId === p.id
-                          ? 'page'
-                          : undefined
-                      }
-                      onClick={() => setRoute({ name: 'environments', projectId: p.id })}
-                    >
-                      <Icon name="settings" size={13} />
-                      <span className="label">
-                        {p.environments.length === 0 ? 'Add environment' : 'Environments'}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      className="nav-item sub"
-                      aria-current={
-                        route.name === 'access' && route.projectId === p.id ? 'page' : undefined
-                      }
-                      onClick={() => setRoute({ name: 'access', projectId: p.id })}
-                    >
-                      <Icon name="people" size={13} />
-                      <span className="label">Access</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
 
-          <div className="nav-section">
-            <span className="eyebrow">Access</span>
-          </div>
-          {nav({ name: 'agents' }, 'agent', 'Agents')}
-          {nav({ name: 'sharing' }, 'share', 'Sharing')}
+            {nav({ name: 'vault' }, 'items', 'Personal')}
 
-          <div className="nav-section">
-            <span className="eyebrow">Tools</span>
-          </div>
-          {nav({ name: 'generator' }, 'wand', 'Password generator')}
-          {nav({ name: 'trash' }, 'trash', 'Trash')}
-
-          <div className="sidebar-foot">
-            {nav({ name: 'settings', section: 'security' }, 'settings', 'Settings')}
-            <button type="button" className="lock-button" onClick={() => void lock.lockNow()}>
-              <Icon name="lock" size={13} strokeWidth={2.2} />
-              <span>Lock now</span>
-              <kbd className="kbd" style={{ color: 'inherit' }}>
-                {MOD}L
-              </kbd>
-            </button>
-          </div>
-        </nav>
-
-        <main className="main">
-          {/* Switching environments keeps the open secret and list filter. */}
-          <ErrorBoundary
-            key={route.name === 'project' ? `project:${route.projectId}` : JSON.stringify(route)}
-          >
-            {route.name === 'vault' && <VaultScreen api={vaultApi} sharing={sharing} />}
-            {route.name === 'project' && (
-              <TeamContext.Provider value={team}>
-                <ProjectsView
-                  key={route.projectId}
-                  projectId={route.projectId}
-                  envId={route.envId}
-                  onEnvChange={(envId) => setRoute({ ...route, envId })}
-                  onOpenProject={(projectId, envId) =>
-                    setRoute({ name: 'project', projectId, envId })
-                  }
-                  onOpenAccess={() => setRoute({ name: 'access', projectId: route.projectId })}
-                  sharing={sharing}
-                />
-              </TeamContext.Provider>
+            <div className="nav-section">
+              <span className="eyebrow">Projects</span>
+              <button
+                type="button"
+                className="icon ghost"
+                style={{ width: 22, height: 22, borderRadius: 6 }}
+                aria-label="New project"
+                title="New project"
+                onClick={() => setCreatingProject(true)}
+              >
+                <Icon name="plus" size={13} strokeWidth={2.4} />
+              </button>
+            </div>
+            <TeamInvites store={team.store} onAccepted={() => void projectsSync.load()} />
+            {projectsStatus === 'ready' && projects.length === 0 && (
+              <button type="button" className="nav-item" onClick={() => setCreatingProject(true)}>
+                <Icon name="plus" size={15} />
+                <span className="label">Create your first project</span>
+              </button>
             )}
-            {route.name === 'environments' && (
-              <TeamContext.Provider value={team}>
-                <EnvironmentsView
-                  projectId={route.projectId}
-                  onOpenEnvironment={(envId) =>
-                    setRoute({ name: 'project', projectId: route.projectId, envId })
-                  }
-                />
-              </TeamContext.Provider>
+            {projectsStatus === 'failed' && (
+              <button type="button" className="nav-item" onClick={() => void projectsSync.load()}>
+                <Icon name="refresh" size={15} />
+                <span className="label">Couldn&apos;t load · Retry</span>
+              </button>
             )}
-            {route.name === 'access' && (
-              <TeamContext.Provider value={team}>
-                <ProjectAccess projectId={route.projectId} />
-              </TeamContext.Provider>
-            )}
-            {route.name === 'agents' && <AgentsView />}
-            {route.name === 'trash' && <TrashView api={vaultApi} />}
-            {route.name === 'sharing' && <SharingCenter api={sharing} />}
-            {route.name === 'generator' && (
-              <div className="page">
-                <div className="page-inner">
-                  <div className="page-head">
-                    <div>
-                      <h1>Password generator</h1>
-                      <p>
-                        Every character is picked in the secure core from the system&apos;s random
-                        source.
-                      </p>
+            {projects.map((p) => {
+              const open = expanded.includes(p.id);
+              return (
+                <div key={p.id} style={{ display: 'contents' }}>
+                  <button
+                    type="button"
+                    className="nav-item"
+                    aria-expanded={open}
+                    onClick={() => toggleProject(p.id)}
+                  >
+                    <Icon
+                      name={open ? 'chevronDown' : 'chevronRight'}
+                      size={11}
+                      strokeWidth={3}
+                      className="nav-caret"
+                    />
+                    <ProjectTile project={p} />
+                    <span className="label" style={{ color: 'var(--text)' }}>
+                      {p.name}
+                    </span>
+                  </button>
+                  {open && (
+                    <div className="nav-tree">
+                      <button
+                        type="button"
+                        className="nav-item sub"
+                        aria-current={
+                          route.name === 'project' && route.projectId === p.id ? 'page' : undefined
+                        }
+                        onClick={() => {
+                          // Stay on the environment already open in this project.
+                          const env =
+                            route.name === 'project' && route.projectId === p.id
+                              ? route.envId
+                              : p.environments[0]?.id;
+                          setRoute(
+                            env
+                              ? { name: 'project', projectId: p.id, envId: env }
+                              : { name: 'environments', projectId: p.id },
+                          );
+                        }}
+                      >
+                        <Icon name="key" size={13} />
+                        <span className="label">Secrets</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="nav-item sub"
+                        aria-current={
+                          route.name === 'environments' && route.projectId === p.id
+                            ? 'page'
+                            : undefined
+                        }
+                        onClick={() => setRoute({ name: 'environments', projectId: p.id })}
+                      >
+                        <Icon name="settings" size={13} />
+                        <span className="label">
+                          {p.environments.length === 0 ? 'Add environment' : 'Environments'}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="nav-item sub"
+                        aria-current={
+                          route.name === 'access' && route.projectId === p.id ? 'page' : undefined
+                        }
+                        onClick={() => setRoute({ name: 'access', projectId: p.id })}
+                      >
+                        <Icon name="people" size={13} />
+                        <span className="label">Access</span>
+                      </button>
                     </div>
-                  </div>
-                  <Generator />
-                  <StrengthChecker />
+                  )}
                 </div>
-              </div>
-            )}
-            {route.name === 'settings' && (
-              <SettingsView
-                session={session}
-                section={route.section}
-                onSection={(section) => setRoute({ name: 'settings', section })}
-                lockStatus={props.lockStatus}
-                onLockChanged={props.onLockChanged}
-                remembered={props.remembered}
-                onForgetSecretKey={props.onForgetSecretKey}
-                onSignOut={props.onSignOut}
-              />
-            )}
-          </ErrorBoundary>
-        </main>
-        {creatingProject && (
-          <NewProjectSheet
-            onClose={() => setCreatingProject(false)}
-            onCreated={openCreatedProject}
-          />
-        )}
-      </div>
-      <AgentPrompts />
+              );
+            })}
+
+            <div className="nav-section">
+              <span className="eyebrow">Access</span>
+            </div>
+            {nav({ name: 'agents' }, 'agent', 'Agents')}
+            {nav({ name: 'sharing' }, 'share', 'Sharing')}
+
+            <div className="nav-section">
+              <span className="eyebrow">Tools</span>
+            </div>
+            {nav({ name: 'generator' }, 'wand', 'Password generator')}
+            {nav({ name: 'trash' }, 'trash', 'Trash')}
+
+            <div className="sidebar-foot">
+              {nav({ name: 'settings', section: 'security' }, 'settings', 'Settings')}
+              <button type="button" className="lock-button" onClick={() => void lock.lockNow()}>
+                <Icon name="lock" size={13} strokeWidth={2.2} />
+                <span>Lock now</span>
+                <kbd className="kbd" style={{ color: 'inherit' }}>
+                  {MOD}L
+                </kbd>
+              </button>
+            </div>
+          </nav>
+
+          <main className="main">
+            {/* Switching environments keeps the open secret and list filter. */}
+            <ErrorBoundary
+              key={route.name === 'project' ? `project:${route.projectId}` : JSON.stringify(route)}
+            >
+              {route.name === 'vault' && <VaultScreen api={vaultApi} sharing={sharing} />}
+              {route.name === 'project' && (
+                <TeamContext.Provider value={team}>
+                  <ProjectsView
+                    key={route.projectId}
+                    projectId={route.projectId}
+                    envId={route.envId}
+                    onEnvChange={(envId) => setRoute({ ...route, envId })}
+                    onOpenProject={(projectId, envId) =>
+                      setRoute({ name: 'project', projectId, envId })
+                    }
+                    onOpenAccess={() => setRoute({ name: 'access', projectId: route.projectId })}
+                    sharing={sharing}
+                  />
+                </TeamContext.Provider>
+              )}
+              {route.name === 'environments' && (
+                <TeamContext.Provider value={team}>
+                  <EnvironmentsView
+                    projectId={route.projectId}
+                    onOpenEnvironment={(envId) =>
+                      setRoute({ name: 'project', projectId: route.projectId, envId })
+                    }
+                  />
+                </TeamContext.Provider>
+              )}
+              {route.name === 'access' && (
+                <TeamContext.Provider value={team}>
+                  <ProjectAccess projectId={route.projectId} />
+                </TeamContext.Provider>
+              )}
+              {route.name === 'agents' && <AgentsView />}
+              {route.name === 'trash' && <TrashView api={vaultApi} />}
+              {route.name === 'sharing' && <SharingCenter api={sharing} />}
+              {route.name === 'generator' && (
+                <div className="page">
+                  <div className="page-inner">
+                    <div className="page-head">
+                      <div>
+                        <h1>Password generator</h1>
+                        <p>
+                          Every character is picked in the secure core from the system&apos;s random
+                          source.
+                        </p>
+                      </div>
+                    </div>
+                    <Generator />
+                    <StrengthChecker />
+                  </div>
+                </div>
+              )}
+              {route.name === 'settings' && (
+                <SettingsView
+                  session={session}
+                  section={route.section}
+                  onSection={(section) => setRoute({ name: 'settings', section })}
+                  lockStatus={props.lockStatus}
+                  onLockChanged={props.onLockChanged}
+                  remembered={props.remembered}
+                  onForgetSecretKey={props.onForgetSecretKey}
+                  onSignOut={props.onSignOut}
+                />
+              )}
+            </ErrorBoundary>
+          </main>
+          {creatingProject && (
+            <NewProjectSheet
+              onClose={() => setCreatingProject(false)}
+              onCreated={openCreatedProject}
+            />
+          )}
+        </div>
+        <AgentPrompts />
+      </SecretSyncContext.Provider>
     </ProjectsContext.Provider>
   );
 }

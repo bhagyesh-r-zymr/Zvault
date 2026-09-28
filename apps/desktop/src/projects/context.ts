@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useSyncExternalStore } from 'react';
+import type { SecretSyncer, SecretSyncSnapshot } from './secretSync.js';
 import type { ProjectsSnapshot, ProjectsSync } from './sync.js';
 import type { ProjectTeam, TeamSnapshot, TeamStore } from './team.js';
 
@@ -38,4 +39,14 @@ export function useProjectTeam(projectId: string): ProjectTeam | undefined {
     void store.loadProject(projectId);
   }, [store, projectId]);
   return team.projects[projectId];
+}
+
+/** Secret sync to GitHub and AWS; provided by the app shell. */
+export const SecretSyncContext = createContext<SecretSyncer | null>(null);
+
+export function useSecretSync(): { syncer: SecretSyncer; snapshot: SecretSyncSnapshot } {
+  const syncer = useContext(SecretSyncContext);
+  if (!syncer) throw new Error('useSecretSync needs a SecretSyncContext provider');
+  const snapshot = useSyncExternalStore(syncer.subscribe, syncer.get);
+  return { syncer, snapshot };
 }

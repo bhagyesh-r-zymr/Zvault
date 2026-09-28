@@ -234,3 +234,34 @@ pub mod saved_session {
         }
     }
 }
+
+/// GitHub and AWS credentials for secret sync, one item per provider. Like
+/// the Secret Key they live in the login keychain and never sync to iCloud.
+pub mod sync_credentials {
+    use security_framework::passwords::{
+        delete_generic_password, get_generic_password, set_generic_password,
+    };
+    use zeroize::Zeroizing;
+
+    const SERVICE: &str = "com.zvault.desktop.secret-sync";
+    const ERR_SEC_ITEM_NOT_FOUND: i32 = -25300;
+
+    pub fn save(provider: &str, json: &[u8]) -> Result<(), String> {
+        set_generic_password(SERVICE, provider, json).map_err(|e| e.to_string())
+    }
+
+    /// `None` if nothing is saved or the person denied the keychain prompt.
+    pub fn load(provider: &str) -> Option<Zeroizing<Vec<u8>>> {
+        get_generic_password(SERVICE, provider)
+            .ok()
+            .map(Zeroizing::new)
+    }
+
+    pub fn delete(provider: &str) -> Result<(), String> {
+        match delete_generic_password(SERVICE, provider) {
+            Ok(()) => Ok(()),
+            Err(e) if e.code() == ERR_SEC_ITEM_NOT_FOUND => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+}

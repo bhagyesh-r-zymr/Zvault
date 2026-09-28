@@ -85,6 +85,46 @@ export type ProjectMeta = z.infer<typeof ProjectMeta>;
 export const EnvironmentKind = z.enum(['development', 'staging', 'production', 'custom']);
 export type EnvironmentKind = z.infer<typeof EnvironmentKind>;
 
+export const MAX_SYNC_TARGETS_PER_ENVIRONMENT = 10;
+
+/**
+ * Where an environment's secrets are pushed, from a member's device (never
+ * the server): GitHub Actions secrets of a repository or one of its
+ * environments, or one AWS Secrets Manager secret holding the environment as
+ * JSON. Credentials for the provider stay in that device's keychain. Matches
+ * `Target` in `crates/zvault-sync`.
+ */
+export const SyncTarget = z.discriminatedUnion('provider', [
+  z.object({
+    provider: z.literal('github'),
+    /** Stable per target, for its last-synced status on each device. */
+    id: z.string().min(1).max(64),
+    /** `owner/name`. */
+    repo: z
+      .string()
+      .max(201)
+      .regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, 'must be owner/name'),
+    /** A GitHub deployment environment; repository secrets without one. */
+    environment: z.string().min(1).max(255).optional(),
+    /** `false` to push only on "Sync now"; otherwise it also syncs on every change. */
+    auto: z.boolean().optional(),
+  }),
+  z.object({
+    provider: z.literal('aws'),
+    id: z.string().min(1).max(64),
+    region: z
+      .string()
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+){2,}$/, 'must be a region such as ap-south-1'),
+    secretName: z
+      .string()
+      .min(1)
+      .max(512)
+      .regex(/^[A-Za-z0-9/_+=.@-]+$/, 'may use letters, digits and /_+=.@-'),
+    auto: z.boolean().optional(),
+  }),
+]);
+export type SyncTarget = z.infer<typeof SyncTarget>;
+
 /** Sealed with the project key (`aad::environment_meta`), so every member sees the list. */
 export const EnvironmentMeta = z.object({
   name: z.string().min(1).max(64),
@@ -98,6 +138,8 @@ export const EnvironmentMeta = z.object({
    * ("Same as Development"). Resolved on the client; chains end at `null`.
    */
   inheritsFrom: RecordId.nullable().default(null),
+  /** Where its secrets are synced to; see {@link SyncTarget}. */
+  sync: z.array(SyncTarget).max(MAX_SYNC_TARGETS_PER_ENVIRONMENT).optional(),
 });
 export type EnvironmentMeta = z.infer<typeof EnvironmentMeta>;
 

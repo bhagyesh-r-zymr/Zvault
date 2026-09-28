@@ -134,6 +134,16 @@ enum Cmd {
         #[arg(long)]
         yes: bool,
     },
+    /// Push an environment's secrets to the GitHub Actions and AWS Secrets
+    /// Manager targets set up for it in Zvault (Environments > Sync).
+    ///
+    /// The app decrypts the values and sends them straight to GitHub or AWS
+    /// with the credentials kept on that Mac. Example:
+    /// zv sync zv://payments-api/production
+    Sync {
+        /// zv://project/environment
+        environment: String,
+    },
     /// Print every secret in an environment or folder as variables.
     ///
     /// Each secret becomes the variable named by its KEY. Example:
@@ -364,6 +374,7 @@ fn dispatch(cmd: Cmd) -> Result<u8, Error> {
         Cmd::Project(cmd) => manage::project(cmd, &store_path),
         Cmd::Environment(cmd) => manage::environment(cmd, &store_path),
         Cmd::Folder(cmd) => manage::folder(cmd, &store_path),
+        Cmd::Sync { environment } => manage::sync(&environment),
         Cmd::Item { cmd } => manage::item(cmd.unwrap_or(manage::ItemCmd::List { json: false })),
         Cmd::Guide => {
             print!("{}", guide::GUIDE);

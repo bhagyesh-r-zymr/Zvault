@@ -6,6 +6,7 @@ import {
   type Project,
   type ProjectSecret,
 } from '../projects/model.js';
+import { describeTarget, type SecretSyncer } from '../projects/secretSync.js';
 import type { ProjectsSync } from '../projects/sync.js';
 import type { VaultApi } from '../vault/api.js';
 import type { VaultCore } from '../vault/core.js';
@@ -34,6 +35,7 @@ import {
 export function serveZv(
   sync: ProjectsSync,
   vault?: { api: VaultApi; core: VaultCore },
+  secretSync?: SecretSyncer,
 ): () => void {
   const ready = async () => {
     if (sync.get().status !== 'ready') await sync.load();
@@ -112,7 +114,7 @@ export function serveZv(
     }));
   };
 
-  const apply: ApplyChange = (change) => applyChange(sync, ready, change);
+  const apply: ApplyChange = (change) => applyChange(sync, ready, change, secretSync);
 
   let vaultSync: VaultSync | null = null;
   const openVault = async (): Promise<VaultSync> => {
@@ -181,6 +183,7 @@ async function applyChange(
   sync: ProjectsSync,
   ready: () => Promise<unknown>,
   change: Change,
+  secretSync?: SecretSyncer,
 ): Promise<string> {
   await ready();
   const project = async (slug: string): Promise<Project> => {
@@ -285,6 +288,25 @@ async function applyChange(
       const f = folder(p, change.folder);
       await sync.deleteFolder(p.id, f.id);
       return `Deleted folder ${f.slug} in zv://${p.slug}.`;
+    }
+    case 'syncEnvironment': {
+      const p = await project(change.project);
+      const env = environment(p, change.environment);
+      if (!secretSync) throw new Error('Secret sync is not available in this window.');
+      if (env.sync.length === 0) {
+        throw new Error(
+          `zv://${p.slug}/${env.slug} has nowhere to sync to yet. Add GitHub or AWS in Zvault: ${p.name} › Environments › Sync.`,
+        );
+      }
+      const results = await secretSync.syncEnvironment(p.id, env.id);
+      const lines = env.sync.map((t, i) => {
+        const r = results[i]!;
+        const mark =
+          r.state === 'synced' ? 'synced' : r.state === 'partial' ? 'partly synced' : 'failed';
+        return `${t.provider === 'github' ? 'GitHub' : 'AWS'} ${describeTarget(t)}: ${mark}. ${r.message}`;
+      });
+      if (results.every((r) => r.state === 'failed')) throw new Error(lines.join('\n'));
+      return lines.join('\n');
     }
     case 'deleteSecret': {
       const path = parseSecretPath(change.reference);

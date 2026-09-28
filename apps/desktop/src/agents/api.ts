@@ -60,7 +60,8 @@ export type PurposeKind =
   | 'change'
   | 'readItem'
   | 'changeItem'
-  | 'fill';
+  | 'fill'
+  | 'saveLogin';
 
 export interface Purpose {
   kind: PurposeKind;

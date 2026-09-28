@@ -58,6 +58,25 @@ pub struct FillContents {
     pub otp_remaining: Option<u64>,
 }
 
+/// Whether a login typed into a page is already in Zvault. The extension
+/// uses it to decide whether to offer saving; it never carries a password.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "camelCase")]
+pub enum SaveCheck {
+    /// No login with this user name is saved for the site.
+    New,
+    /// A login with this user name is saved for the site with a different
+    /// password.
+    #[serde(rename_all = "camelCase")]
+    Update { item: String, title: String },
+    /// This exact login is already saved.
+    Saved,
+}
+
+/// The longest user name and password the extension may offer to save.
+pub const MAX_SAVE_USERNAME: usize = 512;
+pub const MAX_SAVE_PASSWORD: usize = 1024;
+
 /// Hosts shared by many unrelated sites: a login saved for one of these fills
 /// only on that exact host, never on its subdomains.
 const SHARED_HOSTS: &[&str] = &[
@@ -170,6 +189,17 @@ pub fn first_match<'a>(saved: &'a [String], page: &str) -> Option<&'a str> {
 /// The page's host, for prompts and the activity log.
 pub fn host_of(page: &str) -> Option<String> {
     parse(page, false).map(|s| s.host)
+}
+
+/// The website a new login from `page` is saved for: its scheme, host
+/// (without `www.`) and port, like `https://github.com`.
+pub fn site_of(page: &str) -> Option<String> {
+    let site = parse(page, false)?;
+    let scheme = if site.https { "https" } else { "http" };
+    Some(match site.port {
+        Some(port) => format!("{scheme}://{}:{port}", site.host),
+        None => format!("{scheme}://{}", site.host),
+    })
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -294,6 +324,26 @@ mod tests {
         assert_eq!(
             host_of("https://www.GitHub.com/x").as_deref(),
             Some("github.com")
+        );
+    }
+
+    #[test]
+    fn a_new_login_is_saved_for_the_page_s_site() {
+        let site = site_of("https://www.GitHub.com/login?x=1").unwrap();
+        assert_eq!(site, "https://github.com");
+        assert!(matches(&site, "https://github.com/session"));
+        assert_eq!(
+            site_of("http://localhost:3000/signin").as_deref(),
+            Some("http://localhost:3000")
+        );
+        assert_eq!(site_of("chrome://settings"), None);
+        assert_eq!(
+            serde_json::to_value(SaveCheck::Update {
+                item: "i1".into(),
+                title: "GitHub".into()
+            })
+            .unwrap(),
+            serde_json::json!({"state": "update", "item": "i1", "title": "GitHub"})
         );
     }
 

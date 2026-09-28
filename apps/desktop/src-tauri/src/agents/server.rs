@@ -14,7 +14,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use uuid::Uuid;
 use zeroize::Zeroize;
 use zvault_agent::activity::{ActivityEntry, Outcome, Verification};
-use zvault_agent::browser::{self, FillContents, LoginInfo};
+use zvault_agent::browser::{self, FillContents, LoginInfo, SaveCheck};
 use zvault_agent::manage::{self, Change, ItemContents, ItemInfo, ItemPatch, ProjectInfo};
 use zvault_agent::policy::{AgentKind, AgentRecord, ApprovalMode, Decision};
 use zvault_agent::protocol::{
@@ -263,9 +263,48 @@ fn handle(app: &AppHandle, req: Request, peer: Peer) -> Response {
             };
             browser_fill(app, hub, a, &item, page, otp_only, peer)
         }
-        (RequestBody::BrowserLogins { .. } | RequestBody::BrowserFill { .. }, _) => {
-            Err(ErrorCode::BrowserOnly)
+        (
+            RequestBody::BrowserSaveCheck {
+                url,
+                top_url,
+                username,
+                password,
+            },
+            Who::Agent(a),
+        ) if a.kind == AgentKind::Browser => {
+            let page = Page {
+                url: &url,
+                top_url: top_url.as_deref(),
+            };
+            browser_save_check(app, hub, a, page, &username, &password)
         }
+        (
+            RequestBody::BrowserSave {
+                url,
+                top_url,
+                username,
+                password,
+                item,
+            },
+            Who::Agent(a),
+        ) if a.kind == AgentKind::Browser => {
+            let page = Page {
+                url: &url,
+                top_url: top_url.as_deref(),
+            };
+            let login = Typed {
+                username: &username,
+                password: &password,
+            };
+            browser_save(app, hub, a, page, login, item.as_deref(), peer)
+        }
+        (
+            RequestBody::BrowserLogins { .. }
+            | RequestBody::BrowserFill { .. }
+            | RequestBody::BrowserSaveCheck { .. }
+            | RequestBody::BrowserSave { .. },
+            _,
+        ) => Err(ErrorCode::BrowserOnly),
         (RequestBody::SignIn, Who::User) => sign_in(app, hub, peer),
         (RequestBody::SignOut, Who::User) => {
             if let Some(sid) = peer.sid {
@@ -1041,12 +1080,33 @@ fn browser_fill(
         })
     };
     let result = work();
-    let now = now_secs();
+    browser_log(
+        app,
+        hub,
+        &who,
+        &purpose,
+        verified,
+        result.as_ref().err(),
+        peer,
+    );
+    result.map(Response::Fill)
+}
+
+/// Logs what the extension did, or tried to do, in the activity log.
+fn browser_log(
+    app: &AppHandle,
+    hub: &AgentHub,
+    who: &Who,
+    purpose: &Purpose,
+    verified: Option<Verification>,
+    error: Option<&ErrorCode>,
+    peer: Peer,
+) {
     let mut inner = hub.guard();
-    inner.registry.touch(&agent.id, now);
-    let e = match &result {
-        Ok(_) => entry(
-            &who,
+    inner.registry.touch(who.id(), now_secs());
+    let e = match error {
+        None => entry(
+            who,
             if verified.is_some() {
                 Outcome::Approved
             } else {
@@ -1058,8 +1118,8 @@ fn browser_fill(
             verified,
             peer,
         ),
-        Err(code) => entry(
-            &who,
+        Some(code) => entry(
+            who,
             Outcome::Denied,
             vec![],
             Some(purpose.clone()),
@@ -1069,8 +1129,181 @@ fn browser_fill(
         ),
     };
     hub.log(app, &mut inner, e);
-    drop(inner);
-    result.map(Response::Fill)
+}
+
+/// A user name and password typed into a page.
+#[derive(Clone, Copy)]
+struct Typed<'a> {
+    username: &'a str,
+    password: &'a str,
+}
+
+impl Typed<'_> {
+    fn check(self) -> Result<(), ErrorCode> {
+        let ok = !self.password.is_empty()
+            && self.username.len() <= browser::MAX_SAVE_USERNAME
+            && self.password.len() <= browser::MAX_SAVE_PASSWORD
+            && !self.username.chars().any(char::is_control);
+        if ok {
+            Ok(())
+        } else {
+            Err(ErrorCode::BadRequest)
+        }
+    }
+}
+
+fn same_username(a: &str, b: &str) -> bool {
+    a.trim().eq_ignore_ascii_case(b.trim())
+}
+
+/// Whether a login typed into a page is already saved, so the extension
+/// offers to save only new logins and changed passwords. Reveals only
+/// whether the typed password equals the one saved for that same site.
+fn browser_save_check(
+    app: &AppHandle,
+    hub: &AgentHub,
+    agent: &AgentRecord,
+    page: Page<'_>,
+    username: &str,
+    password: &str,
+) -> Result<Response, ErrorCode> {
+    browser_gate(app, agent)?;
+    Typed { username, password }.check()?;
+    let mut why = None;
+    let reply = item_request(app, hub, ItemOp::List, &mut why)?;
+    let candidates: Vec<ItemInfo> = reply
+        .items
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|i| same_username(&i.username, username))
+        .filter(|i| {
+            let mut saved = i.urls.clone();
+            if saved.is_empty() {
+                saved.extend(i.url.clone());
+            }
+            page.matching(&saved).is_some()
+        })
+        .collect();
+    let keyring = app.state::<Keyring>();
+    let mut update = None;
+    for info in candidates {
+        let (vault_id, cipher) = find_item(app, hub, &info.id, &mut why)?;
+        if cipher.id != info.id {
+            continue;
+        }
+        let fields = keyring.open_item(&vault_id, &cipher).map_err(vault_error)?;
+        if page.matching(&fields.urls).is_none() {
+            continue;
+        }
+        if fields.password == password {
+            hub.guard().registry.touch(&agent.id, now_secs());
+            return Ok(Response::SaveCheck(SaveCheck::Saved));
+        }
+        update.get_or_insert(SaveCheck::Update {
+            item: cipher.id.clone(),
+            title: fields.title.trim().to_owned(),
+        });
+    }
+    hub.guard().registry.touch(&agent.id, now_secs());
+    Ok(Response::SaveCheck(update.unwrap_or(SaveCheck::New)))
+}
+
+/// Saves a login typed into a page: a new item named after the site, or a
+/// new password for `item`, which must be saved for that site. Always asks
+/// in the app first, and logs the save.
+fn browser_save(
+    app: &AppHandle,
+    hub: &AgentHub,
+    agent: &AgentRecord,
+    page: Page<'_>,
+    login: Typed<'_>,
+    item: Option<&str>,
+    peer: Peer,
+) -> Result<Response, ErrorCode> {
+    browser_gate(app, agent)?;
+    login.check()?;
+    let host = browser::host_of(page.url).ok_or(ErrorCode::BadRequest)?;
+    let site = browser::site_of(page.url).ok_or(ErrorCode::BadRequest)?;
+    if let Some(top) = page.top_url
+        && !browser::matches(&site, top)
+    {
+        // A login form in a frame from another site is not saved.
+        return Err(ErrorCode::WrongSite);
+    }
+    let who = Who::Agent(agent.clone());
+    let mut purpose = Purpose::app(
+        PurposeKind::SaveLogin,
+        Some(format!("Save a login for {host}")),
+    );
+    let mut verified = None;
+    let mut work = || -> Result<String, ErrorCode> {
+        let mut why = None;
+        let keyring = app.state::<Keyring>();
+        let (vault_id, existing, mut fields) = match item {
+            Some(item) => {
+                let (vault_id, cipher) = find_item(app, hub, item, &mut why)?;
+                if cipher.id != item {
+                    return Err(ErrorCode::NotFound);
+                }
+                let fields = keyring.open_item(&vault_id, &cipher).map_err(vault_error)?;
+                page.matching(&fields.urls).ok_or(ErrorCode::WrongSite)?;
+                purpose.detail = Some(format!(
+                    "Save the new password of “{}” from {host}",
+                    fields.title.trim()
+                ));
+                (vault_id, Some(cipher), fields)
+            }
+            None => {
+                let reply = item_request(app, hub, ItemOp::Vault, &mut why)?;
+                let vault_id = reply.vault_id.ok_or(ErrorCode::Internal)?;
+                let who = if login.username.trim().is_empty() {
+                    String::new()
+                } else {
+                    format!(" as {}", login.username.trim())
+                };
+                purpose.detail = Some(format!("Save a new login for {host}{who}"));
+                let mut fields = ItemFields::default();
+                fields.title = host.clone();
+                fields.username = login.username.trim().to_owned();
+                fields.urls = vec![site.clone()];
+                (vault_id, None, fields)
+            }
+        };
+        verified = Some(ask(app, hub, &who, &[], &purpose, peer, false)?);
+        fields.password.zeroize();
+        fields.password.push_str(login.password);
+        let title = fields.title.trim().to_owned();
+        let sealed = keyring
+            .seal_item(&vault_id, existing.as_ref(), fields)
+            .map_err(vault_error)?;
+        let created = existing.is_none();
+        item_request(
+            app,
+            hub,
+            ItemOp::Upload {
+                vault_id: &vault_id,
+                item: &sealed,
+                created,
+            },
+            &mut why,
+        )?;
+        Ok(if created {
+            format!("Saved “{title}” to Zvault.")
+        } else {
+            format!("Updated the password of “{title}”.")
+        })
+    };
+    let result = work();
+    browser_log(
+        app,
+        hub,
+        &who,
+        &purpose,
+        verified,
+        result.as_ref().err(),
+        peer,
+    );
+    result.map(|message| Response::Changed { message })
 }
 
 // ---------------------------------------------------------------------------

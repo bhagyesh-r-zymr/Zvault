@@ -126,6 +126,53 @@ abstract final class ShareLimits {
   static const maxAllowedEmails = 20;
 }
 
+/// A share another Zvault user sent to this account, still encrypted.
+class IncomingShare {
+  IncomingShare(Map<String, dynamic> json)
+    : id = json['id'] as String,
+      senderEmail = json['sender']['email'] as String,
+      senderPublicKey = json['sender']['publicKey'] as String,
+      ephemeralPublicKey = json['ephemeralPublicKey'] as String,
+      blobJson = jsonEncode(json['blob']),
+      createdAt = DateTime.parse(json['createdAt'] as String);
+
+  final String id;
+  final String senderEmail;
+  final String senderPublicKey;
+  final String ephemeralPublicKey;
+  final String blobJson;
+  final DateTime createdAt;
+}
+
+/// A decrypted share (`SharedItemPayload`). [totp] is the 2FA setup when the
+/// sender chose to include it; codes are computed from it in Rust.
+class SharedItem {
+  SharedItem(Map<String, dynamic> json)
+    : title = json['title'] as String? ?? 'Untitled',
+      username = json['username'] as String? ?? '',
+      password = json['password'] as String? ?? '',
+      url = json['url'] as String? ?? '',
+      notes = json['notes'] as String? ?? '',
+      totp = json['totp'] as String? ?? '',
+      passkeySite = (json['passkey'] as Map?)?['rpId'] as String?,
+      secretKey = (json['secret'] as Map?)?['key'] as String?,
+      secretFrom = json['secret'] is Map
+          ? '${json['secret']['project']} / ${json['secret']['environment']}'
+          : null;
+
+  final String title;
+  final String username;
+  final String password;
+  final String url;
+  final String notes;
+  final String totp;
+  final String? passkeySite;
+
+  /// Set for a shared project secret; its value is in [password].
+  final String? secretKey;
+  final String? secretFrom;
+}
+
 final _emailPattern = RegExp(r"^[a-z0-9._%+'-]+@[a-z0-9-]+(\.[a-z0-9-]+)+$");
 
 /// Splits what the person typed into normalized emails, or throws a message
@@ -598,6 +645,92 @@ class AppState extends ChangeNotifier {
 
   Future<void> testPasskey(VaultItem item) => core.testPasskey(item.vaultId, item.recordJson);
 
+  /// Checks a scanned or pasted 2FA setup; throws a message fit to show.
+  Future<TotpSetup> checkTotp(String input) async {
+    try {
+      return await core.checkTotp(input.trim());
+    } catch (_) {
+      throw const FormatException(
+        "That isn't a 2FA setup key. Scan the QR code or paste the key the website shows.",
+      );
+    }
+  }
+
+  /// Adds, replaces or (with an empty [totp]) removes an item's 2FA setup,
+  /// encrypted here and saved as a new revision, as the Mac saves edits.
+  /// Returns the item as saved.
+  Future<VaultItem> setItemTotp(VaultItem item, String totp) async {
+    final record = jsonDecode(item.recordJson) as Map<String, dynamic>;
+    final data = await core.setItemTotp(item.vaultId, item.recordJson, totp.trim());
+    final Map<String, dynamic> saved;
+    try {
+      saved = await _api!.putItem(item.vaultId, item.id, {
+        'baseRevision': record['revision'] as int,
+        'encryptedKey': record['encryptedKey'] as Map<String, dynamic>,
+        'encryptedData': jsonDecode(data) as Map<String, dynamic>,
+      });
+    } on ApiException catch (e) {
+      if (e.status != 409) rethrow;
+      unawaited(sync());
+      throw ApiException(409, 'This item was changed on another device. Open it again and retry.');
+    }
+    final json = jsonEncode(saved);
+    final updated = VaultItem(
+      vaultId: item.vaultId,
+      vaultName: item.vaultName,
+      id: item.id,
+      recordJson: json,
+      summary: await core.itemSummary(item.vaultId, json),
+    );
+    items = [for (final i in items) i.id == item.id ? updated : i];
+    notifyListeners();
+    return updated;
+  }
+
+  // Shares other people sent here. Opened in Rust with this account's
+  // sharing key; the sender's key is pinned like a recipient's.
+
+  Future<List<IncomingShare>> incomingShares() async {
+    final list = await _api!.incomingShares();
+    return list.map(IncomingShare.new).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  Future<String> senderFingerprint(IncomingShare share) =>
+      core.sharingFingerprint(share.senderPublicKey);
+
+  /// Whether the sender's key is the one seen before.
+  PinCheck senderPin(IncomingShare share) {
+    final pinned = account?.sharingPins[share.senderEmail.toLowerCase()];
+    return pinned == null
+        ? PinCheck.newKey
+        : pinned == share.senderPublicKey
+        ? PinCheck.match
+        : PinCheck.changed;
+  }
+
+  Future<SharedItem> openShare(IncomingShare share) async {
+    final json = await core.openShare(
+      id: share.id,
+      senderPublicKey: share.senderPublicKey,
+      ephemeralPublicKey: share.ephemeralPublicKey,
+      blobJson: share.blobJson,
+    );
+    final item = SharedItem(jsonDecode(json) as Map<String, dynamic>);
+    // It decrypted under this key, so remember it for this sender.
+    final a = account;
+    if (a != null) {
+      account = a.copyWith(
+        sharingPins: {...a.sharingPins, share.senderEmail.toLowerCase(): share.senderPublicKey},
+      );
+      await store.save(account!);
+    }
+    return item;
+  }
+
+  Future<OneTimeCode> sharedCode(String totp) => core.sharedTotpCode(totp);
+
+  Future<void> removeIncomingShare(IncomingShare share) => _api!.removeUserShare(share.id);
+
   // Sharing, as on the Mac. Rust opens and encrypts the item; only
   // ciphertext reaches the server.
 
@@ -609,12 +742,14 @@ class AppState extends ChangeNotifier {
     required int expiresInSeconds,
     required int maxViews,
     List<String>? allowedEmails,
+    bool includeTotp = false,
   }) async {
     final link = await switch (subject) {
       ItemShareSubject(:final item) => core.createShareLink(
         item.vaultId,
         item.recordJson,
         shareOrigin,
+        includeTotp: includeTotp,
       ),
       SecretShareSubject() => core.createSecretShareLink(subject.request, shareOrigin),
     };
@@ -649,7 +784,11 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  Future<void> shareWithUser(ShareSubject subject, ShareRecipient to) async {
+  Future<void> shareWithUser(
+    ShareSubject subject,
+    ShareRecipient to, {
+    bool includeTotp = false,
+  }) async {
     final api = _api!;
     await api.publishSharingKey((await core.sharingIdentity()).publicKey);
     final sealed = await switch (subject) {
@@ -657,6 +796,7 @@ class AppState extends ChangeNotifier {
         item.vaultId,
         item.recordJson,
         to.publicKey,
+        includeTotp: includeTotp,
       ),
       SecretShareSubject() => core.sealSecretShareTo(subject.request, to.publicKey),
     };

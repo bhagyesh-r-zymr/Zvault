@@ -8,12 +8,13 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
 use serde::Serialize;
 use zeroize::Zeroizing;
 use zvault_crypto::{
-    LinkShare, PUBLIC_KEY_LEN, SHARE_ID_LEN, Sealed, SharingKeyPair, fingerprint, seal_to,
+    BoxedShare, LinkShare, PUBLIC_KEY_LEN, SHARE_ID_LEN, Sealed, SharingKeyPair, fingerprint,
+    open_from, seal_to,
 };
 
 use super::keyring;
 use crate::keyring::ItemFields;
-use crate::records::{self, Blob, CRYPTO_VERSION, ItemRecord, decode_key};
+use crate::records::{self, Blob, CRYPTO_VERSION, ItemRecord, decode_array, decode_key};
 
 /// `SHARE_LINK_KID` and `SHARE_BOX_KID` in `@zvault/shared`.
 const LINK_KID: &str = "share-link";
@@ -53,7 +54,7 @@ struct WireBlob<'a> {
     ct: String,
 }
 
-fn blob_json(kid: &str, sealed: &Sealed) -> anyhow::Result<String> {
+pub(crate) fn blob_json(kid: &str, sealed: &Sealed) -> anyhow::Result<String> {
     Ok(serde_json::to_string(&WireBlob {
         v: CRYPTO_VERSION,
         alg: "xchacha20poly1305",
@@ -63,8 +64,8 @@ fn blob_json(kid: &str, sealed: &Sealed) -> anyhow::Result<String> {
     })?)
 }
 
-/// `SharedItemPayload`. Empty fields are left out, as the Mac does.
-/// One-time password seeds are not shared.
+/// `SharedItemPayload`. Empty fields are left out, as the Mac does. The
+/// one-time password setup goes along only when the person asked for it.
 #[derive(Serialize)]
 struct Payload<'a> {
     v: u32,
@@ -81,6 +82,8 @@ struct Payload<'a> {
     passkey: Option<SharedPasskey<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     secret: Option<SecretOrigin<'a>>,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    totp: &'a str,
 }
 
 /// `SharedPasskey`: everything needed to use the passkey elsewhere.
@@ -117,7 +120,7 @@ pub struct SecretShare {
     pub environment_name: String,
 }
 
-fn payload(f: &ItemFields) -> anyhow::Result<Zeroizing<Vec<u8>>> {
+fn payload(f: &ItemFields, include_totp: bool) -> anyhow::Result<Zeroizing<Vec<u8>>> {
     let pem = f
         .passkey
         .as_ref()
@@ -142,6 +145,7 @@ fn payload(f: &ItemFields) -> anyhow::Result<Zeroizing<Vec<u8>>> {
                 private_key: pem,
             }),
         secret: None,
+        totp: if include_totp { &f.totp } else { "" },
     })?))
 }
 
@@ -161,6 +165,7 @@ fn secret_payload(s: &SecretShare, value: &str) -> anyhow::Result<Zeroizing<Vec<
             project: &s.project_name,
             environment: &s.environment_name,
         }),
+        totp: "",
     })?))
 }
 
@@ -173,10 +178,14 @@ fn open_secret_payload(s: &SecretShare) -> anyhow::Result<Zeroizing<Vec<u8>>> {
     secret_payload(s, &value)
 }
 
-fn open_payload(vault_id: &str, record_json: &str) -> anyhow::Result<Zeroizing<Vec<u8>>> {
+fn open_payload(
+    vault_id: &str,
+    record_json: &str,
+    include_totp: bool,
+) -> anyhow::Result<Zeroizing<Vec<u8>>> {
     let record: ItemRecord = records::parse(record_json)?;
     let fields = keyring().open_item(vault_id, &record)?;
-    payload(&fields)
+    payload(&fields, include_totp)
 }
 
 /// Share pages may only be served over HTTPS (or from localhost in development).
@@ -192,14 +201,19 @@ fn check_origin(origin: &str) -> anyhow::Result<&str> {
 }
 
 /// Encrypts an item under a fresh link key and builds its URL on
-/// `share_origin` (the share page, such as `https://host/share`).
+/// `share_origin` (the share page, such as `https://host/share`). The 2FA
+/// setup is included only with `include_totp`.
 pub fn share_link_create(
     vault_id: String,
     record_json: String,
     share_origin: String,
+    include_totp: bool,
 ) -> anyhow::Result<NewShareLink> {
     let origin = check_origin(&share_origin)?;
-    seal_link(&open_payload(&vault_id, &record_json)?, origin)
+    seal_link(
+        &open_payload(&vault_id, &record_json, include_totp)?,
+        origin,
+    )
 }
 
 fn seal_link(plaintext: &[u8], origin: &str) -> anyhow::Result<NewShareLink> {
@@ -248,16 +262,42 @@ pub fn sharing_fingerprint(public_key: String) -> anyhow::Result<String> {
     Ok(fingerprint(&decode_key(&public_key)?))
 }
 
-/// Encrypts an item to another user's sharing key.
+/// Encrypts an item to another user's sharing key. The 2FA setup is
+/// included only with `include_totp`.
 pub fn share_seal_to(
     vault_id: String,
     record_json: String,
     recipient_public_key: String,
+    include_totp: bool,
 ) -> anyhow::Result<NewUserShare> {
     let recipient = decode_key(&recipient_public_key)?;
-    let plaintext = open_payload(&vault_id, &record_json)?;
+    let plaintext = open_payload(&vault_id, &record_json, include_totp)?;
     let me = keyring().sharing_key_pair()?;
     seal_box(&me, &recipient, &plaintext)
+}
+
+/// Decrypts a share another user sent to this account and returns its
+/// `SharedItemPayload` JSON. Fails unless the holder of `sender_public_key`
+/// sealed it for exactly this share id.
+pub fn share_open(
+    id: String,
+    sender_public_key: String,
+    ephemeral_public_key: String,
+    blob_json: String,
+) -> anyhow::Result<String> {
+    let blob: Blob = records::parse(&blob_json)?;
+    let boxed = BoxedShare {
+        ephemeral_public: decode_key(&ephemeral_public_key)?,
+        sealed: blob.sealed(BOX_KID)?,
+    };
+    let me = keyring().sharing_key_pair()?;
+    let plaintext = open_from(
+        &me,
+        &decode_key(&sender_public_key)?,
+        &decode_array::<SHARE_ID_LEN>(&id)?,
+        &boxed,
+    )?;
+    Ok(String::from_utf8(plaintext)?)
 }
 
 fn seal_box(
@@ -278,8 +318,7 @@ fn seal_box(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::records::decode_array;
-    use zvault_crypto::{BoxedShare, KEY_LEN, open_from};
+    use zvault_crypto::KEY_LEN;
 
     fn fields() -> ItemFields {
         ItemFields {
@@ -301,7 +340,7 @@ mod tests {
         let mut f = fields();
         let passkey = zvault_passkeys::Passkey::generate("github.com", "octo", 0).unwrap();
         f.passkey = Some(passkey.clone());
-        let json: serde_json::Value = serde_json::from_slice(&payload(&f).unwrap()).unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&payload(&f, false).unwrap()).unwrap();
         let shared = &json["passkey"];
         assert_eq!(shared["rpId"], "github.com");
         assert_eq!(shared["credentialId"], passkey.credential_id.as_str());
@@ -319,8 +358,9 @@ mod tests {
     }
 
     #[test]
-    fn payload_matches_the_macs_and_leaves_out_the_totp_seed() {
-        let json: serde_json::Value = serde_json::from_slice(&payload(&fields()).unwrap()).unwrap();
+    fn payload_matches_the_macs_and_leaves_out_the_totp_seed_unless_asked() {
+        let json: serde_json::Value =
+            serde_json::from_slice(&payload(&fields(), false).unwrap()).unwrap();
         assert_eq!(
             json,
             serde_json::json!({
@@ -328,6 +368,9 @@ mod tests {
                 "password": "hunter2", "url": "https://github.com"
             })
         );
+        let json: serde_json::Value =
+            serde_json::from_slice(&payload(&fields(), true).unwrap()).unwrap();
+        assert_eq!(json["totp"], "otpauth://totp/x?secret=JBSWY3DPEHPK3PXP");
     }
 
     #[test]

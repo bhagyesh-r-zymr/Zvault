@@ -34,6 +34,7 @@ echo -n "$VALUE" | zv set zv://web/development/DATABASE_URL
 zv env zv://web/development             # KEY="…" lines for a .env file
 eval "$(zv env zv://web/development --format shell)"
 zv run --env-from zv://web/development -- npm test
+zv sync zv://web/production             # push to its GitHub / AWS targets now
 zv signout
 ```
 

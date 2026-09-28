@@ -29,6 +29,10 @@ To build it yourself: `pnpm --filter @zvault/extension build`, then load
 - On the next page, the button in a code field (or the row of code boxes)
   fills the current one-time code, with the login you just used first. The
   popup's **Code** button copies it instead.
+- When you sign in or sign up with a login Zvault doesn't have, or with a new
+  password for one it has, a banner in the page's corner offers to save it.
+  Press **Save** (or **Update**) and approve it in Zvault. A new login is
+  named after the website and saved for it.
 - The browser shows up under **Agents** in Zvault, where you can pause it,
   make every fill ask with Touch ID, see each fill in its activity, or unpair
   it.
@@ -48,8 +52,9 @@ page ── content script ── service worker ── zv (native host) ── 
   stored like an agent's (the login Keychain on macOS) in a separate list.
   The app keeps only its hash.
 - The paired browser is an agent with no `zv://` scopes: it cannot read
-  project secrets. It can ask for two things: the logins saved for a page
-  (titles and user names only) and one login's fill.
+  project secrets. It can ask for the logins saved for a page (titles and
+  user names only), one login's fill, whether a typed login is already
+  saved, and to save one.
 - The page address comes from the browser (the frame's own URL and its tab's
   URL), never from the page. A login is listed or filled only when one of its
   saved websites matches both; a login form framed inside another site gets
@@ -63,5 +68,13 @@ page ── content script ── service worker ── zv (native host) ── 
 - While Zvault is locked or the browser is paused, requests fail without a
   prompt and the extension offers to bring Zvault forward. In "Ask me each
   time" mode every fill shows a prompt with Touch ID.
-- The in-page button and menu live in a closed shadow root and act only on
+- Saving: when a form is sent, the content script reads the user name and
+  password and the service worker asks whether Zvault has them. The answer
+  is only new, changed or saved; it never carries a password. A login to
+  offer waits in `chrome.storage.session` (memory only, out of reach of
+  pages) for two minutes, so the banner can show on the page that follows.
+  Every save or update asks in Zvault, whatever the approval mode, and is
+  logged. An update must be for a login saved for that website, and a login
+  typed into a frame from another site is not saved.
+- The in-page button, menu and save banner live in a closed shadow root and act only on
   real clicks, so the page cannot read or drive them.

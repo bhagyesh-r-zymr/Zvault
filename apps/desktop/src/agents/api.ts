@@ -60,7 +60,8 @@ export type PurposeKind =
   | 'change'
   | 'readItem'
   | 'changeItem'
-  | 'fill';
+  | 'fill'
+  | 'saveLogin';
 
 export interface Purpose {
   kind: PurposeKind;
@@ -227,7 +228,8 @@ export type Change =
       slug: string | null;
     }
   | { op: 'deleteFolder'; project: string; folder: string }
-  | { op: 'deleteSecret'; reference: string; allEnvironments: boolean };
+  | { op: 'deleteSecret'; reference: string; allEnvironments: boolean }
+  | { op: 'syncEnvironment'; project: string; environment: string };
 
 /** Makes a change and returns what it did, for the terminal. Throw to refuse it. */
 export type ApplyChange = (change: Change) => Promise<string>;

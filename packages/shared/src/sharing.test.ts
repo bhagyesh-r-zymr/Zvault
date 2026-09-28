@@ -37,4 +37,13 @@ describe('secretSharePayload', () => {
   it('still parses a vault item without secret details', () => {
     expect(SharedItemPayload.parse({ v: 1, title: 'Wi-Fi', password: 'x' }).secret).toBeUndefined();
   });
+
+  it('carries a one-time password setup only as an otpauth URI', () => {
+    const totp = 'otpauth://totp/GitHub:octo?secret=JBSWY3DPEHPK3PXP&issuer=GitHub';
+    expect(SharedItemPayload.parse({ v: 1, title: 'GitHub', totp }).totp).toBe(totp);
+    expect(
+      SharedItemPayload.safeParse({ v: 1, title: 'x', totp: 'JBSWY3DPEHPK3PXP' }).success,
+    ).toBe(false);
+    expect(SharedItemPayload.parse({ v: 1, title: 'x' }).totp).toBeUndefined();
+  });
 });

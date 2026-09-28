@@ -6,9 +6,30 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../theme.dart';
 import 'welcome.dart';
 
-/// Full-screen camera that returns the first Zvault sign-in code it sees.
+/// Full-screen camera that returns the first matching QR code it sees: a
+/// Zvault sign-in code by default, or a website's 2FA setup with [ScanScreen.totp].
 class ScanScreen extends StatefulWidget {
-  const ScanScreen({super.key});
+  const ScanScreen({super.key})
+    : _accepts = _isPairing,
+      _title = 'Point at the QR code on your Mac',
+      _hint = 'Settings › Devices › Add phone',
+      _canPaste = true;
+
+  /// For a website's two-factor setup page. Typing the key instead happens
+  /// on the screen that opened this one.
+  const ScanScreen.totp({super.key})
+    : _accepts = _isTotp,
+      _title = 'Point at the 2FA QR code',
+      _hint = 'On the website’s two-factor setup page',
+      _canPaste = false;
+
+  final bool Function(String) _accepts;
+  final String _title;
+  final String _hint;
+  final bool _canPaste;
+
+  static bool _isPairing(String v) => v.startsWith('zvault://pair?');
+  static bool _isTotp(String v) => v.toLowerCase().startsWith('otpauth://totp/');
 
   @override
   State<ScanScreen> createState() => _ScanScreenState();
@@ -35,7 +56,7 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
     if (_done) return;
     for (final code in capture.barcodes) {
       final value = code.rawValue;
-      if (value != null && value.startsWith('zvault://pair?')) {
+      if (value != null && widget._accepts(value)) {
         _done = true;
         Navigator.of(context).pop(value);
         return;
@@ -89,7 +110,7 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
                     child: Column(
                       children: [
                         Text(
-                          'Point at the QR code on your Mac',
+                          widget._title,
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
@@ -97,7 +118,7 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
                         Text(
                           camera == null
                               ? 'This device has no camera. Paste the code instead.'
-                              : 'Settings › Devices › Add phone',
+                              : widget._hint,
                           textAlign: TextAlign.center,
                           style: TextStyle(color: context.zv.muted, fontSize: 14),
                         ),
@@ -131,14 +152,15 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
                     ],
                   ),
                   const Spacer(),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    child: OutlinedButton(
-                      key: const Key('scan-paste'),
-                      onPressed: _paste,
-                      child: const Text('Paste code instead'),
+                  if (widget._canPaste)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      child: OutlinedButton(
+                        key: const Key('scan-paste'),
+                        onPressed: _paste,
+                        child: const Text('Paste code instead'),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),

@@ -94,6 +94,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   SharingIdentity dco_decode_sharing_identity(dynamic raw);
 
   @protected
+  TotpSetup dco_decode_totp_setup(dynamic raw);
+
+  @protected
   int dco_decode_u_32(dynamic raw);
 
   @protected
@@ -181,6 +184,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   SharingIdentity sse_decode_sharing_identity(SseDeserializer deserializer);
+
+  @protected
+  TotpSetup sse_decode_totp_setup(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -292,6 +298,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     SharingIdentity self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_totp_setup(TotpSetup self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);

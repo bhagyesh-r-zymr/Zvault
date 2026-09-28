@@ -293,6 +293,177 @@ void main() {
     expect(find.textContaining('Anyone with this link can view the secret'), findsOneWidget);
   });
 
+  group('2FA', () {
+    ItemDetail detail(String title, {bool totp = false}) => ItemDetail(
+      title: title,
+      username: 'meet-oza',
+      password: 'tr0ub4dor&3',
+      urls: const [],
+      notes: '',
+      hasTotp: totp,
+    );
+
+    void tall(WidgetTester tester) {
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(412, 1400);
+      addTearDown(tester.view.reset);
+    }
+
+    testWidgets('is left out of a share unless the person turns it on', (tester) async {
+      tall(tester);
+      final core = FakeCore(details: {'i1': detail('GitHub', totp: true)});
+      final state = unlockedState(core)
+        ..api = ZvaultApi(
+          'https://zvault.example',
+          token: 'token',
+          client: MockClient((_) async => http.Response('{"unverifiedEmails":[]}', 201)),
+        );
+      await tester.pumpWidget(ZvaultApp(state: state));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('GitHub'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('share-item')));
+      await tester.pumpAndSettle();
+
+      final toggle = find.byKey(const Key('share-include-totp'));
+      expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+      await tester.tap(find.byKey(const Key('share-create-link')));
+      await tester.pumpAndSettle();
+      expect(core.lastIncludeTotp, isFalse);
+
+      await tester.tap(find.text('Make another link'));
+      await tester.pumpAndSettle();
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('share-create-link')));
+      await tester.pumpAndSettle();
+      expect(core.lastIncludeTotp, isTrue);
+    });
+
+    testWidgets('can be added to a login and is saved encrypted', (tester) async {
+      tall(tester);
+      final requests = <http.Request>[];
+      const record =
+          '{"id":"i2","vaultId":"v1","revision":3,"deleted":false,'
+          '"encryptedKey":{"v":1,"alg":"xchacha20poly1305","kid":"v1","nonce":"k","ct":"key"},'
+          '"encryptedData":{"v":1,"alg":"xchacha20poly1305","kid":"i2","nonce":"n","ct":"old"}}';
+      final core = FakeCore(details: {'i2': detail('Slack')});
+      final state = unlockedState(core)
+        ..items = [
+          VaultItem(
+            vaultId: 'v1',
+            vaultName: 'Personal',
+            id: 'i2',
+            recordJson: record,
+            summary: const ItemSummary(
+              title: 'Slack',
+              username: 'meet-oza',
+              hasTotp: false,
+              hasPasskey: false,
+            ),
+          ),
+        ]
+        ..api = ZvaultApi(
+          'https://zvault.example',
+          token: 'token',
+          client: MockClient((req) async {
+            requests.add(req);
+            final body = jsonDecode(req.body) as Map<String, dynamic>;
+            return http.Response(
+              jsonEncode({
+                'id': 'i2',
+                'vaultId': 'v1',
+                'revision': 4,
+                'deleted': false,
+                'encryptedKey': body['encryptedKey'],
+                'encryptedData': body['encryptedData'],
+              }),
+              200,
+            );
+          }),
+        );
+      await tester.pumpWidget(ZvaultApp(state: state));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Slack'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('add-totp')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byKey(const Key('totp-input')), 'nope');
+      await tester.pump();
+      expect(find.textContaining("isn't a 2FA setup key"), findsOneWidget);
+
+      await tester.enterText(find.byKey(const Key('totp-input')), 'JBSW Y3DP EHPK 3PXP');
+      await tester.pump();
+      expect(find.text('Slack · meet.oza@zymr.com'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('totp-save')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(requests.single.method, 'PUT');
+      expect(requests.single.url.path, '/v1/vaults/v1/items/i2');
+      final body = jsonDecode(requests.single.body) as Map<String, dynamic>;
+      expect(body['baseRevision'], 3);
+      expect(body['encryptedKey']['ct'], 'key');
+      expect(body['encryptedData']['ct'], 'sealed-with-totp');
+      expect(requests.single.body, isNot(contains('JBSW')));
+      expect(core.savedTotps['i2'], 'JBSW Y3DP EHPK 3PXP');
+      expect(find.text('492 039'), findsOneWidget);
+      expect(state.items.single.summary.hasTotp, isTrue);
+    });
+
+    testWidgets('shared with this account shows a live code', (tester) async {
+      tall(tester);
+      final core = FakeCore()
+        ..incoming = {
+          'SSSSSSSSSSSSSSSSSSSSSS': jsonEncode({
+            'v': 1,
+            'title': 'AWS console',
+            'username': 'ops@zymr.com',
+            'password': 'hunter2',
+            'totp': 'otpauth://totp/AWS:ops?secret=JBSWY3DPEHPK3PXP',
+          }),
+        };
+      final state = unlockedState(core)
+        ..api = ZvaultApi(
+          'https://zvault.example',
+          token: 'token',
+          client: MockClient(
+            (req) async => http.Response(
+              jsonEncode({
+                'incoming': [
+                  {
+                    'id': 'SSSSSSSSSSSSSSSSSSSSSS',
+                    'sender': {'userId': 'u3', 'email': 'vivek@zymr.com', 'publicKey': 'vivek-key'},
+                    'ephemeralPublicKey': 'eph',
+                    'blob': {'v': 1, 'alg': 'xchacha20poly1305', 'kid': 'share-box'},
+                    'createdAt': '2026-09-28T10:00:00Z',
+                    'expiresAt': null,
+                  },
+                ],
+                'outgoing': [],
+              }),
+              200,
+            ),
+          ),
+        );
+      await tester.pumpWidget(ZvaultApp(state: state));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('shared-with-me')));
+      await tester.pumpAndSettle();
+      expect(find.text('From vivek@zymr.com'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('open-share-SSSSSSSSSSSSSSSSSSSSSS')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(find.text('AWS console'), findsOneWidget);
+      expect(find.byKey(const Key('shared-totp')), findsOneWidget);
+      expect(find.text('492 039'), findsOneWidget);
+      expect(state.account!.sharingPins, {'vivek@zymr.com': 'vivek-key'});
+    });
+  });
+
   group('ZvaultApi', () {
     test('reads an approved pairing', () async {
       final api = ZvaultApi(

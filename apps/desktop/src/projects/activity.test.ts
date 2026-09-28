@@ -19,6 +19,7 @@ const env = (eid: string, name: string, slug: string): Environment => ({
   position: 0,
   inheritsFrom: null,
   locked: false,
+  sync: [],
 });
 
 const project: Project = {

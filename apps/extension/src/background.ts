@@ -8,7 +8,17 @@
  */
 
 import { Host } from './host.js';
-import type { Fill, FillNow, Login, Request, Result, Status } from './messages.js';
+import type {
+  Fill,
+  FillNow,
+  Login,
+  OfferSave,
+  Request,
+  Result,
+  SaveCheck,
+  SaveOffer,
+  Status,
+} from './messages.js';
 
 const host = new Host();
 
@@ -71,14 +81,128 @@ async function fill(
   return map(r, (v) => v.fill);
 }
 
+/**
+ * A typed login waiting for the person to save it: kept in session storage,
+ * which stays in memory and out of reach of content scripts, and dropped
+ * after a couple of minutes.
+ */
+interface Pending {
+  url: string;
+  topUrl: string | null;
+  username: string;
+  password: string;
+  item: string | null;
+  offer: SaveOffer;
+  at: number;
+}
+
+const PENDING_MS = 2 * 60 * 1000;
+/** A user name sent alone, for the password page that follows it. */
+const USERNAME_MS = 10 * 60 * 1000;
+
+async function sessionGet<T>(key: string): Promise<T | undefined> {
+  const got: Record<string, T | undefined> = await chrome.storage.session
+    .get<Record<string, T | undefined>>(key)
+    .catch(() => ({}));
+  return got[key];
+}
+
+async function pending(tabId: number): Promise<Pending | null> {
+  const p = await sessionGet<Pending>(`save:${tabId}`);
+  return p && Date.now() - p.at < PENDING_MS ? p : null;
+}
+
+async function dropPending(tabId: number) {
+  await chrome.storage.session.remove(`save:${tabId}`).catch(() => undefined);
+}
+
+async function typed(
+  sender: chrome.runtime.MessageSender,
+  username: string,
+  password: string,
+): Promise<Result<null>> {
+  const page = pageOf(sender);
+  const tabId = sender.tab?.id;
+  if (!page || tabId === undefined) return fail('badRequest', 'This page cannot be saved.');
+  const site = new URL(page.url).origin;
+  if (!username) {
+    const earlier = await sessionGet<{ username: string; site: string; at: number }>(
+      `user:${tabId}`,
+    );
+    if (earlier && earlier.site === site && Date.now() - earlier.at < USERNAME_MS) {
+      username = earlier.username;
+    }
+  }
+  const r = await host.request<{ check: SaveCheck }>({
+    type: 'saveCheck',
+    url: page.url,
+    topUrl: page.topUrl,
+    username,
+    password,
+  });
+  // Locked, paused or not connected: say nothing, as other password
+  // managers do when they cannot save.
+  if (!r.ok || r.value.check.state === 'saved') return { ok: true, value: null };
+  const check = r.value.check;
+  const offer: SaveOffer = {
+    host: new URL(page.url).hostname.replace(/^www\./, ''),
+    username,
+    update: check.state === 'update' ? check.title : null,
+  };
+  const entry: Pending = {
+    url: page.url,
+    topUrl: page.topUrl,
+    username,
+    password,
+    item: check.state === 'update' ? check.item : null,
+    offer,
+    at: Date.now(),
+  };
+  await chrome.storage.session.set({ [`save:${tabId}`]: entry }).catch(() => undefined);
+  // A page that stays put shows the banner now; one that navigates asks
+  // for it when the next page loads.
+  const show: OfferSave = { type: 'offerSave', offer };
+  await chrome.tabs.sendMessage(tabId, show, { frameId: 0 }).catch(() => undefined);
+  return { ok: true, value: null };
+}
+
+async function save(tabId: number): Promise<Result<{ message: string }>> {
+  const p = await pending(tabId);
+  if (!p) return fail('badRequest', 'That login is no longer waiting to be saved.');
+  const r = await host.request<{ message: string }>({
+    type: 'save',
+    url: p.url,
+    topUrl: p.topUrl,
+    username: p.username,
+    password: p.password,
+    item: p.item,
+  });
+  if (r.ok || r.code === 'denied' || r.code === 'wrongSite') await dropPending(tabId);
+  return map(r, (v) => ({ message: v.message }));
+}
+
 /** Requests only the popup may make, and those only a page's content script may. */
 const POPUP_ONLY = new Set<Request['type']>(['pair', 'unpair', 'tabLogins', 'tabFill', 'tabCode']);
-const PAGE_ONLY = new Set<Request['type']>(['logins', 'fill', 'lastFilled']);
+const PAGE_ONLY = new Set<Request['type']>([
+  'logins',
+  'fill',
+  'lastFilled',
+  'typed',
+  'typedUsername',
+  'saveOffer',
+  'save',
+  'dismissSave',
+]);
+/** Requests only a tab's top frame may make: the save banner lives there. */
+const TOP_ONLY = new Set<Request['type']>(['saveOffer', 'save', 'dismissSave']);
 
 async function handle(msg: Request, sender: chrome.runtime.MessageSender): Promise<unknown> {
   // Content scripts report the page's address; the popup its own.
   const fromPage = !sender.url?.startsWith(chrome.runtime.getURL(''));
   if ((fromPage && POPUP_ONLY.has(msg.type)) || (!fromPage && PAGE_ONLY.has(msg.type))) {
+    return fail('badRequest', 'Not allowed from here.');
+  }
+  if (TOP_ONLY.has(msg.type) && sender.frameId !== 0) {
     return fail('badRequest', 'Not allowed from here.');
   }
   switch (msg.type) {
@@ -146,6 +270,36 @@ async function handle(msg: Request, sender: chrome.runtime.MessageSender): Promi
         otpRemaining: f.otpRemaining,
       }));
     }
+    case 'typed':
+      if (typeof msg.username !== 'string' || typeof msg.password !== 'string' || !msg.password)
+        return fail('badRequest', 'Nothing to save.');
+      return typed(sender, msg.username.trim(), msg.password);
+    case 'typedUsername': {
+      const page = pageOf(sender);
+      const tabId = sender.tab?.id;
+      const username = typeof msg.username === 'string' ? msg.username.trim() : '';
+      if (!page || tabId === undefined || !username || username.length > 512)
+        return fail('badRequest', 'Nothing to remember.');
+      await chrome.storage.session
+        .set({
+          [`user:${tabId}`]: { username, site: new URL(page.url).origin, at: Date.now() },
+        })
+        .catch(() => undefined);
+      return { ok: true, value: null };
+    }
+    case 'saveOffer': {
+      const tabId = sender.tab?.id;
+      if (tabId === undefined) return { ok: true, value: null };
+      return { ok: true, value: (await pending(tabId))?.offer ?? null };
+    }
+    case 'save': {
+      const tabId = sender.tab?.id;
+      if (tabId === undefined) return fail('badRequest', 'Not allowed from here.');
+      return save(tabId);
+    }
+    case 'dismissSave':
+      if (sender.tab?.id !== undefined) await dropPending(sender.tab.id);
+      return { ok: true, value: null };
   }
 }
 
@@ -191,5 +345,7 @@ chrome.commands.onCommand.addListener((command, tab) => {
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  void chrome.storage.session.remove(`filled:${tabId}`).catch(() => undefined);
+  void chrome.storage.session
+    .remove([`filled:${tabId}`, `save:${tabId}`, `user:${tabId}`])
+    .catch(() => undefined);
 });

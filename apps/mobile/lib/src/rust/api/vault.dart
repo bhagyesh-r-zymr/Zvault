@@ -7,6 +7,8 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
+// These functions are ignored because they are not marked as `pub`: `code_of`
+
 Future<VaultSummary> vaultOpen({required String recordJson}) =>
     RustLib.instance.api.crateApiVaultVaultOpen(recordJson: recordJson);
 
@@ -45,6 +47,36 @@ Future<OneTimeCode?> itemTotp({
   vaultId: vaultId,
   recordJson: recordJson,
   unixSecs: unixSecs,
+);
+
+/// Checks a scanned `otpauth://` QR code, a pasted link or a typed setup key.
+Future<TotpSetup> totpCheck({
+  required String input,
+  required PlatformInt64 unixSecs,
+}) => RustLib.instance.api.crateApiVaultTotpCheck(
+  input: input,
+  unixSecs: unixSecs,
+);
+
+/// The current code for a setup someone shared (`SharedItemPayload.totp`).
+Future<OneTimeCode> totpCode({
+  required String uri,
+  required PlatformInt64 unixSecs,
+}) => RustLib.instance.api.crateApiVaultTotpCode(uri: uri, unixSecs: unixSecs);
+
+/// Adds, replaces or (with an empty `totp`) removes a login's 2FA setup.
+/// `totp` is what [`totp_check`] accepted; it is stored as the canonical
+/// `otpauth://` URI, as the Mac stores it. Returns the item's new
+/// `encryptedData` as `EncryptedBlob` JSON for `PUT /vaults/:id/items/:id`;
+/// its `encryptedKey` does not change.
+Future<String> itemSetTotp({
+  required String vaultId,
+  required String recordJson,
+  required String totp,
+}) => RustLib.instance.api.crateApiVaultItemSetTotp(
+  vaultId: vaultId,
+  recordJson: recordJson,
+  totp: totp,
 );
 
 /// Opens a project and returns its `ProjectMeta` as JSON. `member_wrap_json`
@@ -259,6 +291,33 @@ class PasskeyDetail {
           credentialId == other.credentialId &&
           publicKey == other.publicKey &&
           createdAt == other.createdAt;
+}
+
+/// A 2FA setup that was scanned or pasted, checked but not saved yet.
+class TotpSetup {
+  final String issuer;
+  final String account;
+
+  /// The first code, so the person can compare it with the website.
+  final OneTimeCode current;
+
+  const TotpSetup({
+    required this.issuer,
+    required this.account,
+    required this.current,
+  });
+
+  @override
+  int get hashCode => issuer.hashCode ^ account.hashCode ^ current.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TotpSetup &&
+          runtimeType == other.runtimeType &&
+          issuer == other.issuer &&
+          account == other.account &&
+          current == other.current;
 }
 
 class VaultSummary {

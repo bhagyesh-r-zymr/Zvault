@@ -11,15 +11,18 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Payload`, `SecretOrigin`, `SharedPasskey`, `WireBlob`
 
 /// Encrypts an item under a fresh link key and builds its URL on
-/// `share_origin` (the share page, such as `https://host/share`).
+/// `share_origin` (the share page, such as `https://host/share`). The 2FA
+/// setup is included only with `include_totp`.
 Future<NewShareLink> shareLinkCreate({
   required String vaultId,
   required String recordJson,
   required String shareOrigin,
+  required bool includeTotp,
 }) => RustLib.instance.api.crateApiSharingShareLinkCreate(
   vaultId: vaultId,
   recordJson: recordJson,
   shareOrigin: shareOrigin,
+  includeTotp: includeTotp,
 );
 
 /// Encrypts one project secret's value under a fresh link key.
@@ -50,15 +53,33 @@ Future<String> sharingFingerprint({required String publicKey}) => RustLib
     .api
     .crateApiSharingSharingFingerprint(publicKey: publicKey);
 
-/// Encrypts an item to another user's sharing key.
+/// Encrypts an item to another user's sharing key. The 2FA setup is
+/// included only with `include_totp`.
 Future<NewUserShare> shareSealTo({
   required String vaultId,
   required String recordJson,
   required String recipientPublicKey,
+  required bool includeTotp,
 }) => RustLib.instance.api.crateApiSharingShareSealTo(
   vaultId: vaultId,
   recordJson: recordJson,
   recipientPublicKey: recipientPublicKey,
+  includeTotp: includeTotp,
+);
+
+/// Decrypts a share another user sent to this account and returns its
+/// `SharedItemPayload` JSON. Fails unless the holder of `sender_public_key`
+/// sealed it for exactly this share id.
+Future<String> shareOpen({
+  required String id,
+  required String senderPublicKey,
+  required String ephemeralPublicKey,
+  required String blobJson,
+}) => RustLib.instance.api.crateApiSharingShareOpen(
+  id: id,
+  senderPublicKey: senderPublicKey,
+  ephemeralPublicKey: ephemeralPublicKey,
+  blobJson: blobJson,
 );
 
 /// A link ready to register with `POST /shares/links`.

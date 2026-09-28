@@ -595,7 +595,8 @@ pub fn item_passkey_test(
 }
 
 /// `SharedItemPayload` in `@zvault/shared`. Empty fields are left out.
-/// One-time password seeds are not shared.
+/// The one-time password setup is included when the item has one; the share
+/// sheet drops it unless the person turns on "Include 2FA code".
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SharePayload<'a> {
@@ -611,6 +612,8 @@ struct SharePayload<'a> {
     notes: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     passkey: Option<SharedPasskey>,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    totp: &'a str,
 }
 
 /// `SharedPasskey` in `@zvault/shared`: everything needed to use the passkey
@@ -667,6 +670,7 @@ fn share_payload(
         url: fields.urls.first().map_or("", String::as_str),
         notes: &fields.notes,
         passkey: passkey.as_ref().map(SharedPasskey::of).transpose()?,
+        totp: &fields.totp,
     };
     serde_json::to_string(&payload)
         .map(Zeroizing::new)
@@ -796,6 +800,24 @@ mod tests {
                 .starts_with("-----BEGIN PRIVATE KEY-----")
         );
         assert_eq!(json["username"], "alice@example.com");
+        assert!(json.get("totp").is_none());
+    }
+
+    #[test]
+    fn share_payload_carries_the_totp_setup() {
+        let keyring = unlocked();
+        let (vault, _) = keyring.create_vault("Personal").unwrap();
+        let mut fields = login();
+        fields.totp = "otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example".into();
+        let item = keyring.seal_item(&vault.id, None, fields).unwrap();
+        let payload = share_payload(&keyring, &vault.id, &item).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&payload).unwrap();
+        assert!(
+            json["totp"]
+                .as_str()
+                .unwrap()
+                .starts_with("otpauth://totp/")
+        );
     }
 
     #[test]

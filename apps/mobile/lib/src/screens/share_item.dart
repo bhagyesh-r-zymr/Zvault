@@ -34,6 +34,9 @@ class ShareItemScreen extends StatefulWidget {
 class _ShareItemScreenState extends State<ShareItemScreen> {
   _Mode _mode = _Mode.link;
 
+  /// Off by default: the 2FA setup goes along only when asked for.
+  bool _includeTotp = false;
+
   @override
   Widget build(BuildContext context) {
     final subject = widget.subject;
@@ -80,6 +83,22 @@ class _ShareItemScreenState extends State<ShareItemScreen> {
                 ),
               ],
             ),
+            if (subject case ItemShareSubject(:final item) when item.summary.hasTotp) ...[
+              const SizedBox(height: 16),
+              Panel(
+                child: SwitchListTile(
+                  key: const Key('share-include-totp'),
+                  value: _includeTotp,
+                  onChanged: (v) => setState(() => _includeTotp = v),
+                  title: const Text('Include 2FA code'),
+                  subtitle: Text(
+                    _includeTotp
+                        ? 'They will see live one-time codes and can sign in without you.'
+                        : 'Off: they get the password but still need you for the one-time code.',
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
             SegmentedButton<_Mode>(
               showSelectedIcon: false,
@@ -100,9 +119,9 @@ class _ShareItemScreenState extends State<ShareItemScreen> {
             ),
             const SizedBox(height: 24),
             if (_mode == _Mode.link)
-              _ShareByLink(subject: subject)
+              _ShareByLink(subject: subject, includeTotp: _includeTotp)
             else
-              _ShareWithPerson(subject: subject),
+              _ShareWithPerson(subject: subject, includeTotp: _includeTotp),
           ],
         ),
       ),
@@ -128,9 +147,10 @@ class _KeyTile extends StatelessWidget {
 }
 
 class _ShareByLink extends StatefulWidget {
-  const _ShareByLink({required this.subject});
+  const _ShareByLink({required this.subject, required this.includeTotp});
 
   final ShareSubject subject;
+  final bool includeTotp;
 
   @override
   State<_ShareByLink> createState() => _ShareByLinkState();
@@ -169,6 +189,7 @@ class _ShareByLinkState extends State<_ShareByLink> {
         expiresInSeconds: _expiresInSeconds,
         maxViews: _maxViews,
         allowedEmails: allowed,
+        includeTotp: widget.includeTotp,
       );
       if (mounted) setState(() => _link = link);
     } catch (e) {
@@ -385,9 +406,10 @@ class _ShareByLinkState extends State<_ShareByLink> {
 }
 
 class _ShareWithPerson extends StatefulWidget {
-  const _ShareWithPerson({required this.subject});
+  const _ShareWithPerson({required this.subject, required this.includeTotp});
 
   final ShareSubject subject;
+  final bool includeTotp;
 
   @override
   State<_ShareWithPerson> createState() => _ShareWithPersonState();
@@ -426,7 +448,7 @@ class _ShareWithPersonState extends State<_ShareWithPerson> {
   });
 
   Future<void> _send(ShareRecipient r) => _run((app) async {
-    await app.shareWithUser(widget.subject, r);
+    await app.shareWithUser(widget.subject, r, includeTotp: widget.includeTotp);
     if (mounted) {
       setState(() {
         _sentTo = r.email;

@@ -8,6 +8,7 @@ import '../core.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'share_item.dart';
+import 'totp_editor.dart';
 
 class ItemDetailScreen extends StatefulWidget {
   const ItemDetailScreen({super.key, required this.item, this.revealed = false});
@@ -22,6 +23,8 @@ class ItemDetailScreen extends StatefulWidget {
 }
 
 class _ItemDetailScreenState extends State<ItemDetailScreen> {
+  /// The item as last saved here; starts as the one opened.
+  late VaultItem _item = widget.item;
   ItemDetail? _detail;
   OneTimeCode? _code;
   String? _error;
@@ -43,7 +46,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   Future<void> _load() async {
     final app = context.read<AppState>();
     try {
-      final d = await app.openItem(widget.item);
+      final d = await app.openItem(_item);
       if (!mounted) return;
       setState(() => _detail = d);
       if (d.hasTotp) {
@@ -56,7 +59,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   }
 
   Future<void> _refreshCode() async {
-    final c = await context.read<AppState>().itemCode(widget.item);
+    final c = await context.read<AppState>().itemCode(_item);
     if (mounted) setState(() => _code = c);
   }
 
@@ -68,25 +71,41 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   void _share(String title) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => ShareItemScreen(subject: ItemShareSubject(widget.item, title)),
+        builder: (_) => ShareItemScreen(subject: ItemShareSubject(_item, title)),
       ),
     );
+  }
+
+  /// Adds, replaces or removes the 2FA setup, then shows the saved item.
+  Future<void> _editTotp(bool hasTotp) async {
+    final saved = await Navigator.of(context).push<VaultItem>(
+      MaterialPageRoute(
+        builder: (_) => TotpEditorScreen(item: _item, hasTotp: hasTotp),
+      ),
+    );
+    if (saved == null || !mounted) return;
+    _tick?.cancel();
+    setState(() {
+      _item = saved;
+      _code = null;
+    });
+    await _load();
   }
 
   @override
   Widget build(BuildContext context) {
     final c = context.zv;
     final d = _detail;
-    final title = d?.title ?? widget.item.summary.title;
+    final title = d?.title ?? _item.summary.title;
     final subtitle = d == null
-        ? widget.item.vaultName
+        ? _item.vaultName
         : d.urls.isNotEmpty
         ? _host(d.urls.first)
-        : widget.item.vaultName;
+        : _item.vaultName;
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.item.vaultName,
+          _item.vaultName,
           style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: c.muted),
         ),
       ),
@@ -139,7 +158,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             if (d?.passkey case final passkey?) ...[
               _PasskeyPanel(
                 passkey: passkey,
-                onTest: () => context.read<AppState>().testPasskey(widget.item),
+                onTest: () => context.read<AppState>().testPasskey(_item),
                 onCopy: _copy,
               ),
               const SizedBox(height: 12),
@@ -182,13 +201,28 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                         if (d.username.isNotEmpty || d.password.isNotEmpty) const Divider(),
                         _Field(
                           label: 'one-time password',
-                          child: _Totp(_code!),
+                          trailing: IconButton(
+                            key: const Key('edit-totp'),
+                            tooltip: 'Change 2FA',
+                            onPressed: () => _editTotp(true),
+                            icon: const Icon(Icons.edit_outlined, size: 20),
+                          ),
                           onCopy: () => _copy('Code', _code!.code),
+                          child: OneTimeCodeView(_code!),
                         ),
                       ],
                     ],
                   ),
                 ),
+              if (!d.hasTotp) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  key: const Key('add-totp'),
+                  onPressed: () => _editTotp(false),
+                  icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+                  label: const Text('Add 2FA code'),
+                ),
+              ],
               if (d.urls.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Panel(
@@ -283,54 +317,6 @@ class _Field extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _Totp extends StatelessWidget {
-  const _Totp(this.code);
-
-  final OneTimeCode code;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.zv;
-    final digits = code.code;
-    final grouped = digits.length == 6
-        ? '${digits.substring(0, 3)} ${digits.substring(3)}'
-        : digits;
-    final low = code.remaining <= 5;
-    final ring = low ? c.attention : c.accent;
-    return Row(
-      children: [
-        Text(
-          grouped,
-          style: Zv.monoStyle.copyWith(
-            fontSize: 22,
-            fontWeight: FontWeight.w600,
-            color: c.ink,
-            letterSpacing: 2,
-          ),
-        ),
-        const Spacer(),
-        Text(
-          '${code.remaining}s',
-          style: TextStyle(color: low ? c.attention : c.muted, fontSize: 12),
-        ),
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 22,
-          height: 22,
-          child: CircularProgressIndicator(
-            value: code.remaining / code.period,
-            strokeWidth: 3,
-            strokeCap: StrokeCap.round,
-            color: ring,
-            backgroundColor: c.line,
-          ),
-        ),
-        const SizedBox(width: 4),
-      ],
     );
   }
 }

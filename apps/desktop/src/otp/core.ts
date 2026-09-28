@@ -18,6 +18,8 @@ export interface OtpSetup {
 export const otpCore = {
   /** Checks a pasted `otpauth://` link or a typed setup key. */
   parse: (input: string) => invoke<OtpSetup>('otp_parse', { input }),
+  /** The current code for a setup someone shared (`SharedItemPayload.totp`). */
+  code: (uri: string) => invoke<OtpCode>('otp_code', { uri }),
   /** Crosshair selection over the screen (macOS); null if cancelled. */
   scanScreen: () => invoke<OtpSetup | null>('otp_scan_screen'),
   /** Picks an image file and reads its QR code; null if cancelled. */

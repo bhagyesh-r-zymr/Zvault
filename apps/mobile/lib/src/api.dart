@@ -183,6 +183,20 @@ class ZvaultApi {
         as Map<String, dynamic>;
   }
 
+  /// Replaces an item (`PutItemRequest`). Returns the stored record, or
+  /// throws with status 409 when another device changed it first.
+  Future<Map<String, dynamic>> putItem(
+    String vaultId,
+    String itemId,
+    Map<String, Object> body,
+  ) async {
+    return await _call(
+      'PUT',
+      '/vaults/${Uri.encodeComponent(vaultId)}/items/${Uri.encodeComponent(itemId)}',
+      body,
+    ) as Map<String, dynamic>;
+  }
+
   // Sharing. Bodies carry ciphertext, verifiers and public keys only; a link's
   // key stays in its URL on this phone.
 
@@ -203,4 +217,13 @@ class ZvaultApi {
       _call('PUT', '/shares/keys/me', {'publicKey': publicKey});
 
   Future<void> shareWithUser(Map<String, Object> body) => _call('POST', '/shares/users', body);
+
+  /// Shares other people sent to this account (`UserShareList.incoming`).
+  Future<List<Map<String, dynamic>>> incomingShares() async {
+    final json = await _call('GET', '/shares/users');
+    return ((json as Map)['incoming'] as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> removeUserShare(String id) =>
+      _call('DELETE', '/shares/users/${Uri.encodeComponent(id)}');
 }

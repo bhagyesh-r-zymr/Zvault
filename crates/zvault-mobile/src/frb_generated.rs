@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1827355528;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -154461657;
 
 // Section: executor
 
@@ -232,6 +232,47 @@ fn wire__crate__api__vault__item_passkey_test_impl(
                     (move || {
                         let output_ok =
                             crate::api::vault::item_passkey_test(api_vault_id, api_record_json)?;
+                        std::result::Result::Ok(output_ok)
+                    })(),
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__vault__item_set_totp_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "item_set_totp",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_vault_id = <String>::sse_decode(&mut deserializer);
+            let api_record_json = <String>::sse_decode(&mut deserializer);
+            let api_totp = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || {
+                        let output_ok = crate::api::vault::item_set_totp(
+                            api_vault_id,
+                            api_record_json,
+                            api_totp,
+                        )?;
                         std::result::Result::Ok(output_ok)
                     })(),
                 )
@@ -638,6 +679,7 @@ fn wire__crate__api__sharing__share_link_create_impl(
             let api_vault_id = <String>::sse_decode(&mut deserializer);
             let api_record_json = <String>::sse_decode(&mut deserializer);
             let api_share_origin = <String>::sse_decode(&mut deserializer);
+            let api_include_totp = <bool>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
@@ -646,6 +688,50 @@ fn wire__crate__api__sharing__share_link_create_impl(
                             api_vault_id,
                             api_record_json,
                             api_share_origin,
+                            api_include_totp,
+                        )?;
+                        std::result::Result::Ok(output_ok)
+                    })(),
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__sharing__share_open_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "share_open",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_id = <String>::sse_decode(&mut deserializer);
+            let api_sender_public_key = <String>::sse_decode(&mut deserializer);
+            let api_ephemeral_public_key = <String>::sse_decode(&mut deserializer);
+            let api_blob_json = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || {
+                        let output_ok = crate::api::sharing::share_open(
+                            api_id,
+                            api_sender_public_key,
+                            api_ephemeral_public_key,
+                            api_blob_json,
                         )?;
                         std::result::Result::Ok(output_ok)
                     })(),
@@ -679,6 +765,7 @@ fn wire__crate__api__sharing__share_seal_to_impl(
             let api_vault_id = <String>::sse_decode(&mut deserializer);
             let api_record_json = <String>::sse_decode(&mut deserializer);
             let api_recipient_public_key = <String>::sse_decode(&mut deserializer);
+            let api_include_totp = <bool>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
@@ -687,6 +774,7 @@ fn wire__crate__api__sharing__share_seal_to_impl(
                             api_vault_id,
                             api_record_json,
                             api_recipient_public_key,
+                            api_include_totp,
                         )?;
                         std::result::Result::Ok(output_ok)
                     })(),
@@ -757,6 +845,78 @@ fn wire__crate__api__sharing__sharing_identity_impl(
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || {
                         let output_ok = crate::api::sharing::sharing_identity()?;
+                        std::result::Result::Ok(output_ok)
+                    })(),
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__vault__totp_check_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "totp_check",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_input = <String>::sse_decode(&mut deserializer);
+            let api_unix_secs = <i64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || {
+                        let output_ok = crate::api::vault::totp_check(api_input, api_unix_secs)?;
+                        std::result::Result::Ok(output_ok)
+                    })(),
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__vault__totp_code_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "totp_code",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_uri = <String>::sse_decode(&mut deserializer);
+            let api_unix_secs = <i64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || {
+                        let output_ok = crate::api::vault::totp_code(api_uri, api_unix_secs)?;
                         std::result::Result::Ok(output_ok)
                     })(),
                 )
@@ -1138,6 +1298,20 @@ impl SseDecode for crate::api::sharing::SharingIdentity {
     }
 }
 
+impl SseDecode for crate::api::vault::TotpSetup {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_issuer = <String>::sse_decode(deserializer);
+        let mut var_account = <String>::sse_decode(deserializer);
+        let mut var_current = <crate::api::vault::OneTimeCode>::sse_decode(deserializer);
+        return crate::api::vault::TotpSetup {
+            issuer: var_issuer,
+            account: var_account,
+            current: var_current,
+        };
+    }
+}
+
 impl SseDecode for u32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1190,29 +1364,33 @@ fn pde_ffi_dispatcher_primary_impl(
         3 => wire__crate__api__init_app_impl(port, ptr, rust_vec_len, data_len),
         4 => wire__crate__api__vault__item_open_impl(port, ptr, rust_vec_len, data_len),
         5 => wire__crate__api__vault__item_passkey_test_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__vault__item_summary_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__vault__item_totp_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__pairing__pairing_finish_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__pairing__pairing_scan_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__vault__project_open_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__sharing__secret_share_link_create_impl(
+        6 => wire__crate__api__vault__item_set_totp_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__vault__item_summary_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__vault__item_totp_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__pairing__pairing_finish_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__pairing__pairing_scan_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__vault__project_open_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__sharing__secret_share_link_create_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        14 => {
+        15 => {
             wire__crate__api__sharing__secret_share_seal_to_impl(port, ptr, rust_vec_len, data_len)
         }
-        15 => wire__crate__api__vault__secret_value_open_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__sharing__share_link_create_impl(port, ptr, rust_vec_len, data_len),
-        17 => wire__crate__api__sharing__share_seal_to_impl(port, ptr, rust_vec_len, data_len),
-        18 => {
+        16 => wire__crate__api__vault__secret_value_open_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__sharing__share_link_create_impl(port, ptr, rust_vec_len, data_len),
+        18 => wire__crate__api__sharing__share_open_impl(port, ptr, rust_vec_len, data_len),
+        19 => wire__crate__api__sharing__share_seal_to_impl(port, ptr, rust_vec_len, data_len),
+        20 => {
             wire__crate__api__sharing__sharing_fingerprint_impl(port, ptr, rust_vec_len, data_len)
         }
-        19 => wire__crate__api__sharing__sharing_identity_impl(port, ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__session__unlock_impl(port, ptr, rust_vec_len, data_len),
-        22 => wire__crate__api__vault__vault_open_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__sharing__sharing_identity_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__vault__totp_check_impl(port, ptr, rust_vec_len, data_len),
+        23 => wire__crate__api__vault__totp_code_impl(port, ptr, rust_vec_len, data_len),
+        24 => wire__crate__api__session__unlock_impl(port, ptr, rust_vec_len, data_len),
+        26 => wire__crate__api__vault__vault_open_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1225,9 +1403,9 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        8 => wire__crate__api__session__lock_impl(ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__pairing__pairing_cancel_impl(ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__session__unlocked_email_impl(ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__session__lock_impl(ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__pairing__pairing_cancel_impl(ptr, rust_vec_len, data_len),
+        25 => wire__crate__api__session__unlocked_email_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1489,6 +1667,25 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::sharing::SharingIdentity>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::vault::TotpSetup {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.issuer.into_into_dart().into_dart(),
+            self.account.into_into_dart().into_dart(),
+            self.current.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::vault::TotpSetup {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::vault::TotpSetup>
+    for crate::api::vault::TotpSetup
+{
+    fn into_into_dart(self) -> crate::api::vault::TotpSetup {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::vault::VaultSummary {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -1699,6 +1896,15 @@ impl SseEncode for crate::api::sharing::SharingIdentity {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.public_key, serializer);
         <String>::sse_encode(self.fingerprint, serializer);
+    }
+}
+
+impl SseEncode for crate::api::vault::TotpSetup {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.issuer, serializer);
+        <String>::sse_encode(self.account, serializer);
+        <crate::api::vault::OneTimeCode>::sse_encode(self.current, serializer);
     }
 }
 

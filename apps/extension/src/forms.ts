@@ -117,7 +117,10 @@ export function usernameFieldFor(
  * The user name field of a page that asks for it alone first (Google,
  * Microsoft and many others), when there is no password field yet.
  */
-function loneUsernameField(root: ParentNode, visible: Visible): HTMLInputElement | null {
+export function loneUsernameField(
+  root: ParentNode,
+  visible: Visible = isVisible,
+): HTMLInputElement | null {
   return (
     inputs(root).find((i) => {
       if (!isTextLike(i) || !usable(i, visible) || isOtpField(i)) return false;
@@ -218,4 +221,42 @@ export function fillLogin(
       filled = fillOtp(otp, fill.otp) || filled;
   }
   return filled;
+}
+
+/** A user name and password someone typed into a page. */
+export interface TypedLogin {
+  username: string;
+  password: string;
+}
+
+/** The longest values offered for saving; Zvault refuses longer ones. */
+const MAX_USERNAME = 512;
+const MAX_PASSWORD = 1024;
+
+/**
+ * The login typed into the form around `near` (the form being sent, or the
+ * button or field that sends it), or anywhere on the page when it has no
+ * form. For a sign-up or change-password form, the new password. Null when
+ * no password was typed.
+ */
+export function typedLogin(
+  root: Document,
+  near: Element | null,
+  visible: Visible = isVisible,
+): TypedLogin | null {
+  const form =
+    near instanceof HTMLFormElement
+      ? near
+      : near instanceof HTMLInputElement || near instanceof HTMLButtonElement
+        ? near.form
+        : (near?.closest('form') ?? null);
+  const filled = inputs(form ?? root).filter(
+    (i) => i.type === 'password' && i.value && !isOtpField(i) && i.maxLength !== 1,
+  );
+  // One field: the password. Two: current and new, or new and confirm; the
+  // second is new either way. Three: current, new and confirm.
+  const password = filled.length >= 3 ? filled[1] : filled.at(-1);
+  if (!password || password.value.length > MAX_PASSWORD) return null;
+  const username = (usernameFieldFor(password, visible)?.value ?? '').trim();
+  return { username: username.length <= MAX_USERNAME ? username : '', password: password.value };
 }

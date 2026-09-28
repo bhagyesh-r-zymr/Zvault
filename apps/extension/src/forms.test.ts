@@ -6,6 +6,7 @@ import {
   otpFields,
   passwordFields,
   roleOf,
+  typedLogin,
   usernameFieldFor,
 } from './forms.js';
 
@@ -133,5 +134,58 @@ describe('filling', () => {
   it('reports when there is nothing to fill', () => {
     page(`<p>Hello</p>`);
     expect(fillLogin(document, { username: 'me', password: 'pw' }, null, shown)).toBe(false);
+  });
+});
+
+describe('noticing a typed login', () => {
+  function type(selector: string, value: string) {
+    input(selector).value = value;
+  }
+
+  it('reads the user name and password of the form being sent', () => {
+    page(`
+      <input id="q" type="text" value="search words">
+      <form id="f">
+        <input id="user" type="text" name="username">
+        <input id="pw" type="password">
+        <button id="go">Sign in</button>
+      </form>`);
+    type('#user', ' sam@acme.test ');
+    type('#pw', 'hunter2');
+    const form = document.querySelector('form')!;
+    expect(typedLogin(document, form, shown)).toEqual({
+      username: 'sam@acme.test',
+      password: 'hunter2',
+    });
+    expect(typedLogin(document, document.querySelector('#go'), shown)?.password).toBe('hunter2');
+  });
+
+  it('takes the new password of sign-up and change-password forms', () => {
+    page(`
+      <form>
+        <input id="email" type="email">
+        <input id="a" type="password"><input id="b" type="password">
+      </form>`);
+    type('#email', 'sam@acme.test');
+    type('#a', 'new-one');
+    type('#b', 'new-one');
+    expect(typedLogin(document, input('#b'), shown)?.password).toBe('new-one');
+    page(`
+      <form>
+        <input id="c" type="password"><input id="n" type="password"><input id="r" type="password">
+      </form>`);
+    type('#c', 'old');
+    type('#n', 'fresh');
+    type('#r', 'fresh');
+    expect(typedLogin(document, input('#r'), shown)).toEqual({ username: '', password: 'fresh' });
+  });
+
+  it('finds nothing when no password was typed', () => {
+    page(`<form><input id="user" type="text" name="username"><input type="password"></form>`);
+    type('#user', 'sam');
+    expect(typedLogin(document, input('#user'), shown)).toBeNull();
+    page(`<form><input id="code" autocomplete="one-time-code" type="password"></form>`);
+    type('#code', '123456');
+    expect(typedLogin(document, input('#code'), shown)).toBeNull();
   });
 });

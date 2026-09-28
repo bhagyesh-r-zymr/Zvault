@@ -69,6 +69,24 @@ enum Message {
         #[serde(default)]
         otp_only: bool,
     },
+    /// Whether a login typed into a page is new, changed or already saved.
+    SaveCheck {
+        url: String,
+        #[serde(default)]
+        top_url: Option<String>,
+        username: String,
+        password: Zeroizing<String>,
+    },
+    /// Saves a login typed into a page, after the user approves it in Zvault.
+    Save {
+        url: String,
+        #[serde(default)]
+        top_url: Option<String>,
+        username: String,
+        password: Zeroizing<String>,
+        #[serde(default)]
+        item: Option<String>,
+    },
 }
 
 #[derive(Deserialize)]
@@ -251,6 +269,36 @@ fn handle(
             Response::Fill(fill) => Ok(json!({ "fill": fill })),
             _ => Err(ClientError::Unexpected.into()),
         },
+        Message::SaveCheck {
+            url,
+            top_url,
+            username,
+            password,
+        } => match as_browser(RequestBody::BrowserSaveCheck {
+            url,
+            top_url,
+            username,
+            password,
+        })? {
+            Response::SaveCheck(check) => Ok(json!({ "check": check })),
+            _ => Err(ClientError::Unexpected.into()),
+        },
+        Message::Save {
+            url,
+            top_url,
+            username,
+            password,
+            item,
+        } => match as_browser(RequestBody::BrowserSave {
+            url,
+            top_url,
+            username,
+            password,
+            item,
+        })? {
+            Response::Changed { message } => Ok(json!({ "message": message })),
+            _ => Err(ClientError::Unexpected.into()),
+        },
     }
 }
 
@@ -324,6 +372,11 @@ mod tests {
         assert!(matches!(e.message, Message::Fill { otp_only: true, .. }));
         let e: Envelope = serde_json::from_str(r#"{"id":"x","type":"status"}"#).unwrap();
         assert!(matches!(e.message, Message::Status));
+        let e: Envelope = serde_json::from_str(
+            r#"{"id":3,"type":"save","url":"https://a.test/","username":"me","password":"pw","item":"i1"}"#,
+        )
+        .unwrap();
+        assert!(matches!(e.message, Message::Save { item: Some(_), .. }));
         assert!(serde_json::from_str::<Envelope>(r#"{"id":1,"type":"read"}"#).is_err());
     }
 

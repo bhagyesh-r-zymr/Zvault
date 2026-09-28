@@ -3,19 +3,33 @@
  * focus it shows a small Zvault button inside the field; clicking it lists
  * the logins Zvault has for this page and fills the one picked.
  *
+ * When a login is sent, it asks Zvault whether it is new or changed, and
+ * the top frame offers to save it in a small banner.
+ *
  * The page cannot see or drive this UI: it lives in a closed shadow root and
  * only answers real clicks. Logins and fills come from the background worker,
  * which asks Zvault with the address the browser reports for this frame.
  */
 
-import { fillLogin, fillOtp, isVisible, otpFields, roleOf, type Role } from './forms.js';
+import {
+  fillLogin,
+  fillOtp,
+  isVisible,
+  loneUsernameField,
+  otpFields,
+  roleOf,
+  typedLogin,
+  type Role,
+} from './forms.js';
 import {
   ERROR_TEXT,
   type Fill,
   type FillNow,
   type Login,
+  type OfferSave,
   type Request,
   type Result,
+  type SaveOffer,
 } from './messages.js';
 
 declare global {
@@ -56,6 +70,20 @@ button.row:hover, button.row:focus-visible { background: #f2f5fa; }
 .sub { color: #65718c; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tag { margin-left: auto; font-size: 11px; color: #0f8a6a; background: #e2f4ed; border-radius: 6px; padding: 2px 6px; flex: none; }
 .note { padding: 8px 8px 10px; color: #65718c; }
+.banner {
+  position: fixed; top: 14px; right: 14px; width: 320px; pointer-events: auto;
+  background: #fff; color: #10204a; border: 1px solid #e4e8f0; border-radius: 14px;
+  box-shadow: 0 16px 40px -14px rgb(16 32 74 / 40%), 0 1px 3px rgb(16 32 74 / 8%);
+  padding: 14px; font-size: 13px; line-height: 1.4;
+}
+.banner .head { padding: 0 0 10px; }
+.banner .what { font-weight: 650; font-size: 14px; }
+.banner .sub { margin-top: 2px; }
+.buttons { display: flex; gap: 8px; margin-top: 12px; justify-content: flex-end; }
+.quiet { all: unset; cursor: pointer; padding: 7px 12px; border-radius: 8px; color: #65718c; font-weight: 600; }
+.quiet:hover { background: #f2f5fa; }
+.buttons .action { margin: 0; }
+.done { color: #0f8a6a; font-weight: 600; }
 .action { all: unset; cursor: pointer; margin: 0 8px 8px; padding: 7px 12px; border-radius: 8px; background: #2f63d9; color: #fff; font-weight: 600; display: inline-block; }
 @media (prefers-color-scheme: dark) {
   .menu { background: #1a2440; color: #e9eefa; border-color: #26324f; }
@@ -64,6 +92,11 @@ button.row:hover, button.row:focus-visible { background: #f2f5fa; }
   .tile { background: #1f2f5c; color: #9bb8ff; }
   .sub, .note, .head { color: #8e9ab8; }
   .tag { background: #173a33; color: #4cc79f; }
+  .banner { background: #1a2440; color: #e9eefa; border-color: #26324f; }
+  .logo { background: #2f63d9; }
+  .quiet { color: #8e9ab8; }
+  .quiet:hover { background: #202b4a; }
+  .done { color: #4cc79f; }
 }
 `;
 
@@ -290,6 +323,148 @@ class InlineMenu {
   }
 }
 
+/** Offers to save a login just typed, in the top frame's corner. */
+class SaveBanner {
+  private readonly host = document.createElement('zvault-save');
+  private readonly root = this.host.attachShadow({ mode: 'closed' });
+  private shown: SaveOffer | null = null;
+
+  constructor() {
+    this.host.style.cssText =
+      'position:fixed;inset:0 auto auto 0;width:0;height:0;z-index:2147483647;pointer-events:none;';
+    this.root.append(el('style', { text: STYLE }));
+  }
+
+  show(offer: SaveOffer) {
+    if (
+      this.shown?.host === offer.host &&
+      this.shown.username === offer.username &&
+      this.host.isConnected
+    )
+      return;
+    this.shown = offer;
+    const what = offer.update
+      ? `Update the password of “${offer.update}”?`
+      : `Save this login to Zvault?`;
+    const save = this.button(offer.update ? 'Update' : 'Save', 'action', () => void this.save());
+    const later = this.button('Not now', 'quiet', () => {
+      void send({ type: 'dismissSave' });
+      this.close();
+    });
+    this.render(
+      el('div', { class: 'what', text: what }),
+      el('div', { class: 'sub', text: offer.username || 'No user name' }),
+      el('div', { class: 'buttons' }, later, save),
+    );
+  }
+
+  private button(text: string, cls: string, onClick: () => void) {
+    const b = el('button', { class: cls, text });
+    b.type = 'button';
+    b.addEventListener('click', (e) => {
+      if (e.isTrusted) onClick();
+    });
+    return b;
+  }
+
+  private render(...children: Node[]) {
+    const head = el(
+      'div',
+      { class: 'head' },
+      el('span', { class: 'logo', html: KEYHOLE }),
+      el('b', { text: 'Zvault' }),
+      el('span', { text: this.shown?.host ?? '' }),
+    );
+    const banner = el('div', { class: 'banner' }, head, ...children);
+    banner.setAttribute('role', 'dialog');
+    banner.setAttribute('aria-label', 'Save login to Zvault');
+    this.root.querySelector('.banner')?.remove();
+    this.root.append(banner);
+    if (!this.host.isConnected) document.documentElement.append(this.host);
+  }
+
+  private async save() {
+    this.render(el('div', { class: 'note', text: 'Approve the save in Zvault on your Mac…' }));
+    const r = await send<{ message: string }>({ type: 'save' });
+    if (!r.ok) {
+      const retry = this.button('Try again', 'action', () => void this.save());
+      const close = this.button('Close', 'quiet', () => this.close());
+      this.render(
+        el('div', { class: 'note', text: ERROR_TEXT[r.code] ?? r.message }),
+        el('div', { class: 'buttons' }, close, ...(r.code === 'denied' ? [] : [retry])),
+      );
+      return;
+    }
+    this.render(el('div', { class: 'done', text: r.value.message }));
+    setTimeout(() => this.close(), 2500);
+  }
+
+  private close() {
+    this.host.remove();
+    this.shown = null;
+  }
+}
+
+const SUBMIT_TEXT =
+  /log ?in|sign ?in|sign ?up|register|create|continue|next|submit|save|update|change|join/i;
+
+/**
+ * Watches for a login being sent: a form submitted, a sign-in button
+ * clicked or Enter pressed in a field. Many sites never submit a form, so
+ * each of those counts. Reads the fields at that moment, before the page
+ * clears them, and tells the background worker, which asks Zvault.
+ */
+function watchLogins() {
+  let last = '';
+  let lastAt = 0;
+  const notice = (near: Element | null) => {
+    const login = typedLogin(document, near);
+    if (!login) {
+      // A page that asks for the user name alone first.
+      const user = loneUsernameField(near?.closest('form') ?? document);
+      if (user?.value.trim()) void send({ type: 'typedUsername', username: user.value.trim() });
+      return;
+    }
+    const key = `${login.username}\u0000${login.password}`;
+    if (key === last && Date.now() - lastAt < 5000) return;
+    last = key;
+    lastAt = Date.now();
+    void send({ type: 'typed', username: login.username, password: login.password });
+  };
+  document.addEventListener(
+    'submit',
+    (e) => {
+      // Sites often submit from script after a real click, so any submit
+      // counts; saving still takes a real click on the banner and approval.
+      if (e.target instanceof HTMLFormElement) notice(e.target);
+    },
+    true,
+  );
+  document.addEventListener(
+    'click',
+    (e) => {
+      if (!e.isTrusted || !(e.target instanceof Element)) return;
+      const b = e.target.closest<HTMLElement>('button, input[type=submit], [role=button]');
+      if (!b) return;
+      const text = b instanceof HTMLInputElement ? b.value : (b.textContent ?? '');
+      const submits =
+        (b instanceof HTMLButtonElement && b.type === 'submit' && b.form !== null) ||
+        (b instanceof HTMLInputElement && b.type === 'submit') ||
+        SUBMIT_TEXT.test(text.slice(0, 60));
+      if (submits) notice(b);
+    },
+    true,
+  );
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      if (e.isTrusted && e.key === 'Enter' && e.target instanceof HTMLInputElement)
+        notice(e.target);
+    },
+    true,
+  );
+}
+
 /** The code boxes that include `field`, or `field` alone. */
 function otpFieldsNear(field: HTMLInputElement): HTMLInputElement[] {
   const all = otpFields(field.form ?? document);
@@ -304,11 +479,25 @@ function focusedInput(): HTMLInputElement | null {
 if (!window.__zvaultFill && document.documentElement instanceof HTMLHtmlElement) {
   window.__zvaultFill = true;
   new InlineMenu();
+  watchLogins();
+  const top = window === window.top;
+  const banner = top ? new SaveBanner() : null;
+  if (banner) {
+    void send<SaveOffer | null>({ type: 'saveOffer' }).then((r) => {
+      if (r.ok && r.value) banner.show(r.value);
+    });
+  }
 
-  // Fills asked for from the popup or the keyboard shortcut, in the top frame.
-  chrome.runtime.onMessage.addListener((msg: FillNow, sender, respond) => {
-    if (sender.id !== chrome.runtime.id || sender.tab || msg.type !== 'fillNow') return false;
-    if (window !== window.top || location.origin !== msg.origin) {
+  // Fills asked for from the popup or the keyboard shortcut, and save
+  // offers, in the top frame.
+  chrome.runtime.onMessage.addListener((msg: FillNow | OfferSave, sender, respond) => {
+    if (sender.id !== chrome.runtime.id || sender.tab) return false;
+    if (msg.type === 'offerSave') {
+      banner?.show(msg.offer);
+      return false;
+    }
+    if (msg.type !== 'fillNow') return false;
+    if (!top || location.origin !== msg.origin) {
       respond(false);
       return false;
     }

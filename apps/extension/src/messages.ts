@@ -74,7 +74,35 @@ export type Request =
   /** From the popup: fill a tab's page. */
   | { type: 'tabFill'; tabId: number; item: string; otpOnly: boolean }
   /** From the popup: a login's current one-time code, to copy. */
-  | { type: 'tabCode'; tabId: number; item: string };
+  | { type: 'tabCode'; tabId: number; item: string }
+  /** From a content script: a login was typed and sent in the frame. */
+  | { type: 'typed'; username: string; password: string }
+  /** From a content script: a user name was sent alone, before the password page. */
+  | { type: 'typedUsername'; username: string }
+  /** From a top frame as it loads: a login waiting to be saved, if any. */
+  | { type: 'saveOffer' }
+  /** From a top frame's save banner. */
+  | { type: 'save' }
+  | { type: 'dismissSave' };
+
+/** A typed login Zvault does not have yet, offered for saving. */
+export interface SaveOffer {
+  /** The website it would be saved for. */
+  host: string;
+  username: string;
+  /** The title of the saved login whose password changed, if any. */
+  update: string | null;
+}
+
+/** From the background worker to a tab's top frame: show the save banner. */
+export interface OfferSave {
+  type: 'offerSave';
+  offer: SaveOffer;
+}
+
+/** What `zv` says about a typed login. */
+export type SaveCheck =
+  { state: 'new' } | { state: 'update'; item: string; title: string } | { state: 'saved' };
 
 /** From the background worker to a tab's top frame. */
 export interface FillNow {

@@ -4,6 +4,7 @@ import { ErrorLine } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import { useProjects, useProjectTeam, useTeam, useTeamStore } from './context.js';
 import type { Project } from './model.js';
+import { AgentTokens } from './AgentTokens.js';
 import { ProjectTile } from './ProjectsView.js';
 import type { KeyHandOver, ProjectTeam } from './team.js';
 import { MANAGERS_ONLY, teamError } from './teamApi.js';
@@ -100,6 +101,14 @@ export function ProjectAccess({ projectId }: { projectId: string }) {
           />
         )}
         {ready?.org && <OrgPanels projectId={project.id} org={ready.org} />}
+        {(team?.status === 'ready' || team?.status === 'unshared') && (
+          <AgentTokens
+            project={project}
+            keyVersions={Object.fromEntries(
+              (ready?.access?.environments ?? []).map((e) => [e.id, e.keyVersion]),
+            )}
+          />
+        )}
 
         <p className="notice">
           <Icon name="shield" size={14} />

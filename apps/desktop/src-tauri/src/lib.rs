@@ -23,6 +23,7 @@ mod session;
 mod sharing;
 mod stay_unlocked;
 mod team;
+mod tokens;
 mod updater;
 mod vault;
 
@@ -149,6 +150,7 @@ pub fn run() {
             sharing::share_seal_to,
             sharing::share_open,
             sharing::share_compose_email,
+            tokens::agent_token_issue,
             team::project_key_wrap,
             team::environment_key_wrap,
             team::environment_rotate,

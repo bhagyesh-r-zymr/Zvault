@@ -450,6 +450,26 @@ export class ProjectsStore {
       .limit(limit);
     return hydrate(this.db, projectId, viewer, rows);
   }
+
+  /**
+   * Entries changed after `since` as an access token sees them: environments
+   * without keys (the token carries its own) and only the values of
+   * `environmentIds`.
+   */
+  async listChangesForToken(
+    projectId: string,
+    environmentIds: readonly string[],
+    since: number,
+    limit: number,
+  ): Promise<ProjectEntry[]> {
+    const rows = await this.db
+      .select()
+      .from(projectEntries)
+      .where(and(eq(projectEntries.projectId, projectId), gt(projectEntries.seq, since)))
+      .orderBy(asc(projectEntries.seq))
+      .limit(limit);
+    return hydrateWith(this.db, projectId, new Map(), environmentIds, rows);
+  }
 }
 
 /** Keeps a secret's content (metadata and every environment's value) before a write replaces it. */
@@ -533,9 +553,22 @@ async function hydrate(
     .from(keyGrants)
     .where(and(eq(keyGrants.projectId, projectId), eq(keyGrants.accountId, viewer)));
   const keyOf = new Map(grants.map((g) => [g.resourceId, g.wrappedKey]));
-
-  const secretIds = rows.filter((r) => r.type === 'secret' && !r.deleted).map((r) => r.id);
   const envIds = [...keyOf.keys()].filter((id) => id !== projectId);
+  return hydrateWith(db, projectId, keyOf, envIds, rows);
+}
+
+/**
+ * Wire records carrying the environment keys in `keyOf` and only the values
+ * of `envIds`.
+ */
+async function hydrateWith(
+  db: Db,
+  projectId: string,
+  keyOf: ReadonlyMap<string, EncryptedBlob>,
+  envIds: readonly string[],
+  rows: EntryRow[],
+): Promise<ProjectEntry[]> {
+  const secretIds = rows.filter((r) => r.type === 'secret' && !r.deleted).map((r) => r.id);
   const valueRows =
     secretIds.length > 0 && envIds.length > 0
       ? await db
@@ -545,7 +578,7 @@ async function hydrate(
             and(
               eq(secretValues.projectId, projectId),
               inArray(secretValues.secretId, secretIds),
-              inArray(secretValues.environmentId, envIds),
+              inArray(secretValues.environmentId, [...envIds]),
             ),
           )
           .orderBy(asc(secretValues.environmentId))

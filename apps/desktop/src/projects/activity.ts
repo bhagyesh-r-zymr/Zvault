@@ -169,6 +169,10 @@ export const KIND_OF: Record<ActivityEvent['action'], ActivityKind> = {
   'request.created': 'access',
   'request.approved': 'access',
   'request.denied': 'access',
+  'token.issued': 'access',
+  'token.revoked': 'access',
+  'token.used': 'use',
+  'token.denied': 'use',
 };
 
 export interface DescribedEvent {
@@ -215,6 +219,8 @@ export function describeEvent(
     : 'someone';
   const base = { who, kind: KIND_OF[e.action], tone: 'neutral' as DescribedEvent['tone'] };
   const agentName = e.detail.agent?.name ?? 'an agent';
+  const tokenName = `“${e.detail.token?.name ?? 'a token'}”`;
+  const forEnv = env ? `for ${env.name}` : null;
   const items = (n: number | undefined, one: string, many: string) =>
     n === 1 ? `1 ${one}` : `${n ?? 0} ${many}`;
 
@@ -355,5 +361,42 @@ export function describeEvent(
         where: inEnv,
         tone: 'negative',
       };
+    case 'token.issued':
+      return { ...base, what: 'made the token', subject: tokenName, where: forEnv };
+    case 'token.revoked':
+      return {
+        ...base,
+        what: 'revoked the token',
+        subject: tokenName,
+        where: null,
+        tone: 'negative',
+      };
+    case 'token.used':
+      return {
+        ...base,
+        who: `The token ${tokenName}`,
+        what: 'read',
+        subject: env?.name ?? 'an environment',
+        where: 'with zv',
+      };
+    case 'token.denied':
+      return {
+        ...base,
+        who: `The token ${tokenName}`,
+        what: 'was refused',
+        subject: null,
+        where: TOKEN_REFUSALS[e.detail.token?.reason ?? 'expired'],
+        tone: 'negative',
+      };
   }
 }
+
+const TOKEN_REFUSALS: Record<
+  NonNullable<ActivityEvent['detail']['token']>['reason'] & string,
+  string
+> = {
+  expired: '(it had expired)',
+  stale: '(the key was rotated since)',
+  creator_lost_access: '(its creator lost access)',
+  environment_deleted: '(its environment was deleted)',
+};

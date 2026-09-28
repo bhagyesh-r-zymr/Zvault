@@ -48,6 +48,10 @@ export const ActivityAction = z.enum([
   'request.created',
   'request.approved',
   'request.denied',
+  'token.issued',
+  'token.revoked',
+  'token.used',
+  'token.denied',
 ]);
 export type ActivityAction = z.infer<typeof ActivityAction>;
 
@@ -92,6 +96,13 @@ export const ActivityDetail = z.object({
   items: z.number().int().min(0).optional(),
   share: ShareChannel.optional(),
   agent: AgentUse.optional(),
+  /** Access tokens (`ZVAULT_TOKEN`): the token's name, and why it was refused. */
+  token: z
+    .object({
+      name: z.string().max(100),
+      reason: z.enum(['expired', 'stale', 'creator_lost_access', 'environment_deleted']).optional(),
+    })
+    .optional(),
 });
 export type ActivityDetail = z.infer<typeof ActivityDetail>;
 

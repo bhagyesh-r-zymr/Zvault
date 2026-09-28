@@ -545,6 +545,9 @@ pub struct ItemInfo {
     pub username: String,
     #[serde(default)]
     pub url: Option<String>,
+    /// Every website saved on the item, for matching a page in the browser.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub urls: Vec<String>,
     #[serde(default)]
     pub has_totp: bool,
 }

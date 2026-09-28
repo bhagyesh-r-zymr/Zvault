@@ -52,7 +52,7 @@ document.querySelectorAll('.reveal, .words').forEach((el) => {
 const show = document.getElementById('show');
 const tabs = [...show.querySelectorAll('[role="tab"]')];
 const shots = [...show.querySelectorAll('.w-stage img')];
-const AUTOPLAY_MS = 5000;
+const AUTOPLAY_MS = 7000;
 show.style.setProperty('--autoplay', `${AUTOPLAY_MS}ms`);
 let current = 0;
 let timer = 0;

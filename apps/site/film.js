@@ -26,15 +26,10 @@ var SHOTS = [
   { id: 'end', a: 34, b: 40.01, bg: 'white', tone: 'white', lbl: '// zvault', still: 38.5 },
 ];
 var WHIPS = [6, 13, 22];
-var TEASER = [
-  [0.25, 1.6],
-  [2.3, 1.5],
-  [27.35, 1.25],
-  [34.55, 1.65],
-]; /* [film start, duration] */
-var TEASE = TEASER.reduce(function (s, c) {
-  return s + c[1];
-}, 0);
+/* The opening (the mascot slides in and asks) plays once on load, gently. Everything
+   after it moves only with the scroll: the rest of the film is spread over the page. */
+var INTRO = 4.4,
+  INTRO_SPEED = 0.8;
 
 var qs = new URLSearchParams(location.search);
 var REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches || qs.has('still');
@@ -1241,8 +1236,10 @@ function filmP() {
   var r = film.getBoundingClientRect();
   return clamp(-r.top / Math.max(1, film.offsetHeight - innerHeight));
 }
+/* Scroll position that shows film time t (the intro sits at the very top). */
 function filmScrollFor(t) {
-  return film.offsetTop + (t / TOTAL) * (film.offsetHeight - innerHeight);
+  var k = clamp((t - INTRO) / (TOTAL - INTRO));
+  return film.offsetTop + k * (film.offsetHeight - innerHeight);
 }
 function pad(n) {
   return (n < 10 ? '0' : '') + n;
@@ -1256,19 +1253,10 @@ function tcode(t) {
 var lastKey = '',
   curT = 0,
   tgtT = 0,
-  teaseT = 0,
-  forcedTease = null,
+  forced = false,
   last = performance.now(),
   t0 = last,
   active = true;
-function teaserToFilm(tt) {
-  var acc = 0;
-  for (var i = 0; i < TEASER.length; i++) {
-    if (tt < acc + TEASER[i][1]) return TEASER[i][0] + (tt - acc);
-    acc += TEASER[i][1];
-  }
-  return TEASER[TEASER.length - 1][0] + TEASER[TEASER.length - 1][1];
-}
 
 /* The nav reads the film's tone while the film is on screen, and turns solid after it. */
 var tone = 'white';
@@ -1280,7 +1268,7 @@ function navState() {
 }
 addEventListener('scroll', navState, { passive: true });
 
-function draw(ft, teasing, shownT) {
+function draw(ft, atTop, shownT) {
   var s = shotAt(ft);
   Object.keys(shots).forEach(function (k) {
     shots[k].classList.toggle('on', k === s.id);
@@ -1290,10 +1278,10 @@ function draw(ft, teasing, shownT) {
   });
   tone = s.tone;
   navState();
-  pin.classList.toggle('teasing', teasing);
-  lbl.textContent = teasing ? '// teaser' : s.lbl;
+  pin.classList.toggle('teasing', atTop);
+  lbl.textContent = s.lbl;
   tc.textContent = tcode(shownT);
-  fi.style.width = (teasing ? 0 : (ft / TOTAL) * 100) + '%';
+  fi.style.width = (ft / TOTAL) * 100 + '%';
   var wp = whip(ft);
   content.style.transform = wp.x ? 'translateX(' + wp.x.toFixed(2) + 'vw)' : '';
   content.style.filter = wp.b > 0.5 ? 'blur(' + wp.b.toFixed(1) + 'px)' : '';
@@ -1316,30 +1304,17 @@ function frame(now) {
   last = now;
   if (!active) return;
   var p = filmP();
-  tgtT = p * TOTAL;
-  var teasing = forcedTease !== null || (p <= 0.0004 && window.scrollY < 4);
-  var ft, shown, key;
-  if (teasing) {
-    if (REDUCE) {
-      ft = 38.5;
-      shown = 0;
-    } else {
-      teaseT = forcedTease !== null ? forcedTease : ((now - t0) / 1000) % TEASE;
-      ft = teaserToFilm(teaseT);
-      shown = teaseT;
-    }
-    curT = 0;
-  } else {
-    if (REDUCE) curT = tgtT;
-    else curT += (tgtT - curT) * (1 - Math.exp(-dt * 7));
-    if (Math.abs(tgtT - curT) < 0.002) curT = tgtT;
-    ft = REDUCE ? stillOf(curT) : curT;
-    shown = curT;
-  }
-  key = ft.toFixed(4) + '|' + teasing + '|' + W + 'x' + H;
+  var intro = forced || REDUCE ? INTRO : Math.min(INTRO, ((now - t0) / 1000) * INTRO_SPEED);
+  tgtT = Math.max(intro, INTRO + p * (TOTAL - INTRO));
+  if (REDUCE || forced) curT = tgtT;
+  else curT += (tgtT - curT) * (1 - Math.exp(-dt * 5));
+  if (Math.abs(tgtT - curT) < 0.002) curT = tgtT;
+  var ft = REDUCE ? stillOf(curT) : curT;
+  var atTop = p <= 0.002;
+  var key = ft.toFixed(4) + '|' + atTop + '|' + W + 'x' + H;
   if (key === lastKey) return;
   lastKey = key;
-  draw(ft, teasing, shown);
+  draw(ft, atTop, curT);
 }
 var io = new IntersectionObserver(
   function (en) {
@@ -1355,21 +1330,13 @@ document.getElementById('scrub').addEventListener('click', function (e) {
   scrollTo({ top: filmScrollFor(k * TOTAL) + 1, behavior: REDUCE ? 'auto' : 'smooth' });
 });
 
-/* test hooks: __setScroll(p) with p in 0..1 = film progress; p<0 = teaser (optional teaser time); __setFilm(seconds) */
-window.__setScroll = function (p, tt) {
-  if (p < 0) {
-    scrollTo(0, 0);
-    forcedTease = tt === undefined ? 1.2 : tt;
-  } else {
-    forcedTease = null;
-    scrollTo(0, Math.max(5, filmScrollFor(p * TOTAL)));
-    curT = tgtT = p * TOTAL;
-  }
+/* test hooks: __setScroll(p) with p in 0..1 = film time as a share of the film; __setFilm(seconds) */
+window.__setScroll = function (p) {
+  forced = true;
+  curT = tgtT = Math.max(INTRO, p * TOTAL);
+  scrollTo(0, Math.max(0, filmScrollFor(curT)));
   lastKey = '';
-  var teasing = forcedTease !== null;
-  var ft = teasing ? teaserToFilm(forcedTease) : REDUCE ? stillOf(curT) : curT;
-  draw(ft, teasing, teasing ? forcedTease : curT);
-  lastKey = ft.toFixed(4) + '|' + teasing + '|' + W + 'x' + H;
+  draw(REDUCE ? stillOf(curT) : curT, false, curT);
 };
 window.__setFilm = function (sec) {
   window.__setScroll(sec / TOTAL);

@@ -6,6 +6,7 @@ import {
   type FolderMeta,
   type ProjectMeta,
   type SecretMeta,
+  type SyncTarget,
 } from '@zvault/shared';
 
 /**
@@ -54,6 +55,8 @@ export interface Environment {
   inheritsFrom: string | null;
   /** This account holds no key for it, so its values can't be read or written. */
   locked: boolean;
+  /** Where its secrets are pushed from members' devices. */
+  sync: SyncTarget[];
 }
 
 export interface Folder {
@@ -140,6 +143,7 @@ export function toView(states: Iterable<ProjectState>): ProjectsView {
         position: e.meta.position,
         inheritsFrom: e.meta.inheritsFrom,
         locked: !e.unlocked,
+        sync: e.meta.sync ?? [],
       }))
       .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
     const folders = [...s.folders]

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:zvault_mobile/src/app_state.dart';
 import 'package:zvault_mobile/src/core.dart';
 import 'package:zvault_mobile/src/storage.dart';
@@ -10,14 +12,78 @@ class FakeCore extends Core {
   final Map<String, String> values;
   bool locked = false;
 
+  static const code = OneTimeCode(code: '492039', period: 30, remaining: 17);
+
+  /// 2FA setups saved through [setItemTotp], by item id.
+  final savedTotps = <String, String>{};
+
+  /// What the last share was asked to include.
+  bool? lastIncludeTotp;
+
+  /// Plain ids in most tests; a JSON record where an item is saved.
+  static String _id(String recordJson) =>
+      recordJson.startsWith('{') ? (jsonDecode(recordJson) as Map)['id'] as String : recordJson;
+
   @override
-  Future<ItemDetail> openItem(String vaultId, String recordJson) async => details[recordJson]!;
+  Future<ItemDetail> openItem(String vaultId, String recordJson) async {
+    final d = details[recordJson] ?? details[_id(recordJson)]!;
+    final saved = savedTotps[_id(recordJson)];
+    if (saved == null) return d;
+    return ItemDetail(
+      title: d.title,
+      username: d.username,
+      password: d.password,
+      urls: d.urls,
+      notes: d.notes,
+      hasTotp: saved.isNotEmpty,
+      passkey: d.passkey,
+    );
+  }
 
   @override
   Future<OneTimeCode?> itemTotp(String vaultId, String recordJson) async =>
-      details[recordJson]!.hasTotp
-      ? const OneTimeCode(code: '492039', period: 30, remaining: 17)
-      : null;
+      (await openItem(vaultId, recordJson)).hasTotp ? code : null;
+
+  @override
+  Future<ItemSummary> itemSummary(String vaultId, String recordJson) async {
+    final d = await openItem(vaultId, recordJson);
+    return ItemSummary(
+      title: d.title,
+      username: d.username,
+      url: null,
+      hasTotp: d.hasTotp,
+      hasPasskey: d.passkey != null,
+      hasSshKey: d.sshKey != null,
+    );
+  }
+
+  @override
+  Future<TotpSetup> checkTotp(String input) async {
+    if (!input.startsWith('otpauth://') && !RegExp(r'^[A-Z2-7 ]{16,}$').hasMatch(input)) {
+      throw ArgumentError('not a setup key');
+    }
+    return const TotpSetup(issuer: 'Slack', account: 'meet.oza@zymr.com', current: code);
+  }
+
+  @override
+  Future<OneTimeCode> sharedTotpCode(String uri) async => code;
+
+  @override
+  Future<String> setItemTotp(String vaultId, String recordJson, String totp) async {
+    savedTotps[_id(recordJson)] = totp;
+    return '{"v":1,"alg":"xchacha20poly1305","kid":"${_id(recordJson)}","nonce":"n2","ct":"sealed-with-totp"}';
+  }
+
+  /// Plaintext payloads of shares sent to this account, by share id.
+  Map<String, String> incoming = {};
+
+  @override
+  Future<String> openShare({
+    required String id,
+    required String senderPublicKey,
+    required String ephemeralPublicKey,
+    required String blobJson,
+  }) async => incoming[id]!;
 
   @override
   Future<String> openSecretValue(
@@ -31,13 +97,17 @@ class FakeCore extends Core {
   Future<NewShareLink> createShareLink(
     String vaultId,
     String recordJson,
-    String shareOrigin,
-  ) async => NewShareLink(
-    id: 'AAAAAAAAAAAAAAAAAAAAAA',
-    verifier: 'verifier',
-    blobJson: '{"v":1,"alg":"xchacha20poly1305","kid":"share-link","nonce":"n","ct":"c"}',
-    url: '$shareOrigin/#AAAAAAAAAAAAAAAAAAAAAA.linkkey',
-  );
+    String shareOrigin, {
+    bool includeTotp = false,
+  }) async {
+    lastIncludeTotp = includeTotp;
+    return NewShareLink(
+      id: 'AAAAAAAAAAAAAAAAAAAAAA',
+      verifier: 'verifier',
+      blobJson: '{"v":1,"alg":"xchacha20poly1305","kid":"share-link","nonce":"n","ct":"c"}',
+      url: '$shareOrigin/#AAAAAAAAAAAAAAAAAAAAAA.linkkey',
+    );
+  }
 
   /// Project secrets shared through [createSecretShareLink] or [sealSecretShareTo].
   final sharedSecrets = <SecretShare>[];
@@ -65,13 +135,17 @@ class FakeCore extends Core {
   Future<NewUserShare> sealShareTo(
     String vaultId,
     String recordJson,
-    String recipientPublicKey,
-  ) async => const NewUserShare(
-    id: 'BBBBBBBBBBBBBBBBBBBBBB',
-    senderPublicKey: 'my-key',
-    ephemeralPublicKey: 'eph',
-    blobJson: '{"v":1,"alg":"xchacha20poly1305","kid":"share-box","nonce":"n","ct":"c"}',
-  );
+    String recipientPublicKey, {
+    bool includeTotp = false,
+  }) async {
+    lastIncludeTotp = includeTotp;
+    return const NewUserShare(
+      id: 'BBBBBBBBBBBBBBBBBBBBBB',
+      senderPublicKey: 'my-key',
+      ephemeralPublicKey: 'eph',
+      blobJson: '{"v":1,"alg":"xchacha20poly1305","kid":"share-box","nonce":"n","ct":"c"}',
+    );
+  }
 
   int passkeyTests = 0;
 

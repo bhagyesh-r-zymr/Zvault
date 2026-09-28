@@ -10,7 +10,7 @@ use std::io::{BufRead, Write};
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
-use crate::browser::{FillContents, LoginInfo};
+use crate::browser::{FillContents, LoginInfo, SaveCheck};
 use crate::manage::{Change, ItemContents, ItemInfo, ItemPatch, ProjectInfo};
 use crate::policy::ApprovalMode;
 use crate::reference::{ScopePattern, SecretRef};
@@ -96,6 +96,8 @@ pub enum PurposeKind {
     ChangeItem,
     /// The browser extension fills a login on a website.
     Fill,
+    /// The browser extension saves a login typed into a website.
+    SaveLogin,
     /// An SSH client asks the app's SSH agent to sign with a vault key.
     SshSign,
 }
@@ -196,6 +198,30 @@ pub enum RequestBody {
         #[serde(default)]
         otp_only: bool,
     },
+    /// Whether a login typed into the page at `url` is new, changes a saved
+    /// one or is already saved. Needs the browser extension's `auth`; asks
+    /// nothing.
+    #[serde(rename_all = "camelCase")]
+    BrowserSaveCheck {
+        url: String,
+        #[serde(default)]
+        top_url: Option<String>,
+        username: String,
+        password: Zeroizing<String>,
+    },
+    /// Saves a login typed into the page at `url`: a new item for the site,
+    /// or a new password for `item`, which must be saved for that site.
+    /// Needs the browser extension's `auth`, and always approved in the app.
+    #[serde(rename_all = "camelCase")]
+    BrowserSave {
+        url: String,
+        #[serde(default)]
+        top_url: Option<String>,
+        username: String,
+        password: Zeroizing<String>,
+        #[serde(default)]
+        item: Option<String>,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -260,6 +286,8 @@ pub enum Response {
     },
     /// What to fill.
     Fill(FillContents),
+    /// Whether a typed login is already saved.
+    SaveCheck(SaveCheck),
     Ok,
     Error {
         code: ErrorCode,
@@ -481,6 +509,29 @@ mod tests {
         .unwrap();
         assert!(json.contains(r#""type":"fill""#), "{json}");
         assert!(json.contains(r#""otpRemaining":12"#), "{json}");
+
+        let line = br#"{"v":1,"auth":{"agentId":"a","token":"t"},"body":{"type":"browserSave","url":"https://github.com/login","username":"me","password":"pw"}}"#;
+        let mut line = line.to_vec();
+        line.push(b'\n');
+        let req: Request = read_message(&mut Cursor::new(line)).unwrap();
+        assert!(matches!(
+            req.body,
+            RequestBody::BrowserSave { item: None, ref password, .. } if password.as_str() == "pw"
+        ));
+        let json = serde_json::to_string(&Response::SaveCheck(SaveCheck::Update {
+            item: "i1".into(),
+            title: "GitHub".into(),
+        }))
+        .unwrap();
+        assert_eq!(
+            json,
+            r#"{"type":"saveCheck","state":"update","item":"i1","title":"GitHub"}"#
+        );
+        let back: Response = serde_json::from_str(&json).unwrap();
+        assert!(matches!(
+            back,
+            Response::SaveCheck(SaveCheck::Update { .. })
+        ));
     }
 
     #[test]

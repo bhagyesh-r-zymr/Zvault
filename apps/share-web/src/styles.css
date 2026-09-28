@@ -128,6 +128,39 @@ h2 {
   overflow-wrap: anywhere;
 }
 
+.totp-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.totp code {
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+/* A ring that empties as the code runs out; --left goes from 1 to 0. */
+.ring {
+  --left: 1;
+  --ring: var(--iris);
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 50%;
+  background:
+    radial-gradient(closest-side, #fff 76%, transparent 78%),
+    conic-gradient(var(--ring) calc(var(--left) * 360deg), var(--line) 0);
+  color: var(--text-2);
+  font: 600 0.72rem var(--mono);
+}
+
+.ring.low {
+  --ring: var(--danger);
+  color: var(--danger);
+}
+
 .label,
 .hint {
   color: var(--muted);

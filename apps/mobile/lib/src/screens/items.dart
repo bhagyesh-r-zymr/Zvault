@@ -6,6 +6,7 @@ import '../theme.dart';
 import '../widgets.dart';
 import 'home.dart';
 import 'item_detail.dart';
+import 'shared_with_me.dart';
 
 class ItemsTab extends StatefulWidget {
   const ItemsTab({super.key});
@@ -69,6 +70,14 @@ class _ItemsTabState extends State<ItemsTab> {
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           ),
+                        IconButton(
+                          key: const Key('shared-with-me'),
+                          tooltip: 'Shared with you',
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(builder: (_) => const SharedWithMeScreen()),
+                          ),
+                          icon: const Icon(Icons.inbox_outlined),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 12),

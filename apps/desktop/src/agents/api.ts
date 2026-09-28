@@ -61,6 +61,7 @@ export type PurposeKind =
   | 'readItem'
   | 'changeItem'
   | 'fill'
+  | 'saveLogin'
   /** An SSH client asks Zvault's SSH agent to sign with a vault key. */
   | 'sshSign';
 
@@ -230,7 +231,8 @@ export type Change =
       slug: string | null;
     }
   | { op: 'deleteFolder'; project: string; folder: string }
-  | { op: 'deleteSecret'; reference: string; allEnvironments: boolean };
+  | { op: 'deleteSecret'; reference: string; allEnvironments: boolean }
+  | { op: 'syncEnvironment'; project: string; environment: string };
 
 /** Makes a change and returns what it did, for the terminal. Throw to refuse it. */
 export type ApplyChange = (change: Change) => Promise<string>;

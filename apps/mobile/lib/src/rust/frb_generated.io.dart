@@ -103,6 +103,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   SshKeyDetail dco_decode_ssh_key_detail(dynamic raw);
 
   @protected
+  TotpSetup dco_decode_totp_setup(dynamic raw);
+
+  @protected
   int dco_decode_u_32(dynamic raw);
 
   @protected
@@ -124,16 +127,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
-  OneTimeCode sse_decode_box_autoadd_one_time_code(SseDeserializer deserializer);
+  OneTimeCode sse_decode_box_autoadd_one_time_code(
+    SseDeserializer deserializer,
+  );
 
   @protected
-  PasskeyDetail sse_decode_box_autoadd_passkey_detail(SseDeserializer deserializer);
+  PasskeyDetail sse_decode_box_autoadd_passkey_detail(
+    SseDeserializer deserializer,
+  );
 
   @protected
   SecretShare sse_decode_box_autoadd_secret_share(SseDeserializer deserializer);
 
   @protected
-  SshKeyDetail sse_decode_box_autoadd_ssh_key_detail(SseDeserializer deserializer);
+  SshKeyDetail sse_decode_box_autoadd_ssh_key_detail(
+    SseDeserializer deserializer,
+  );
 
   @protected
   EnvironmentView sse_decode_environment_view(SseDeserializer deserializer);
@@ -166,13 +175,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
-  OneTimeCode? sse_decode_opt_box_autoadd_one_time_code(SseDeserializer deserializer);
+  OneTimeCode? sse_decode_opt_box_autoadd_one_time_code(
+    SseDeserializer deserializer,
+  );
 
   @protected
-  PasskeyDetail? sse_decode_opt_box_autoadd_passkey_detail(SseDeserializer deserializer);
+  PasskeyDetail? sse_decode_opt_box_autoadd_passkey_detail(
+    SseDeserializer deserializer,
+  );
 
   @protected
-  SshKeyDetail? sse_decode_opt_box_autoadd_ssh_key_detail(SseDeserializer deserializer);
+  SshKeyDetail? sse_decode_opt_box_autoadd_ssh_key_detail(
+    SseDeserializer deserializer,
+  );
 
   @protected
   PairedAccount sse_decode_paired_account(SseDeserializer deserializer);
@@ -193,6 +208,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   SshKeyDetail sse_decode_ssh_key_detail(SseDeserializer deserializer);
 
   @protected
+  TotpSetup sse_decode_totp_setup(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_u_32(SseDeserializer deserializer);
 
   @protected
@@ -208,7 +226,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
-  void sse_encode_AnyhowException(AnyhowException self, SseSerializer serializer);
+  void sse_encode_AnyhowException(
+    AnyhowException self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
@@ -217,19 +238,34 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
-  void sse_encode_box_autoadd_one_time_code(OneTimeCode self, SseSerializer serializer);
+  void sse_encode_box_autoadd_one_time_code(
+    OneTimeCode self,
+    SseSerializer serializer,
+  );
 
   @protected
-  void sse_encode_box_autoadd_passkey_detail(PasskeyDetail self, SseSerializer serializer);
+  void sse_encode_box_autoadd_passkey_detail(
+    PasskeyDetail self,
+    SseSerializer serializer,
+  );
 
   @protected
-  void sse_encode_box_autoadd_secret_share(SecretShare self, SseSerializer serializer);
+  void sse_encode_box_autoadd_secret_share(
+    SecretShare self,
+    SseSerializer serializer,
+  );
 
   @protected
-  void sse_encode_box_autoadd_ssh_key_detail(SshKeyDetail self, SseSerializer serializer);
+  void sse_encode_box_autoadd_ssh_key_detail(
+    SshKeyDetail self,
+    SseSerializer serializer,
+  );
 
   @protected
-  void sse_encode_environment_view(EnvironmentView self, SseSerializer serializer);
+  void sse_encode_environment_view(
+    EnvironmentView self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
@@ -244,7 +280,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_prim_u_8_strict(Uint8List self, SseSerializer serializer);
+  void sse_encode_list_prim_u_8_strict(
+    Uint8List self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_new_share_link(NewShareLink self, SseSerializer serializer);
@@ -259,13 +298,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
-  void sse_encode_opt_box_autoadd_one_time_code(OneTimeCode? self, SseSerializer serializer);
+  void sse_encode_opt_box_autoadd_one_time_code(
+    OneTimeCode? self,
+    SseSerializer serializer,
+  );
 
   @protected
-  void sse_encode_opt_box_autoadd_passkey_detail(PasskeyDetail? self, SseSerializer serializer);
+  void sse_encode_opt_box_autoadd_passkey_detail(
+    PasskeyDetail? self,
+    SseSerializer serializer,
+  );
 
   @protected
-  void sse_encode_opt_box_autoadd_ssh_key_detail(SshKeyDetail? self, SseSerializer serializer);
+  void sse_encode_opt_box_autoadd_ssh_key_detail(
+    SshKeyDetail? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_paired_account(PairedAccount self, SseSerializer serializer);
@@ -280,10 +328,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_secret_share(SecretShare self, SseSerializer serializer);
 
   @protected
-  void sse_encode_sharing_identity(SharingIdentity self, SseSerializer serializer);
+  void sse_encode_sharing_identity(
+    SharingIdentity self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_ssh_key_detail(SshKeyDetail self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_totp_setup(TotpSetup self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);
@@ -308,8 +362,10 @@ class RustLibWire implements BaseWire {
       RustLibWire(lib.ffiDynamicLibrary);
 
   /// Holds the symbol lookup function.
-  final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName) _lookup;
+  final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
+  _lookup;
 
   /// The symbols are looked up in [dynamicLibrary].
-  RustLibWire(ffi.DynamicLibrary dynamicLibrary) : _lookup = dynamicLibrary.lookup;
+  RustLibWire(ffi.DynamicLibrary dynamicLibrary)
+    : _lookup = dynamicLibrary.lookup;
 }

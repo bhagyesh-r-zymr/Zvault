@@ -12,6 +12,7 @@ import {
   type ProjectEntry,
   type ProjectRecord,
   type SecretVersion,
+  type SyncTarget,
   type TrashedSecret,
 } from '@zvault/shared';
 import { EntryConflictError, type ProjectsApi } from './api.js';
@@ -219,6 +220,16 @@ export class ProjectsSync {
    * Renames an environment, changes its slug, kind or fallback. Only its
    * metadata is re-sealed; its key and values stay as they are.
    */
+  /** Replaces where an environment's secrets are synced to. */
+  async setSyncTargets(projectId: string, envId: string, targets: SyncTarget[]): Promise<void> {
+    const project = this.project(projectId);
+    const current = project.environments.get(envId);
+    if (!current) throw new Error('This environment is no longer available.');
+    const meta = EnvironmentMeta.parse({ ...current.meta, sync: targets });
+    if (targets.length === 0) delete meta.sync;
+    await this.saveEnvironment(project, envId, current.revision, meta);
+  }
+
   async updateEnvironment(
     projectId: string,
     envId: string,

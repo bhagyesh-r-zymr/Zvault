@@ -7,19 +7,36 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
+// These functions are ignored because they are not marked as `pub`: `code_of`
+
 Future<VaultSummary> vaultOpen({required String recordJson}) =>
     RustLib.instance.api.crateApiVaultVaultOpen(recordJson: recordJson);
 
-Future<ItemSummary> itemSummary({required String vaultId, required String recordJson}) =>
-    RustLib.instance.api.crateApiVaultItemSummary(vaultId: vaultId, recordJson: recordJson);
+Future<ItemSummary> itemSummary({
+  required String vaultId,
+  required String recordJson,
+}) => RustLib.instance.api.crateApiVaultItemSummary(
+  vaultId: vaultId,
+  recordJson: recordJson,
+);
 
-Future<ItemDetail> itemOpen({required String vaultId, required String recordJson}) =>
-    RustLib.instance.api.crateApiVaultItemOpen(vaultId: vaultId, recordJson: recordJson);
+Future<ItemDetail> itemOpen({
+  required String vaultId,
+  required String recordJson,
+}) => RustLib.instance.api.crateApiVaultItemOpen(
+  vaultId: vaultId,
+  recordJson: recordJson,
+);
 
 /// Signs a fresh WebAuthn challenge with the item's passkey and verifies it
 /// with the public key, as the website would.
-Future<void> itemPasskeyTest({required String vaultId, required String recordJson}) =>
-    RustLib.instance.api.crateApiVaultItemPasskeyTest(vaultId: vaultId, recordJson: recordJson);
+Future<void> itemPasskeyTest({
+  required String vaultId,
+  required String recordJson,
+}) => RustLib.instance.api.crateApiVaultItemPasskeyTest(
+  vaultId: vaultId,
+  recordJson: recordJson,
+);
 
 /// The item's current one-time password, or None if it has none.
 Future<OneTimeCode?> itemTotp({
@@ -32,12 +49,45 @@ Future<OneTimeCode?> itemTotp({
   unixSecs: unixSecs,
 );
 
+/// Checks a scanned `otpauth://` QR code, a pasted link or a typed setup key.
+Future<TotpSetup> totpCheck({
+  required String input,
+  required PlatformInt64 unixSecs,
+}) => RustLib.instance.api.crateApiVaultTotpCheck(
+  input: input,
+  unixSecs: unixSecs,
+);
+
+/// The current code for a setup someone shared (`SharedItemPayload.totp`).
+Future<OneTimeCode> totpCode({
+  required String uri,
+  required PlatformInt64 unixSecs,
+}) => RustLib.instance.api.crateApiVaultTotpCode(uri: uri, unixSecs: unixSecs);
+
+/// Adds, replaces or (with an empty `totp`) removes a login's 2FA setup.
+/// `totp` is what [`totp_check`] accepted; it is stored as the canonical
+/// `otpauth://` URI, as the Mac stores it. Returns the item's new
+/// `encryptedData` as `EncryptedBlob` JSON for `PUT /vaults/:id/items/:id`;
+/// its `encryptedKey` does not change.
+Future<String> itemSetTotp({
+  required String vaultId,
+  required String recordJson,
+  required String totp,
+}) => RustLib.instance.api.crateApiVaultItemSetTotp(
+  vaultId: vaultId,
+  recordJson: recordJson,
+  totp: totp,
+);
+
 /// Opens a project and returns its `ProjectMeta` as JSON. `member_wrap_json`
 /// is `projectKey` from `GET /access/projects/:id/keys/me` for a shared project.
-Future<String> projectOpen({required String recordJson, String? memberWrapJson}) => RustLib
-    .instance
-    .api
-    .crateApiVaultProjectOpen(recordJson: recordJson, memberWrapJson: memberWrapJson);
+Future<String> projectOpen({
+  required String recordJson,
+  String? memberWrapJson,
+}) => RustLib.instance.api.crateApiVaultProjectOpen(
+  recordJson: recordJson,
+  memberWrapJson: memberWrapJson,
+);
 
 Future<EnvironmentView> environmentOpen({
   required String projectId,
@@ -191,7 +241,11 @@ class OneTimeCode {
   /// Seconds until the next code.
   final int remaining;
 
-  const OneTimeCode({required this.code, required this.period, required this.remaining});
+  const OneTimeCode({
+    required this.code,
+    required this.period,
+    required this.remaining,
+  });
 
   @override
   int get hashCode => code.hashCode ^ period.hashCode ^ remaining.hashCode;
@@ -289,6 +343,33 @@ class SshKeyDetail {
           keyType == other.keyType &&
           comment == other.comment &&
           createdAt == other.createdAt;
+}
+
+/// A 2FA setup that was scanned or pasted, checked but not saved yet.
+class TotpSetup {
+  final String issuer;
+  final String account;
+
+  /// The first code, so the person can compare it with the website.
+  final OneTimeCode current;
+
+  const TotpSetup({
+    required this.issuer,
+    required this.account,
+    required this.current,
+  });
+
+  @override
+  int get hashCode => issuer.hashCode ^ account.hashCode ^ current.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TotpSetup &&
+          runtimeType == other.runtimeType &&
+          issuer == other.issuer &&
+          account == other.account &&
+          current == other.current;
 }
 
 class VaultSummary {

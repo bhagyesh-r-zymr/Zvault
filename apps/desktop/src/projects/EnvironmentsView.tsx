@@ -3,9 +3,10 @@ import { useId, useState, type FormEvent } from 'react';
 import { ErrorLine, Segmented, Sheet } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import { writeError } from './api.js';
-import { useProjects, useProjectsSync, useProjectTeam } from './context.js';
+import { useProjects, useProjectsSync, useProjectTeam, useSecretSync } from './context.js';
 import { ENV_COLORS, ENV_KIND_LABELS, type Environment, type Project } from './model.js';
 import { EnvDot, ProjectTile } from './ProjectsView.js';
+import { SyncSheet } from './SyncSheet.js';
 import { isOrgAdmin } from './teamModel.js';
 
 const KINDS: readonly { value: EnvironmentKind; label: string }[] = (
@@ -21,7 +22,9 @@ export function EnvironmentsView(props: {
   const sync = useProjectsSync();
   const team = useProjectTeam(props.projectId);
   const project = projects.find((p) => p.id === props.projectId);
+  const { snapshot: syncState } = useSecretSync();
   const [editing, setEditing] = useState<Environment | 'new' | null>(null);
+  const [syncing, setSyncing] = useState<Environment | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +70,14 @@ export function EnvironmentsView(props: {
       );
     }
     return parts.join(' ');
+  };
+
+  // The worst last result among an environment's targets, for its button.
+  const syncHealth = (env: Environment) => {
+    const states = env.sync.map((t) => syncState.status[t.id]?.state);
+    if (states.includes('failed')) return 'failed';
+    if (states.includes('partial')) return 'partial';
+    return '';
   };
 
   return (
@@ -150,6 +161,17 @@ export function EnvironmentsView(props: {
                       >
                         Open
                       </button>
+                      {(canManage || env.sync.length > 0) && (
+                        <button
+                          type="button"
+                          className={`small sync-button ${syncHealth(env)}`}
+                          title="Sync to GitHub or AWS"
+                          onClick={() => setSyncing(env)}
+                        >
+                          <Icon name="refresh" size={12} />
+                          {env.sync.length > 0 ? `Synced to ${env.sync.length}` : 'Sync'}
+                        </button>
+                      )}
                       {canManage && (
                         <>
                           <button
@@ -190,6 +212,15 @@ export function EnvironmentsView(props: {
         )}
         <ErrorLine error={error} />
       </div>
+
+      {syncing && (
+        <SyncSheet
+          project={project}
+          env={syncing}
+          canManage={canManage}
+          onClose={() => setSyncing(null)}
+        />
+      )}
 
       {editing && (
         <EnvironmentSheet

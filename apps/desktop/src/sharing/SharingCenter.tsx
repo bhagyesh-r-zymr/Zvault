@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { SharingApi } from './api.js';
 import { CopyButton, ErrorLine, SecretText } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
+import { OneTimePasswordCode, otpCore } from '../otp/index.js';
 import { sharingCore, type SharingIdentity } from './core.js';
 import { checkPin, pinKey, type PinCheck } from './pins.js';
 
@@ -250,6 +251,7 @@ function IncomingRow({ share, onRemove }: { share: IncomingUserShare; onRemove: 
               <CopyButton value={item.password} />
             </div>
           )}
+          {item.totp && <SharedTotpRow uri={item.totp} />}
           {item.url && (
             <div className="row">
               <div className="row-main">
@@ -280,5 +282,18 @@ function IncomingRow({ share, onRemove }: { share: IncomingUserShare; onRemove: 
         </div>
       )}
     </li>
+  );
+}
+
+/** Live one-time codes from a 2FA setup the sender chose to include. */
+function SharedTotpRow({ uri }: { uri: string }) {
+  const getCode = useCallback(() => otpCore.code(uri), [uri]);
+  return (
+    <div className="row">
+      <div className="row-main">
+        <span className="row-label">one-time password</span>
+        <OneTimePasswordCode getCode={getCode} />
+      </div>
+    </div>
   );
 }

@@ -25,6 +25,7 @@ const WANTS: Record<PurposeKind, string> = {
   readItem: 'wants to see a vault item',
   changeItem: 'wants to change your vault',
   fill: 'wants to fill a login',
+  saveLogin: 'wants to save a login',
   sshSign: 'wants to use an SSH key',
 };
 
@@ -69,7 +70,8 @@ function ApprovalSheet({ prompt, onDone }: { prompt: ApprovalPrompt; onDone: () 
   const [error, setError] = useState<string | null>(null);
   const ssh = prompt.principal === 'ssh';
   const who = prompt.principal === 'user' ? 'Your terminal' : prompt.agentName;
-  const browser = prompt.purpose.kind === 'fill';
+  const browser = prompt.purpose.kind === 'fill' || prompt.purpose.kind === 'saveLogin';
+  const saving = prompt.purpose.kind === 'saveLogin';
   const n = prompt.refs.length;
   const what = n === 0 ? '' : n === 1 ? ' 1 secret' : ` ${n} secrets`;
 
@@ -149,7 +151,9 @@ function ApprovalSheet({ prompt, onDone }: { prompt: ApprovalPrompt; onDone: () 
       {browser && (
         <p className="notice">
           <Icon name="shield" size={14} />
-          Zvault checked this login is saved for the website asking for it.
+          {saving
+            ? 'The login was typed into this website. Zvault saves it for this website only.'
+            : 'Zvault checked this login is saved for the website asking for it.'}
         </p>
       )}
       {n > 0 && (

@@ -74,6 +74,16 @@ export const SharedItemPayload = z.object({
   notes: z.string().max(10_000).optional(),
   passkey: SharedPasskey.optional(),
   /**
+   * The login's one-time password setup, as an `otpauth://totp/` URI. Only
+   * present when the sender chose to include it; the recipient's app or the
+   * share page shows live codes from it.
+   */
+  totp: z
+    .string()
+    .max(2048)
+    .regex(/^otpauth:\/\/totp\//i)
+    .optional(),
+  /**
    * Set when a project secret is shared rather than a vault item. Its value
    * travels in `password`, so apps that predate this field still show it.
    */

@@ -35,6 +35,7 @@ zvault-otp = { path = "../../../crates/zvault-otp" }
 zvault-passkeys = { path = "../../../crates/zvault-passkeys" }
 zvault-passwords = { path = "../../../crates/zvault-passwords" }
 zvault-ssh = { path = "../../../crates/zvault-ssh" }
+zvault-sync = { path = "../../../crates/zvault-sync" }
 tauri-plugin-updater = "2"
 
 [dev-dependencies]

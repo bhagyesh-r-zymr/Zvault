@@ -13,6 +13,7 @@ export 'rust/api/vault.dart'
         OneTimeCode,
         PasskeyDetail,
         SshKeyDetail,
+        TotpSetup,
         VaultSummary;
 
 /// The Rust core, behind an interface so screens can be tested without it.
@@ -45,6 +46,19 @@ class Core {
     recordJson: recordJson,
     unixSecs: DateTime.now().millisecondsSinceEpoch ~/ 1000,
   );
+
+  int get _now => DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+  /// Checks a scanned or pasted 2FA setup before it is saved.
+  Future<vault.TotpSetup> checkTotp(String input) => vault.totpCheck(input: input, unixSecs: _now);
+
+  /// The current code for a setup someone shared.
+  Future<vault.OneTimeCode> sharedTotpCode(String uri) => vault.totpCode(uri: uri, unixSecs: _now);
+
+  /// Seals the item again with its 2FA setup added, replaced or (empty)
+  /// removed. Returns the new `encryptedData` blob as JSON.
+  Future<String> setItemTotp(String vaultId, String recordJson, String totp) =>
+      vault.itemSetTotp(vaultId: vaultId, recordJson: recordJson, totp: totp);
 
   /// Signs a fresh WebAuthn challenge with the item's passkey and checks it
   /// with the public key. The private key stays in Rust.
@@ -83,8 +97,14 @@ class Core {
   Future<sharing.NewShareLink> createShareLink(
     String vaultId,
     String recordJson,
-    String shareOrigin,
-  ) => sharing.shareLinkCreate(vaultId: vaultId, recordJson: recordJson, shareOrigin: shareOrigin);
+    String shareOrigin, {
+    bool includeTotp = false,
+  }) => sharing.shareLinkCreate(
+    vaultId: vaultId,
+    recordJson: recordJson,
+    shareOrigin: shareOrigin,
+    includeTotp: includeTotp,
+  );
 
   /// Opens one project secret's value and encrypts it under a fresh link key.
   Future<sharing.NewShareLink> createSecretShareLink(
@@ -100,11 +120,26 @@ class Core {
   Future<sharing.NewUserShare> sealShareTo(
     String vaultId,
     String recordJson,
-    String recipientPublicKey,
-  ) => sharing.shareSealTo(
+    String recipientPublicKey, {
+    bool includeTotp = false,
+  }) => sharing.shareSealTo(
     vaultId: vaultId,
     recordJson: recordJson,
     recipientPublicKey: recipientPublicKey,
+    includeTotp: includeTotp,
+  );
+
+  /// Decrypts a share sent to this account; returns `SharedItemPayload` JSON.
+  Future<String> openShare({
+    required String id,
+    required String senderPublicKey,
+    required String ephemeralPublicKey,
+    required String blobJson,
+  }) => sharing.shareOpen(
+    id: id,
+    senderPublicKey: senderPublicKey,
+    ephemeralPublicKey: ephemeralPublicKey,
+    blobJson: blobJson,
   );
 
   Future<sharing.NewUserShare> sealSecretShareTo(

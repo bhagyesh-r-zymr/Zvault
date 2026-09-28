@@ -114,6 +114,7 @@ export class TokensService {
       kind: 'issued',
       tokenId: req.id,
       projectId,
+      environmentId: envIds[0]!,
       accountId: user.id,
       name: req.name,
     });
@@ -176,7 +177,14 @@ export class TokensService {
       (await this.policy.canManageTokens(projectId, user.id, access.ownerId, primary));
     if (!mayRevoke) throw new NotFoundException();
     await this.db.delete(agentTokens).where(eq(agentTokens.id, tokenId));
-    await this.activity.record({ kind: 'revoked', tokenId, projectId, accountId: user.id });
+    await this.activity.record({
+      kind: 'revoked',
+      tokenId,
+      projectId,
+      environmentId: primary,
+      accountId: user.id,
+      name: token.name,
+    });
   }
 
   // ------------------------------------------------------------ token use
@@ -196,7 +204,15 @@ export class TokensService {
     const deny = async (
       reason: 'expired' | 'stale' | 'creator_lost_access' | 'environment_deleted',
     ): Promise<never> => {
-      await this.activity.record({ kind: 'denied', tokenId, projectId: row.projectId, reason });
+      await this.activity.record({
+        kind: 'denied',
+        tokenId,
+        projectId: row.projectId,
+        environmentId: row.environments[0]!.environmentId,
+        name: row.name,
+        createdBy: row.createdBy,
+        reason,
+      });
       if (reason === 'stale') throw new ConflictException({ error: 'token_stale' });
       throw new UnauthorizedException({ error: `token_${reason}` });
     };
@@ -244,7 +260,9 @@ export class TokensService {
       kind: 'used',
       tokenId: row.id,
       projectId: row.projectId,
-      environmentIds: row.environments.map((e) => e.environmentId),
+      environmentId: row.environments[0]!.environmentId,
+      name: row.name,
+      createdBy: row.createdBy,
     });
     return {
       token: { id: row.id, name: row.name, expiresAt: row.expiresAt.toISOString() },

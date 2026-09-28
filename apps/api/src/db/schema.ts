@@ -1,7 +1,15 @@
-import type { DeviceInfo, EncryptedBlob, ShareId, SharingPublicKey } from '@zvault/shared';
+import type {
+  ActivityAction,
+  ActivityDetail,
+  DeviceInfo,
+  EncryptedBlob,
+  ShareId,
+  SharingPublicKey,
+} from '@zvault/shared';
 import { sql } from 'drizzle-orm';
 import {
   bigint,
+  bigserial,
   boolean,
   customType,
   foreignKey,
@@ -687,6 +695,33 @@ export const userShares = pgTable(
   (t) => [
     index('user_shares_recipient_idx').on(t.recipientId, t.createdAt),
     index('user_shares_sender_idx').on(t.senderId, t.createdAt),
+  ],
+);
+
+/**
+ * The team activity log of a project (see `activity.ts` in `@zvault/shared`).
+ * Rows hold ids and outcomes only; names sealed with the project key stay
+ * sealed. `actorId` is an account or an org agent, so it has no foreign key.
+ */
+export const activityEvents = pgTable(
+  'activity_events',
+  {
+    seq: bigserial('seq', { mode: 'number' }).primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    at: ts('at').notNull().defaultNow(),
+    action: text('action').$type<ActivityAction>().notNull(),
+    actorType: text('actor_type').$type<'account' | 'agent'>().notNull(),
+    actorId: uuid('actor_id').notNull(),
+    environmentId: uuid('environment_id'),
+    targetId: uuid('target_id'),
+    detail: jsonb('detail').$type<ActivityDetail>().notNull().default({}),
+  },
+  (t) => [
+    index('activity_events_project_idx').on(t.projectId, t.seq),
+    index('activity_events_target_idx').on(t.projectId, t.targetId, t.seq),
+    index('activity_events_at_idx').on(t.at),
   ],
 );
 

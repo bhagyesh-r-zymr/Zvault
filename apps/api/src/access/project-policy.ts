@@ -67,4 +67,19 @@ export class ProjectPolicy {
         : [...byEnv.keys()].some((id) => levelAtLeast(levelIn(id), 'edit'));
     if (!ok) throw new ForbiddenException({ error: 'no_access' });
   }
+
+  /**
+   * The activity log: the owner, org owners and admins, and anyone who
+   * manages at least one of the project's environments.
+   */
+  async canSeeActivity(projectId: string, accountId: string, ownerId: string): Promise<boolean> {
+    if (accountId === ownerId) return true;
+    const project = await this.facts.linkedProject(projectId);
+    if (!project) return false;
+    if (await this.facts.isAdmin(project.orgId, accountId)) return true;
+    const { byEnv } = await this.facts.projectLevels(project, this.now());
+    return [...byEnv.values()].some((levels) =>
+      levelAtLeast(levels.get(holderKey('account', accountId)) ?? 'none', 'manage'),
+    );
+  }
 }

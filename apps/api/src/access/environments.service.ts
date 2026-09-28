@@ -31,6 +31,7 @@ import {
 } from '@zvault/shared';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { DATABASE, type Database } from '../db/database.js';
+import { ActivityLog } from '../activity/activity.log.js';
 import {
   accessRequests,
   accounts,
@@ -89,6 +90,7 @@ export class EnvironmentsService {
     @Inject(DATABASE) private readonly db: Database,
     @Inject(ACCESS_CLOCK) private readonly now: Clock,
     private readonly facts: AccessFacts,
+    private readonly activity: ActivityLog,
   ) {}
 
   // ------------------------------------------------------------ projects
@@ -113,6 +115,11 @@ export class EnvironmentsService {
       if (isUniqueViolation(e)) throw new ConflictException('Already shared with an organization');
       throw e;
     }
+    await this.activity.record({
+      projectId,
+      action: 'project.linked',
+      actor: { type: 'account', id: accountId },
+    });
     return this.project(accountId, projectId);
   }
 
@@ -385,6 +392,7 @@ export class EnvironmentsService {
         set: { level: row.level, expiresAt, grantedBy: accountId, createdAt: now },
       });
     await this.facts.reconcileProject(env.projectId, now);
+    await this.recordGrant(accountId, env.projectId, environmentId, req.principal, req.level);
     return toGrant(row);
   }
 
@@ -402,6 +410,25 @@ export class EnvironmentsService {
       .returning();
     if (removed.length === 0) throw new NotFoundException();
     await this.facts.reconcileProject(env.projectId, now);
+    await this.recordGrant(accountId, env.projectId, environmentId, principal, null);
+  }
+
+  private async recordGrant(
+    accountId: string,
+    projectId: string,
+    environmentId: string,
+    principal: PrincipalRef,
+    level: AccessLevel | null,
+  ): Promise<void> {
+    const name = (await this.names([principal])).get(`${principal.type}:${principal.id}`);
+    await this.activity.record({
+      projectId,
+      action: level ? 'grant.changed' : 'grant.removed',
+      actor: { type: 'account', id: accountId },
+      environmentId,
+      targetId: principal.id,
+      detail: { principal: { ...principal, name: name ?? null }, ...(level && { level }) },
+    });
   }
 
   // ------------------------------------------------------------ keys
@@ -661,6 +688,14 @@ export class EnvironmentsService {
       }
       await tx.update(projects).set({ seq }).where(eq(projects.id, env.projectId));
     });
+    await this.activity.record({
+      projectId: env.projectId,
+      action: 'key.rotated',
+      actor: { type: 'account', id: accountId },
+      environmentId,
+      targetId: environmentId,
+      detail: { keyVersion: next, items: req.values.length },
+    });
     return this.detail(accountId, environmentId);
   }
 
@@ -726,6 +761,14 @@ export class EnvironmentsService {
         createdAt: now,
       })
       .returning();
+    await this.activity.record({
+      projectId: env.projectId,
+      action: 'request.created',
+      actor: holder,
+      environmentId,
+      targetId: row!.id,
+      detail: { items: req.items.length },
+    });
     return this.view(row!, await this.nameOf(holder), true, now);
   }
 
@@ -835,23 +878,43 @@ export class EnvironmentsService {
       .where(and(eq(accessRequests.id, requestId), eq(accessRequests.status, 'pending')))
       .returning();
     if (!row) throw new ConflictException('This request was already decided');
+    await this.recordDecision(accountId, env.projectId, row, 'request.approved');
     return this.view(row, await this.nameOf(requester), false, now);
   }
 
   async deny(accountId: string, requestId: string): Promise<AccessRequestView> {
-    const { now } = await this.decidable(accountId, requestId);
+    const { env, now } = await this.decidable(accountId, requestId);
     const [row] = await this.db
       .update(accessRequests)
       .set({ status: 'denied', decidedBy: accountId, decidedAt: now })
       .where(and(eq(accessRequests.id, requestId), eq(accessRequests.status, 'pending')))
       .returning();
     if (!row) throw new ConflictException('This request was already decided');
+    await this.recordDecision(accountId, env.projectId, row, 'request.denied');
     return this.view(
       row,
       await this.nameOf({ type: row.requesterType as KeyHolder['type'], id: row.requesterId }),
       false,
       now,
     );
+  }
+
+  private async recordDecision(
+    accountId: string,
+    projectId: string,
+    r: RequestRow,
+    action: 'request.approved' | 'request.denied',
+  ): Promise<void> {
+    const requester = { type: r.requesterType, id: r.requesterId };
+    const name = (await this.names([requester])).get(`${r.requesterType}:${r.requesterId}`);
+    await this.activity.record({
+      projectId,
+      action,
+      actor: { type: 'account', id: accountId },
+      environmentId: r.environmentId,
+      targetId: r.id,
+      detail: { principal: { ...requester, name: name ?? null }, items: r.items.length },
+    });
   }
 
   /**

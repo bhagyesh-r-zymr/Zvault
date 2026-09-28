@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AccessModule } from './access/access.module.js';
+import { ActivityLogModule } from './activity/activity.log.js';
+import { ActivityModule } from './activity/activity.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { SessionUserResolver } from './auth/session-user.resolver.js';
 import { ConfigModule } from './config/config.module.js';
@@ -24,6 +26,7 @@ import { WaitlistModule } from './waitlist/waitlist.module.js';
   imports: [
     ConfigModule,
     DatabaseModule,
+    ActivityLogModule,
     MailModule,
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     DevicesModule,
@@ -38,6 +41,7 @@ import { WaitlistModule } from './waitlist/waitlist.module.js';
     HistoryModule,
     SharingModule,
     AccessModule,
+    ActivityModule,
     PairingModule,
     TokensModule,
     WaitlistModule,

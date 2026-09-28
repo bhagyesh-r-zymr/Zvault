@@ -1,26 +1,39 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { ActivityLog } from '../activity/activity.log.js';
 
-/** Something that happened to an access token. Ids only, never key material. */
-export type TokenEvent =
-  | { kind: 'issued'; tokenId: string; projectId: string; accountId: string; name: string }
-  | { kind: 'revoked'; tokenId: string; projectId: string; accountId: string }
-  | { kind: 'used'; tokenId: string; projectId: string; environmentIds: string[] }
+/** Something that happened to an access token. Ids and names only, never key material. */
+export type TokenEvent = {
+  tokenId: string;
+  projectId: string;
+  environmentId: string;
+  name: string;
+} & (
+  | { kind: 'issued' | 'revoked'; accountId: string }
+  | { kind: 'used'; createdBy: string }
   | {
       kind: 'denied';
-      tokenId: string;
-      projectId: string;
+      createdBy: string;
       reason: 'expired' | 'stale' | 'creator_lost_access' | 'environment_deleted';
-    };
+    }
+);
 
 /**
- * Where token events go. Today they are logged; an activity log can replace
- * this provider (or wrap `record`) to store them.
+ * Reports token events to the project's activity log. Use and refusals are
+ * attributed to the token's creator, with the token named in the detail.
  */
 @Injectable()
 export class TokenActivity {
-  private readonly log = new Logger('AgentTokens');
+  constructor(private readonly log: ActivityLog) {}
 
-  record(event: TokenEvent): void | Promise<void> {
-    this.log.log(JSON.stringify(event));
+  record(e: TokenEvent): Promise<void> {
+    const actorId = 'accountId' in e ? e.accountId : e.createdBy;
+    return this.log.record({
+      projectId: e.projectId,
+      action: `token.${e.kind}`,
+      actor: { type: 'account', id: actorId },
+      environmentId: e.environmentId,
+      targetId: e.tokenId,
+      detail: { token: { name: e.name, ...(e.kind === 'denied' && { reason: e.reason }) } },
+    });
   }
 }

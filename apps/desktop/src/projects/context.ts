@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useSyncExternalStore } from 'react';
+import type { ActivityReporter } from './activity.js';
 import type { ProjectsSnapshot, ProjectsSync } from './sync.js';
 import type { ProjectTeam, TeamSnapshot, TeamStore } from './team.js';
 
@@ -14,6 +15,16 @@ export function useProjectsSync(): ProjectsSync {
 export function useProjects(): ProjectsSnapshot {
   const sync = useProjectsSync();
   return useSyncExternalStore(sync.subscribe, sync.get);
+}
+
+/**
+ * Reports views, copies and shares to the team activity log; provided by the
+ * app shell, absent in previews.
+ */
+export const ActivityContext = createContext<ActivityReporter | null>(null);
+
+export function useActivityReporter(): ActivityReporter | null {
+  return useContext(ActivityContext);
 }
 
 /** Team access (organizations and per-environment grants); provided by the app shell. */

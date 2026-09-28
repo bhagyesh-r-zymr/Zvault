@@ -1,6 +1,6 @@
 {
-  "id": "ea2f374f-41b6-45eb-b9a0-1122aee00f88",
-  "prevId": "fc68d474-cfc6-4eca-95d8-7e211ccfaa78",
+  "id": "0c5624cc-89f3-4bd0-81e9-cb5e5dc50e87",
+  "prevId": "ea2f374f-41b6-45eb-b9a0-1122aee00f88",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -493,6 +493,121 @@
           "tableFrom": "activity_events",
           "tableTo": "projects",
           "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.agent_tokens": {
+      "name": "agent_tokens",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verifier": {
+          "name": "verifier",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "encrypted_project_key": {
+          "name": "encrypted_project_key",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "environments": {
+          "name": "environments",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_used_at": {
+          "name": "last_used_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "agent_tokens_project_idx": {
+          "name": "agent_tokens_project_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "agent_tokens_project_id_projects_id_fk": {
+          "name": "agent_tokens_project_id_projects_id_fk",
+          "tableFrom": "agent_tokens",
+          "tableTo": "projects",
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "agent_tokens_created_by_accounts_id_fk": {
+          "name": "agent_tokens_created_by_accounts_id_fk",
+          "tableFrom": "agent_tokens",
+          "tableTo": "accounts",
+          "columnsFrom": ["created_by"],
           "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"

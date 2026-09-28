@@ -12,4 +12,5 @@ export * from './pairing.js';
 export * from './waitlist.js';
 export * from './recovery.js';
 export * from './history.js';
+export * from './activity.js';
 export * from './tokens.js';

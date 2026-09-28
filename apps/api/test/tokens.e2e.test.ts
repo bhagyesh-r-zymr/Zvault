@@ -10,7 +10,7 @@ import {
 import { eq } from 'drizzle-orm';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { agentTokens, environmentAccess, organizations } from '../src/db/schema.js';
+import { activityEvents, agentTokens, environmentAccess, organizations } from '../src/db/schema.js';
 import { createHarness, signedInAccount, type Harness } from './harness.js';
 
 const b64 = (n: number, fill = 7) => Buffer.alloc(n, fill).toString('base64url');
@@ -151,6 +151,16 @@ describe('Agent tokens (e2e)', () => {
     await api(t.bearer).get('/token').expect(200);
     await api(alice.headers).del(`/projects/${p.id}/tokens/${t.id}`).expect(204);
     await api(t.bearer).get('/token').expect(401);
+    const logged = await h.db
+      .select({ action: activityEvents.action, detail: activityEvents.detail })
+      .from(activityEvents)
+      .where(eq(activityEvents.targetId, t.id));
+    expect(logged.map((l) => l.action).sort()).toEqual([
+      'token.issued',
+      'token.revoked',
+      'token.used',
+    ]);
+    expect(logged[0]?.detail).toEqual({ token: { name: 'GitHub Actions' } });
 
     const e = newToken([p.dev]);
     await api(alice.headers).post(`/projects/${p.id}/tokens`, e.body).expect(201);

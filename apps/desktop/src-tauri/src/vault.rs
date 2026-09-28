@@ -908,7 +908,12 @@ mod tests {
         let mut edited = opened.clone();
         edited.ssh_key.as_mut().unwrap().comment = "Deploy".into();
         let v2 = keyring.seal_item(&vault.id, Some(&item), edited).unwrap();
-        let key2 = keyring.open_item(&vault.id, &v2).unwrap().ssh_key.clone().unwrap();
+        let key2 = keyring
+            .open_item(&vault.id, &v2)
+            .unwrap()
+            .ssh_key
+            .clone()
+            .unwrap();
         assert_eq!(key2.fingerprint, key.fingerprint);
         assert_eq!(key2.comment, "Deploy");
         let (title, stored) = keyring.open_item_ssh_key(&vault.id, &v2).unwrap().unwrap();
@@ -940,7 +945,12 @@ mod tests {
         imported.private_key = source.private_key_openssh().to_string();
         fields.ssh_key = Some(imported);
         let item = keyring.seal_item(&vault.id, None, fields).unwrap();
-        let key = keyring.open_item(&vault.id, &item).unwrap().ssh_key.clone().unwrap();
+        let key = keyring
+            .open_item(&vault.id, &item)
+            .unwrap()
+            .ssh_key
+            .clone()
+            .unwrap();
         assert_eq!(key.fingerprint, source.public().unwrap().fingerprint);
         assert_eq!(key.comment, "laptop");
 

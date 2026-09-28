@@ -93,6 +93,8 @@ pub enum PurposeKind {
     ReadItem,
     /// `zv item create`, `edit` or `delete`.
     ChangeItem,
+    /// An SSH client asks the app's SSH agent to sign with a vault key.
+    SshSign,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -116,10 +116,14 @@ fn write_frame(w: &mut impl Write, body: &[u8]) -> io::Result<()> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SignPurpose {
     /// Logging in to a server (`ssh`, `git fetch`, `git push`).
-    Login { user: String },
+    Login {
+        user: String,
+    },
     /// An SSHSIG signature, such as a signed git commit (`namespace` "git")
     /// or a file (`ssh-keygen -Y sign`).
-    Signature { namespace: String },
+    Signature {
+        namespace: String,
+    },
     Unknown,
 }
 
@@ -143,7 +147,8 @@ pub fn sign_purpose(data: &[u8]) -> SignPurpose {
         let user = string(&mut rest)?;
         let _service = string(&mut rest)?;
         let method = string(&mut rest)?;
-        (method == b"publickey").then(|| printable(user))
+        // `publickey-hostbound-v00@openssh.com` since OpenSSH 8.9.
+        method.starts_with(b"publickey").then(|| printable(user))
     })();
     match login {
         Some(user) => SignPurpose::Login { user },
@@ -285,9 +290,27 @@ mod tests {
         );
         assert_eq!(sign_purpose(b"random"), SignPurpose::Unknown);
 
+        let mut hostbound = strings(&[b"session"]);
+        hostbound.push(SSH_MSG_USERAUTH_REQUEST);
+        hostbound.extend(strings(&[
+            b"deploy",
+            b"ssh-connection",
+            b"publickey-hostbound-v00@openssh.com",
+        ]));
+        assert_eq!(
+            sign_purpose(&hostbound),
+            SignPurpose::Login {
+                user: "deploy".into()
+            }
+        );
+
         let mut evil = strings(&[b"s"]);
         evil.push(SSH_MSG_USERAUTH_REQUEST);
-        evil.extend(strings(&[b"ro\not\x1b[31m", b"ssh-connection", b"publickey"]));
+        evil.extend(strings(&[
+            b"ro\not\x1b[31m",
+            b"ssh-connection",
+            b"publickey",
+        ]));
         assert_eq!(
             sign_purpose(&evil),
             SignPurpose::Login {

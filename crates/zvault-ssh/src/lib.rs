@@ -118,8 +118,7 @@ impl SshKey {
     }
 
     fn key(&self) -> Result<PrivateKey> {
-        let key =
-            PrivateKey::from_openssh(&self.private_key).map_err(|_| SshKeyError::Damaged)?;
+        let key = PrivateKey::from_openssh(&self.private_key).map_err(|_| SshKeyError::Damaged)?;
         if key.is_encrypted() {
             return Err(SshKeyError::Damaged);
         }
@@ -145,9 +144,7 @@ impl SshKey {
         let key = self.key()?;
         let public = key.public_key();
         Ok(SshPublicKey {
-            public_key: public
-                .to_openssh()
-                .map_err(|_| SshKeyError::Damaged)?,
+            public_key: public.to_openssh().map_err(|_| SshKeyError::Damaged)?,
             fingerprint: public.fingerprint(HashAlg::Sha256).to_string(),
             key_type: key_type(&key),
             comment: key.comment().to_owned(),
@@ -250,7 +247,9 @@ fn clean_comment(comment: &str) -> Result<String> {
 fn check_supported(key: &PrivateKey) -> Result<()> {
     match key.key_data() {
         KeypairData::Ed25519(_) => Ok(()),
-        KeypairData::Ecdsa(k) if matches!(k.curve(), EcdsaCurve::NistP256 | EcdsaCurve::NistP384) => {
+        KeypairData::Ecdsa(k)
+            if matches!(k.curve(), EcdsaCurve::NistP256 | EcdsaCurve::NistP384) =>
+        {
             Ok(())
         }
         KeypairData::Rsa(k) if rsa_bits(&k.public) >= MIN_RSA_BITS => Ok(()),
@@ -259,10 +258,7 @@ fn check_supported(key: &PrivateKey) -> Result<()> {
 }
 
 fn rsa_bits(public: &ssh_key::public::RsaPublicKey) -> usize {
-    public
-        .n
-        .as_positive_bytes()
-        .map_or(0, |n| n.len() * 8)
+    public.n.as_positive_bytes().map_or(0, |n| n.len() * 8)
 }
 
 fn key_type(key: &PrivateKey) -> String {
@@ -294,8 +290,8 @@ mod tests {
     use super::*;
 
     fn verify(key: &SshKey, data: &[u8], sig: &[u8]) {
-        use ssh_encoding::Decode;
         use rsa::signature::Verifier;
+        use ssh_encoding::Decode;
         let public = PublicKey::from_openssh(&key.public().unwrap().public_key).unwrap();
         let sig = Signature::decode(&mut &sig[..]).unwrap();
         public.key_data().verify(data, &sig).unwrap();
@@ -327,13 +323,19 @@ mod tests {
         let source = SshKey::generate("old name", 0).unwrap();
         let pem = source.private_key_openssh();
         let imported = SshKey::import(&pem, "", "", 7).unwrap();
-        assert_eq!(imported.public().unwrap().fingerprint, source.public().unwrap().fingerprint);
+        assert_eq!(
+            imported.public().unwrap().fingerprint,
+            source.public().unwrap().fingerprint
+        );
         assert_eq!(imported.public().unwrap().comment, "old name");
         let mut renamed = SshKey::import(&pem, "", "GitHub", 7).unwrap();
         assert_eq!(renamed.public().unwrap().comment, "GitHub");
         renamed.set_comment("Deploy").unwrap();
         assert_eq!(renamed.public().unwrap().comment, "Deploy");
-        assert_eq!(renamed.public().unwrap().fingerprint, source.public().unwrap().fingerprint);
+        assert_eq!(
+            renamed.public().unwrap().fingerprint,
+            source.public().unwrap().fingerprint
+        );
     }
 
     #[test]
@@ -351,9 +353,11 @@ mod tests {
         );
         let imported = SshKey::import(&pem, "hunter2", "", 0).unwrap();
         // Stored without the passphrase.
-        assert!(!PrivateKey::from_openssh(&*imported.private_key_openssh())
-            .unwrap()
-            .is_encrypted());
+        assert!(
+            !PrivateKey::from_openssh(&*imported.private_key_openssh())
+                .unwrap()
+                .is_encrypted()
+        );
         assert_eq!(
             imported.public().unwrap().fingerprint,
             key.fingerprint(HashAlg::Sha256).to_string()

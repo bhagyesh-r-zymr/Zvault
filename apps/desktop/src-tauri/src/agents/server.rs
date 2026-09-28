@@ -50,10 +50,13 @@ const MAX_PENDING_PROMPTS: usize = 4;
 const USER_ID: &str = "user";
 const USER_NAME: &str = "You (terminal)";
 
+/// How SSH clients appear in the activity log.
+const SSH_ID: &str = "ssh";
+
 /// The process on the other end of the socket, as the OS reports it.
 #[derive(Debug, Clone, Copy, Default)]
-struct Peer {
-    pid: Option<i32>,
+pub(crate) struct Peer {
+    pub(crate) pid: Option<i32>,
     /// Its session id: shared by a terminal's shell and everything it starts.
     sid: Option<i32>,
 }
@@ -61,6 +64,8 @@ struct Peer {
 enum Who {
     Agent(AgentRecord),
     User,
+    /// An SSH client using the SSH agent, named after its process.
+    Ssh(String),
 }
 
 impl Who {
@@ -68,6 +73,7 @@ impl Who {
         match self {
             Self::Agent(a) => &a.id,
             Self::User => USER_ID,
+            Self::Ssh(_) => SSH_ID,
         }
     }
 
@@ -75,6 +81,7 @@ impl Who {
         match self {
             Self::Agent(a) => &a.name,
             Self::User => USER_NAME,
+            Self::Ssh(client) => client,
         }
     }
 }
@@ -121,7 +128,7 @@ pub fn start(app: &AppHandle) {
         .expect("failed to start the agent socket thread");
 }
 
-fn bind(path: &Path) -> std::io::Result<UnixListener> {
+pub(crate) fn bind(path: &Path) -> std::io::Result<UnixListener> {
     if let Some(dir) = path.parent() {
         std::fs::DirBuilder::new()
             .recursive(true)
@@ -147,7 +154,7 @@ fn bind(path: &Path) -> std::io::Result<UnixListener> {
 }
 
 /// The peer, if it runs as our user; `Err` if it does not.
-fn check_peer(stream: &UnixStream) -> Result<Peer, ()> {
+pub(crate) fn check_peer(stream: &UnixStream) -> Result<Peer, ()> {
     let me = nix::unistd::geteuid().as_raw();
     #[cfg(target_os = "linux")]
     let pid = {
@@ -219,6 +226,8 @@ fn handle(app: &AppHandle, req: Request, peer: Peer) -> Response {
     };
     let hub = &*hub;
     let result = match (req.body, &who) {
+        // SSH clients use their own socket and never reach here.
+        (_, Who::Ssh(_)) => Err(ErrorCode::BadRequest),
         (RequestBody::AppStatus, _) => Ok(app_status(app, hub, peer)),
         (RequestBody::Unlock, _) => wait_unlocked(app).map(|()| Response::Ok),
         (RequestBody::Fetch { refs, purpose }, _) => fetch(app, hub, &who, refs, &purpose, peer),
@@ -285,7 +294,7 @@ fn app_status(app: &AppHandle, hub: &AgentHub, peer: Peer) -> Response {
 }
 
 /// Brings Zvault forward and waits for the user to unlock it.
-fn wait_unlocked(app: &AppHandle) -> Result<(), ErrorCode> {
+pub(crate) fn wait_unlocked(app: &AppHandle) -> Result<(), ErrorCode> {
     let locked = || app.state::<AppState>().session().is_locked();
     if !locked() {
         return Ok(());
@@ -433,6 +442,7 @@ fn list(
         Who::User => logged(app, hub, who, &[], &purpose, peer, || {
             list_refs(app, hub, prefix)
         })?,
+        Who::Ssh(_) => return Err(ErrorCode::BadRequest),
     };
     Ok(Response::List { refs })
 }
@@ -452,6 +462,7 @@ fn export(
         }
         Who::Agent(_) => {}
         Who::User => wait_unlocked(app)?,
+        Who::Ssh(_) => return Err(ErrorCode::BadRequest),
     }
     let mut refs = list_refs(app, hub, Some(prefix))?;
     if let Who::Agent(a) = who {
@@ -584,6 +595,7 @@ fn structure(
             );
             logged(app, hub, who, &[], &purpose, peer, fetch)?
         }
+        Who::Ssh(_) => return Err(ErrorCode::BadRequest),
     };
     Ok(Response::Structure { projects })
 }
@@ -604,6 +616,8 @@ struct UiReply {
     vault_id: Option<String>,
     #[serde(default)]
     item: Option<ItemCipher>,
+    #[serde(default)]
+    ssh_keys: Option<Vec<ItemCipher>>,
 }
 
 impl UiReply {
@@ -897,6 +911,10 @@ fn authorize(
                 }
             }
         }
+        Who::Ssh(_) => {
+            wait_unlocked(app)?;
+            ask(app, hub, who, refs, purpose, peer, true).map(Some)
+        }
         Who::User => {
             wait_unlocked(app)?;
             // Changes and new sign-ins always need the user.
@@ -970,6 +988,30 @@ fn logged<T>(
     result.map(|(t, _)| t)
 }
 
+/// Asks the user to approve one SSH signature, with Touch ID where it is
+/// set up, and logs the outcome in the activity log. `client` names the
+/// process asking, such as `git` or `ssh`.
+pub(crate) fn approve_ssh_sign(
+    app: &AppHandle,
+    client: String,
+    detail: String,
+    peer: Peer,
+) -> Result<(), ErrorCode> {
+    let hub = app.state::<AgentHub>();
+    let purpose = Purpose::app(PurposeKind::SshSign, Some(detail));
+    logged(app, &hub, &Who::Ssh(client), &[], &purpose, peer, || Ok(()))
+}
+
+/// The personal vault's id and every item in it holding an SSH key, as
+/// ciphertext. Waits for the UI to sync.
+pub(crate) fn ssh_key_items(app: &AppHandle) -> Result<(String, Vec<ItemCipher>), ErrorCode> {
+    let hub = app.state::<AgentHub>();
+    let mut why = None;
+    let reply = item_request(app, &hub, ItemOp::SshKeys, &mut why)?;
+    let vault_id = reply.vault_id.ok_or(ErrorCode::NotFound)?;
+    Ok((vault_id, reply.ssh_keys.unwrap_or_default()))
+}
+
 /// Shows the approval prompt and waits for the answer.
 fn ask(
     app: &AppHandle,
@@ -993,6 +1035,7 @@ fn ask(
     let (principal, agent_id, approval) = match who {
         Who::Agent(a) => ("agent", Some(a.id.as_str()), Some(a.approval)),
         Who::User => ("user", None, None),
+        Who::Ssh(_) => ("ssh", None, None),
     };
     let _ = app.emit(
         APPROVAL_EVENT,
@@ -1181,7 +1224,7 @@ struct PairingPrompt<'a> {
 #[serde(rename_all = "camelCase")]
 struct ApprovalPrompt<'a> {
     request_id: &'a str,
-    /// `agent` or `user`.
+    /// `agent`, `user` or `ssh`.
     principal: &'static str,
     agent_id: Option<&'a str>,
     agent_name: &'a str,
@@ -1233,6 +1276,8 @@ enum ItemOp<'a> {
     },
     /// Deletes an item by id or title: `{ message }`.
     Delete { item: &'a str },
+    /// Every item holding an SSH key: `{ vaultId, sshKeys }`.
+    SshKeys,
 }
 
 #[derive(Clone, Serialize)]

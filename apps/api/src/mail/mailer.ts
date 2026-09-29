@@ -11,4 +11,9 @@ export interface MailMessage {
  */
 export abstract class Mailer {
   abstract send(message: MailMessage): Promise<void>;
+
+  /** Whether this transport is known to be able to reach `email` (SES sandbox). */
+  async isVerified(_email: string): Promise<boolean> {
+    return false;
+  }
 }

@@ -1423,3 +1423,23 @@ html.rm .xr .skip {
     bottom: 54px;
   }
 }
+
+/* Header: readable and clickable over the ciphertext wall. Kept here (not only in site.css)
+   so it can never be missing when the page loads. */
+.nav {
+  z-index: 100;
+  pointer-events: auto;
+}
+.nav.dark {
+  color: #fff;
+  --hi: #0b1430;
+  background: linear-gradient(180deg, rgba(11, 20, 48, 0.92), rgba(11, 20, 48, 0));
+}
+.nav.dark .pill {
+  background: #fff;
+  color: var(--ink);
+}
+.nav.dark a,
+.nav.dark .brand {
+  cursor: pointer;
+}

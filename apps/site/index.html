@@ -8,7 +8,7 @@
     />
     <meta name="referrer" content="no-referrer" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="theme-color" content="#0b1430" />
     <title>Zvault</title>
     <meta
       name="description"
@@ -26,11 +26,12 @@
       crossorigin
     />
     <link rel="stylesheet" href="/site.css" />
+    <link rel="stylesheet" href="/xray.css" />
     <script src="/site.js" defer></script>
-    <script type="module" src="/film.js"></script>
+    <script src="/xray.js" defer></script>
   </head>
-  <body data-tone="white">
-    <header class="nav onfilm" id="nav">
+  <body>
+    <header class="nav dark" id="nav">
       <div class="in">
         <a class="brand" href="#top" aria-label="Zvault home">
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -56,280 +57,129 @@
     </header>
 
     <main id="top">
-      <!-- The launch film: a pinned stage you play by scrolling. film.js drives it. -->
-      <section class="film" id="film" aria-label="Zvault in one minute, played by scrolling">
-        <div class="pin" id="pin">
-          <div class="bgs" aria-hidden="true">
-            <div class="bg white on" data-bg="white"></div>
-            <div class="bg blue" data-bg="blue"></div>
-            <div class="bg black" data-bg="black"></div>
-          </div>
-          <div id="content">
-            <canvas id="gl" aria-hidden="true"></canvas>
-
-            <!-- 01 hook -->
-            <div class="shot on" data-shot="hook">
-              <div class="bubble" id="bubble" data-show="0.8" data-hide="1.95" aria-hidden="true">
-                <span data-type data-a="0.9" data-b="1.6" data-text="psst…"></span>
-              </div>
-              <div class="hook-text">
-                <p class="mlabel" data-show="2.2">// for people and their agents</p>
-                <h1 class="big">
-                  <span class="kw" data-a="2.35" data-s="0.15">Your agent needs</span><br /><em
-                    class="kw acc"
-                    data-a="3.05"
-                    >keys?</em
-                  >
-                </h1>
-                <svg class="uline" viewBox="0 0 160 16" aria-hidden="true">
-                  <path data-draw="3.35" d="M3 11 C 40 4, 90 3, 157 7" />
-                </svg>
-              </div>
+      <!-- X-ray: a pinned story you play by scrolling, then the blueprint band. xray.js drives both. -->
+      <div class="xr">
+        <section id="story">
+          <div class="sticky" id="stage">
+            <canvas id="wall"></canvas>
+            <div class="vig"></div>
+            <div class="world" id="outerW"></div>
+            <div id="innerMask">
+              <div class="bg"></div>
+              <div class="world" id="innerW"></div>
             </div>
+            <div id="ring"></div>
+            <div id="read"><i></i><span></span></div>
 
-            <!-- 02 problem -->
-            <div class="shot" data-shot="problem">
-              <p class="plabel" data-show="6.2">// where keys go today</p>
-              <div class="cards3">
-                <div class="pcard pop" data-a="6.45">
-                  <div class="pc-h"><span>// prompt</span><span>01</span></div>
-                  <canvas class="obj" data-obj="laptop"></canvas>
-                  <b>Agent prompt<i class="x" data-strike="9.3"></i></b>
-                  <span class="pc-s">AKIA…7Q2M pasted</span>
-                  <span class="stamp" data-show="9.45">leaked</span>
-                </div>
-                <div class="pcard pop" data-a="7.1">
-                  <div class="pc-h"><span>// .env</span><span>02</span></div>
-                  <canvas class="obj" data-obj="docs"></canvas>
-                  <b>.env file<i class="x" data-strike="9.8"></i></b>
-                  <span class="pc-s">committed, then cloned</span>
-                  <span class="stamp" data-show="9.95">leaked</span>
-                </div>
-                <div class="pcard pop" data-a="7.75">
-                  <div class="pc-h"><span>// chat</span><span>03</span></div>
-                  <canvas class="obj" data-obj="phone"></canvas>
-                  <b>Team chat<i class="x" data-strike="10.3"></i></b>
-                  <span class="pc-s">prod db password</span>
-                  <span class="stamp" data-show="10.45">leaked</span>
-                </div>
-              </div>
-              <p class="under">
-                <span class="kw" data-a="11.0" data-s="0.2"
-                  >Plain text. No approval. No trace.</span
-                >
-              </p>
-            </div>
-
-            <!-- 03 zvault -->
-            <div class="shot" data-shot="zvault">
-              <div class="zv-text">
-                <p class="lead">
-                  <span class="kw sw" data-a="13.3">Zvault</span>
-                  <span class="kw" data-a="13.55" data-s="0.1">turns it into</span>
+            <div class="caps">
+              <div class="cap" data-a="0" data-b="1.4">
+                <div class="chap fade" data-d="0"><b>Zvault</b> · zero-knowledge secrets</div>
+                <h1 class="ws">Everything we store looks like <em>this.</em></h1>
+                <p class="fade" data-d="1.3">
+                  Move the lens. Plaintext only exists where the keys are: on your device, and in
+                  the browser you share with.
                 </p>
-                <h2 class="big">
-                  <span class="kw" data-a="14.1" data-s="0.17">one approved</span><br /><em
-                    class="kw acc"
-                    data-a="14.75"
-                    >handoff.</em
-                  >
-                </h2>
-              </div>
-              <div class="term pop" data-a="13.15" id="term-film">
-                <div class="t-bar">
-                  <i></i><i></i><i></i><span class="ttl">claude-code · zsh</span
-                  ><span class="ok">zv · paired</span>
-                </div>
-                <div class="t-body">
-                  <div class="ln">
-                    <span class="pr">~/loadtest $ </span
-                    ><span
-                      data-type
-                      data-a="15.0"
-                      data-b="16.1"
-                      data-text="zv run --env AWS_KEY=zv://loadtest/staging/aws -- k6 run load.js"
-                    ></span>
-                  </div>
-                  <div class="ln" data-show="16.3">
-                    <span class="mu">scope </span>zv://loadtest/staging/*
-                    <span class="ok">✓</span>
-                  </div>
-                  <div class="ln" data-show="16.8">
-                    <span class="mu">approve </span>Touch ID on your Mac <span class="ok">✓</span>
-                  </div>
-                  <div class="ln" data-show="17.3">
-                    <span class="mu">running </span>k6 · 400 users
-                  </div>
-                  <div class="stats" data-show="17.6">
-                    <div>
-                      <b data-count data-a="17.7" data-b="19.0" data-to="2400">0</b
-                      ><span>req/s</span>
-                    </div>
-                    <div><b data-show="18.6">182 ms</b><span>p95</span></div>
-                    <div><b data-show="18.8">0.00%</b><span>errors</span></div>
-                    <div class="bars" id="bars"></div>
-                  </div>
-                  <div class="ln" data-show="19.5">
-                    <span class="ok">✓ done · the key stayed in the command · output masked</span>
-                  </div>
+                <pre
+                  class="code fade"
+                  data-d="1.6"
+                ><span class="c">// what the Zvault server holds</span>
+item.prod_db  → <span class="k">9f2c41…a71e</span>  <span class="c">ciphertext</span>
+master_pw     → <span class="x">never sent</span></pre>
+                <div class="row fade" data-d="1.8">
+                  <a class="pill" href="#waitlist">Join the waitlist</a
+                  ><span class="ghost mono">scroll ↓</span>
                 </div>
               </div>
-              <div class="keycard pop" data-a="16.55" id="keycard">
-                <canvas class="obj" data-obj="key"></canvas>
-                <b>AWS · staging</b>
-                <span>approved on your Mac</span>
-                <span class="seal-tag">asks every time</span>
-              </div>
-            </div>
-
-            <!-- 04 handled -->
-            <div class="shot" data-shot="handled">
-              <div class="bento ghosts" aria-hidden="true">
-                <div class="a-share"></div>
-                <div class="a-mascot"></div>
-                <div class="a-phone"></div>
-                <div class="a-search"></div>
-                <div class="a-server"></div>
-              </div>
-              <div class="bento" id="bento">
-                <div class="cell a-share pop" data-a="22.25">
-                  <div class="ch"><span>// share</span><span>01</span></div>
-                  <div class="who">
-                    <span class="av pr">PR</span><span class="ar"></span><span class="av">You</span
-                    ><small>Priya → you</small>
-                  </div>
-                  <div class="item">
-                    <canvas class="obj" data-obj="db"></canvas>
-                    <div><b>Postgres · staging</b><span>encrypted on Priya’s Mac</span></div>
-                  </div>
-                  <p class="tiny">one-time code from your email</p>
-                  <div class="code" data-code="482913" data-a="23.0" data-b="24.1">
-                    <i></i><i></i><i></i><i></i><i></i><i></i>
-                  </div>
-                  <div class="okrow" data-show="24.4">
-                    <span class="tick">✓</span>Opened in your browser
-                  </div>
-                  <div class="frag" data-show="24.8">
-                    <span class="mono">…/share/f3a9<b>#k=••••••••</b></span
-                    ><em>1 view · gone</em>
-                  </div>
-                  <div class="mrow" data-show="24.8">
-                    The key lives after the #. Our server never sees it.
-                  </div>
-                </div>
-                <div class="cell a-mascot pop" data-a="22.55" id="mcell">
-                  <div class="ch">
-                    <span><i class="dot"></i>// on air</span><span>02</span>
-                  </div>
-                </div>
-                <div class="cell a-phone pop" data-a="22.9">
-                  <div class="ch"><span>// android</span><span>03</span></div>
-                  <div class="mini-phone">
-                    <img src="/img/android/items.webp" alt="" width="412" height="892" />
-                  </div>
-                  <div class="okrow sm" data-show="24.2">
-                    <span class="tick">✓</span>Paired with a QR code
-                  </div>
-                </div>
-                <div class="cell a-search pop" data-a="23.35">
-                  <div class="ch"><span>// search</span><span>04</span></div>
-                  <div class="sbox">
-                    <svg viewBox="0 0 14 14" aria-hidden="true">
-                      <circle
-                        cx="6"
-                        cy="6"
-                        r="4.3"
-                        fill="none"
-                        stroke="#8A93AD"
-                        stroke-width="1.6"
-                      />
-                      <path
-                        d="M9.3 9.3 12.5 12.5"
-                        stroke="#8A93AD"
-                        stroke-width="1.6"
-                        stroke-linecap="round"
-                      /></svg
-                    ><span data-type data-a="23.8" data-b="24.4" data-text="stripe"></span>
-                  </div>
-                  <div class="res" data-show="24.5">
-                    <div data-on="24.95">
-                      <span class="ic">S</span
-                      ><span><mark>Stripe</mark> secret key<small>Payments API · Dev</small></span>
-                    </div>
-                    <div>
-                      <span class="ic ic2">S</span
-                      ><span><mark>Stripe</mark> webhook<small>Payments API · Dev</small></span>
-                    </div>
-                    <div>
-                      <span class="ic ic3">S</span
-                      ><span><mark>Stripe</mark><small>billing login</small></span>
-                    </div>
-                  </div>
-                  <div class="toast pop" data-a="25.3"><span class="tick">✓</span>Copied</div>
-                </div>
-                <div class="cell a-server pop" data-a="24.5">
-                  <div class="ch"><span>// server</span></div>
-                  <strong>Only ciphertext on the server.</strong>
-                  <div class="chips">
-                    <span class="chip pop" data-a="25.0"
-                      ><span class="tick">✓</span>XChaCha20-Poly1305</span
-                    >
-                    <span class="chip pop" data-a="25.25"><span class="tick">✓</span>Argon2id</span>
-                    <span class="chip pop" data-a="25.5"
-                      ><span class="tick">✓</span>SRP sign-in</span
-                    >
-                  </div>
-                </div>
-              </div>
-              <div class="banner" id="banner" aria-hidden="true">
-                <div class="band"><em>Sealed.</em></div>
-              </div>
-            </div>
-
-            <!-- 05 flow -->
-            <div class="shot" data-shot="flow">
-              <div class="iris" id="iris"></div>
-              <div class="flow-text">
-                <h2 class="big">
-                  <span class="kw" data-a="29.75" data-s="0.17">Your agents work.</span>
-                </h2>
-                <h2 class="big g">
-                  <span class="kw" data-a="30.9" data-s="0.17">Your keys stay</span>
-                  <em class="kw acc" id="yours" data-a="31.65">yours.</em>
-                </h2>
-              </div>
-            </div>
-
-            <!-- end card -->
-            <div class="shot" data-shot="end">
-              <div class="end">
-                <h2 class="wordmark" id="wordmark">Zvault</h2>
-                <p class="tag" data-show="35.2">
-                  The vault for people and the <em>agents</em> they work with.
+              <div class="cap" data-a="1.4" data-b="3.1">
+                <div class="chap fade" data-d="0"><b>01</b> · Encrypt</div>
+                <h2 class="ws">Sealed on <em>your device.</em></h2>
+                <p class="fade" data-d=".9">
+                  Priya shares the prod password. Zvault seals it on her Mac with a fresh random
+                  key.
                 </p>
-                <div class="end-cta live" data-show="35.7">
-                  <a class="pill" href="#waitlist">Join the waitlist</a>
-                  <a
-                    class="lnk"
-                    href="https://github.com/bhagyesh-r-zymr/Zvault/releases/latest/download/zvault-android.apk"
-                    >Get the Android app ›</a
-                  >
-                </div>
-                <p class="tinyrow" data-show="36.2">Mac · Android · zv CLI</p>
+                <pre class="code fade" data-d="1.2">key = <span class="k">random(32 bytes)</span>
+ct  = xchacha20poly1305(key, item)
+upload(ct)   <span class="c">// the key stays here</span></pre>
+              </div>
+              <div class="cap" data-a="3.1" data-b="5.25">
+                <div class="chap fade" data-d="0"><b>02</b> · Store</div>
+                <h2 class="ws">Even <em>we</em> can't see through.</h2>
+                <p class="fade" data-d="1.1">
+                  The server keeps ciphertext, a view counter and an expiry. No key, so no
+                  plaintext.
+                </p>
+                <pre class="code fade" data-d="1.4">stored.ct       = 412 bytes
+stored.views    = 1
+stored.key      = <span class="x">— (not ours to hold)</span></pre>
+              </div>
+              <div class="cap" data-a="5.25" data-b="7.05">
+                <div class="chap fade" data-d="0"><b>03</b> · Share</div>
+                <h2 class="ws">The key stays after the <em>#</em></h2>
+                <p class="fade" data-d="1.3">
+                  Browsers never send the URL fragment in a request. Our logs only see the part
+                  before it.
+                </p>
+                <pre
+                  class="code fade"
+                  data-d="1.6"
+                >location.hash  <span class="c">// "</span><span class="k">#k3v9…id.Xq7…key</span><span class="c">"</span>
+<span class="c">// read by the page, never sent over HTTP</span></pre>
+              </div>
+              <div class="cap" data-a="7.05" data-b="9.4">
+                <div class="chap fade" data-d="0"><b>04</b> · Verify</div>
+                <h2 class="ws">A code only <em>they</em> receive.</h2>
+                <p class="fade" data-d="1.1">
+                  Six digits to sam@acme.dev, valid 10 minutes. Then his browser decrypts it
+                  locally.
+                </p>
+                <pre
+                  class="code fade"
+                  data-d="1.4"
+                >verify(<span class="k">sam@acme.dev</span>, 482917)  <span class="g">✓</span>
+plain = open(key_from_hash, ct)  <span class="c">// here</span></pre>
+              </div>
+              <div class="cap" data-a="9.4" data-b="99">
+                <div class="chap fade" data-d="0"><b>05</b> · Expire</div>
+                <h2 class="ws">One view. Then <em>nothing.</em></h2>
+                <p class="fade" data-d=".9">
+                  The link is spent. The server never saw a thing, and now there's nothing left to
+                  see.
+                </p>
+                <pre
+                  class="code fade"
+                  data-d="1.2"
+                >views_left = 0   <span class="c">// link expired</span>
+server.saw  = <span class="k">ciphertext only</span></pre>
               </div>
             </div>
+            <a class="skip" href="#mac">Skip to the Mac app ↓</a>
+            <div class="rail" id="rail">
+              <span>Mac<i></i></span><span>Server<i></i></span><span>Link<i></i></span
+              ><span>Browser<i></i></span>
+            </div>
           </div>
-          <div class="grain" aria-hidden="true"></div>
-          <div class="chrome" aria-hidden="true">
-            <span id="lbl">// 01 — hook</span><span>ZVAULT <b id="tc">00:00:00:00</b></span>
+        </section>
+
+        <section id="bp">
+          <div class="sticky bpStage" id="bpStage">
+            <div class="bpHead">
+              <div class="chap"><b>06</b> · Blueprint</div>
+              <h2 class="ws" id="bpH">Only ciphertext stays <em>lit.</em></h2>
+              <div class="bpCap">
+                <span class="tagp">SERVER VIEW</span
+                ><span class="q">What does our server actually hold?</span
+                ><span class="a" id="bpA">Ciphertext. Nothing it can read.</span>
+              </div>
+            </div>
+            <div class="bpBoard" id="bpBoard">
+              <div class="bpL bpReal" id="bpReal"></div>
+              <div class="bpL bpBlue" id="bpBlue"><div class="bpAnn" id="bpAnn"></div></div>
+              <div class="scan" id="scan"></div>
+            </div>
+            <div class="bpMode mono" id="bpMode">view · product</div>
           </div>
-          <div class="hint" aria-hidden="true">Scroll to play<i></i></div>
-          <a class="skip" href="#mac">Skip the film ↓</a>
-          <div class="scrub" id="scrub" aria-hidden="true">
-            <div class="tr"><div class="fi" id="fi"></div></div>
-          </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
       <!-- Mac -->
       <section class="sec" id="mac" aria-labelledby="h-mac">

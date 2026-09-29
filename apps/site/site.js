@@ -1,8 +1,8 @@
-// The sections after the film: reveals, the Mac screen tabs, the terminal and the waitlist.
-// The page reads fine without any of this. film.js runs the launch film at the top.
+// The sections after the X-ray story: reveals, the Mac screen tabs, the terminal and the waitlist.
+// The page reads fine without any of this. xray.js runs the story at the top.
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-// Headings reveal word by word, like the film's titles.
+// Headings reveal word by word, like the story's titles.
 document.querySelectorAll('.words').forEach((h) => {
   let i = 0;
   for (const child of [...h.childNodes]) {

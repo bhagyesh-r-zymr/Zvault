@@ -32,7 +32,7 @@ export class SesMailer extends Mailer {
     );
   }
 
-  isVerified(email: string): Promise<boolean> {
+  override isVerified(email: string): Promise<boolean> {
     return isSesVerified(email);
   }
 }

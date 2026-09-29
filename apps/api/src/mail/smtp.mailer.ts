@@ -26,7 +26,7 @@ export class SmtpMailer extends Mailer {
     await this.transport.sendMail({ from: this.env.MAIL_FROM, ...message });
   }
 
-  isVerified(email: string): Promise<boolean> {
+  override isVerified(email: string): Promise<boolean> {
     return isSesVerified(email);
   }
 }

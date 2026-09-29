@@ -38,6 +38,8 @@ pub enum VaultError {
     OneTimePassword(#[from] zvault_otp::OtpError),
     #[error("{0}")]
     Passkey(#[from] zvault_passkeys::PasskeyError),
+    #[error("{0}")]
+    SshKey(#[from] zvault_ssh::SshKeyError),
 }
 
 impl Serialize for VaultError {
@@ -133,6 +135,60 @@ pub struct ItemFields {
     /// [`ItemPlaintext::passkey`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub passkey: Option<PasskeyFields>,
+    /// The item's SSH key, without its private key, which stays in Rust.
+    /// Taken out before sealing like the passkey: the stored key lives in
+    /// [`ItemPlaintext::ssh_key`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ssh_key: Option<SshKeyFields>,
+}
+
+/// An SSH key as the UI sees and edits it.
+///
+/// To create an Ed25519 key, send only `comment`; to import one, also send
+/// `privateKey` (an OpenSSH private key) and its `passphrase` if it has one.
+/// An existing key is kept when its `fingerprint` comes back unchanged; only
+/// its comment can be edited. The private key and passphrase are accepted but
+/// never returned.
+#[derive(Default, Clone, PartialEq, Eq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+#[serde(rename_all = "camelCase")]
+pub struct SshKeyFields {
+    #[serde(default)]
+    pub comment: String,
+    /// `SHA256:…`. Output only, and how an unchanged key is recognized.
+    #[serde(default)]
+    pub fingerprint: String,
+    /// One `authorized_keys` line. Output only.
+    #[serde(default)]
+    pub public_key: String,
+    /// Such as `Ed25519` or `RSA 4096`. Output only.
+    #[serde(default)]
+    pub key_type: String,
+    #[serde(default)]
+    #[zeroize(skip)]
+    pub created_at: i64,
+    /// Import only. Never serialized.
+    #[serde(default, skip_serializing)]
+    pub private_key: String,
+    /// Import only. Never serialized or stored.
+    #[serde(default, skip_serializing)]
+    pub passphrase: String,
+}
+
+impl TryFrom<&zvault_ssh::SshKey> for SshKeyFields {
+    type Error = VaultError;
+
+    fn try_from(k: &zvault_ssh::SshKey) -> Result<Self> {
+        let public = k.public()?;
+        Ok(Self {
+            comment: public.comment,
+            fingerprint: public.fingerprint,
+            public_key: public.public_key,
+            key_type: public.key_type,
+            created_at: k.created_at,
+            private_key: String::new(),
+            passphrase: String::new(),
+        })
+    }
 }
 
 /// A passkey as the UI sees and edits it.
@@ -200,6 +256,8 @@ pub struct ItemSummary {
     pub has_totp: bool,
     /// Whether the item holds a passkey.
     pub has_passkey: bool,
+    /// Whether the item holds an SSH key.
+    pub has_ssh_key: bool,
 }
 
 impl From<&ItemFields> for ItemSummary {
@@ -211,6 +269,7 @@ impl From<&ItemFields> for ItemSummary {
             urls: f.urls.clone(),
             has_totp: !f.totp.is_empty(),
             has_passkey: f.passkey.is_some(),
+            has_ssh_key: f.ssh_key.is_some(),
         }
     }
 }
@@ -218,7 +277,9 @@ impl From<&ItemFields> for ItemSummary {
 /// Plaintext layout inside `encryptedData`, versioned for later item kinds.
 ///
 /// A passkey is a field of a login item, as in 1Password, so apps that
-/// predate passkeys still open these items.
+/// predate passkeys still open these items. An SSH key is added the same way:
+/// the app shows an item holding one as an SSH key, and older apps still open
+/// it as a login with its title and notes.
 #[derive(Serialize, Deserialize)]
 struct ItemPlaintext {
     v: u32,
@@ -227,6 +288,8 @@ struct ItemPlaintext {
     fields: ItemFields,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     passkey: Option<zvault_passkeys::Passkey>,
+    #[serde(rename = "sshKey", default, skip_serializing_if = "Option::is_none")]
+    ssh_key: Option<zvault_ssh::SshKey>,
 }
 
 #[derive(Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
@@ -344,16 +407,17 @@ impl Keyring {
         let vault_id = canonical_id(vault_id)?;
         let keys = self.keys();
         let vault_key = vault_key(&keys, &vault_id)?;
-        let (item_id, item_key, stored_passkey) = match existing {
+        let (item_id, item_key, stored_passkey, stored_ssh_key) = match existing {
             Some(item) => {
                 let id = canonical_id(&item.id)?;
                 let key = unwrap_item_key(vault_key, &vault_id, &id, item)?;
                 let old = open_plaintext(&key, &vault_id, &id, item)?;
-                (id, key, old.passkey.clone())
+                (id, key, old.passkey.clone(), old.ssh_key.clone())
             }
             None => (
                 Uuid::new_v4().to_string(),
                 SymmetricKey::generate().map_err(|_| VaultError::Encrypt)?,
+                None,
                 None,
             ),
         };
@@ -361,11 +425,13 @@ impl Keyring {
             .map_err(|_| VaultError::Encrypt)?;
         let mut fields = normalize(fields)?;
         let passkey = resolve_passkey(fields.passkey.take(), stored_passkey)?;
+        let ssh_key = resolve_ssh_key(fields.ssh_key.take(), stored_ssh_key)?;
         let plaintext = ItemPlaintext {
             v: 1,
             kind: ITEM_KIND_LOGIN.into(),
             fields,
             passkey,
+            ssh_key,
         };
         let json = Zeroizing::new(serde_json::to_vec(&plaintext).map_err(|_| VaultError::Encrypt)?);
         let sealed = seal_padded(&item_key, &json, &aad::item_data(&vault_id, &item_id))
@@ -378,8 +444,18 @@ impl Keyring {
     }
 
     pub fn open_item(&self, vault_id: &str, item: &ItemCipher) -> Result<ItemFields> {
-        let (mut fields, passkey) = self.open_item_with_passkey(vault_id, item)?;
-        fields.passkey = passkey.as_ref().map(PasskeyFields::try_from).transpose()?;
+        let mut plaintext = self.open_item_plaintext(vault_id, item)?;
+        let mut fields = std::mem::take(&mut plaintext.fields);
+        fields.passkey = plaintext
+            .passkey
+            .as_ref()
+            .map(PasskeyFields::try_from)
+            .transpose()?;
+        fields.ssh_key = plaintext
+            .ssh_key
+            .as_ref()
+            .map(SshKeyFields::try_from)
+            .transpose()?;
         Ok(fields)
     }
 
@@ -390,15 +466,35 @@ impl Keyring {
         vault_id: &str,
         item: &ItemCipher,
     ) -> Result<(ItemFields, Option<zvault_passkeys::Passkey>)> {
+        let mut plaintext = self.open_item_plaintext(vault_id, item)?;
+        let passkey = plaintext.passkey.take();
+        let fields = std::mem::take(&mut plaintext.fields);
+        Ok((fields, passkey))
+    }
+
+    /// Opens an item's stored SSH key, private key included. For the SSH
+    /// agent only; never return it to the UI.
+    pub(crate) fn open_item_ssh_key(
+        &self,
+        vault_id: &str,
+        item: &ItemCipher,
+    ) -> Result<Option<(String, zvault_ssh::SshKey)>> {
+        let mut plaintext = self.open_item_plaintext(vault_id, item)?;
+        Ok(plaintext
+            .ssh_key
+            .take()
+            .map(|k| (std::mem::take(&mut plaintext.fields.title), k)))
+    }
+
+    fn open_item_plaintext(&self, vault_id: &str, item: &ItemCipher) -> Result<ItemPlaintext> {
         let vault_id = canonical_id(vault_id)?;
         let item_id = canonical_id(&item.id)?;
         let keys = self.keys();
         let item_key = unwrap_item_key(vault_key(&keys, &vault_id)?, &vault_id, &item_id, item)?;
         let mut plaintext = open_plaintext(&item_key, &vault_id, &item_id, item)?;
-        let passkey = plaintext.passkey.take();
-        let mut fields = std::mem::take(&mut plaintext.fields);
-        fields.passkey = None;
-        Ok((fields, passkey))
+        plaintext.fields.passkey = None;
+        plaintext.fields.ssh_key = None;
+        Ok(plaintext)
     }
 }
 
@@ -422,7 +518,40 @@ fn open_plaintext(
     if let Some(passkey) = &plaintext.passkey {
         passkey.validate().map_err(|_| VaultError::Decrypt)?;
     }
+    if let Some(ssh_key) = &plaintext.ssh_key {
+        ssh_key.validate().map_err(|_| VaultError::Decrypt)?;
+    }
     Ok(plaintext)
+}
+
+/// Works out the SSH key to store from what the UI sent and what the item
+/// already holds. See [`SshKeyFields`].
+fn resolve_ssh_key(
+    incoming: Option<SshKeyFields>,
+    stored: Option<zvault_ssh::SshKey>,
+) -> Result<Option<zvault_ssh::SshKey>> {
+    let Some(k) = incoming else {
+        return Ok(None);
+    };
+    let now = unix_now();
+    if !k.private_key.trim().is_empty() {
+        return Ok(Some(zvault_ssh::SshKey::import(
+            &k.private_key,
+            &k.passphrase,
+            &k.comment,
+            now,
+        )?));
+    }
+    if k.fingerprint.trim().is_empty() {
+        return Ok(Some(zvault_ssh::SshKey::generate(&k.comment, now)?));
+    }
+    let mut stored = stored
+        .filter(|s| s.public().is_ok_and(|p| p.fingerprint == k.fingerprint))
+        .ok_or(zvault_ssh::SshKeyError::InvalidPrivateKey)?;
+    if stored.public()?.comment != k.comment.trim() {
+        stored.set_comment(&k.comment)?;
+    }
+    Ok(Some(stored))
 }
 
 /// Works out the passkey to store from what the UI sent and what the item
@@ -704,6 +833,7 @@ mod tests {
             notes: "recovery codes in the safe".into(),
             totp: String::new(),
             passkey: None,
+            ssh_key: None,
         }
     }
 
@@ -758,6 +888,90 @@ mod tests {
         removed.passkey = None;
         let v3 = keyring.seal_item(&vault.id, Some(&v2), removed).unwrap();
         assert!(keyring.open_item(&vault.id, &v3).unwrap().passkey.is_none());
+    }
+
+    #[test]
+    fn creates_keeps_renames_and_removes_an_ssh_key() {
+        let keyring = unlocked();
+        let (vault, _) = keyring.create_vault("Personal").unwrap();
+        let mut fields = login();
+        let mut new_key = SshKeyFields::default();
+        new_key.comment = "GitHub".into();
+        fields.ssh_key = Some(new_key);
+        let item = keyring.seal_item(&vault.id, None, fields).unwrap();
+        let opened = keyring.open_item(&vault.id, &item).unwrap();
+        let key = opened.ssh_key.clone().unwrap();
+        assert_eq!(key.key_type, "Ed25519");
+        assert!(key.public_key.starts_with("ssh-ed25519 "));
+        assert!(key.fingerprint.starts_with("SHA256:"));
+        assert!(ItemSummary::from(&opened).has_ssh_key);
+        let to_ui = serde_json::to_string(&opened).unwrap();
+        assert!(!to_ui.contains("PRIVATE KEY"));
+        assert!(!to_ui.contains("privateKey"));
+        let wire = serde_json::to_string(&item).unwrap();
+        assert!(!wire.contains("ssh-ed25519"));
+
+        // Editing keeps the key; only the comment changes.
+        let mut edited = opened.clone();
+        edited.ssh_key.as_mut().unwrap().comment = "Deploy".into();
+        let v2 = keyring.seal_item(&vault.id, Some(&item), edited).unwrap();
+        let key2 = keyring
+            .open_item(&vault.id, &v2)
+            .unwrap()
+            .ssh_key
+            .clone()
+            .unwrap();
+        assert_eq!(key2.fingerprint, key.fingerprint);
+        assert_eq!(key2.comment, "Deploy");
+        let (title, stored) = keyring.open_item_ssh_key(&vault.id, &v2).unwrap().unwrap();
+        assert_eq!(title, "Example");
+        stored.sign(b"data", 0).unwrap();
+
+        // A key can't be claimed by fingerprint alone.
+        let mut forged = login();
+        forged.ssh_key = Some(key2.clone());
+        assert!(matches!(
+            keyring.seal_item(&vault.id, None, forged),
+            Err(VaultError::SshKey(_))
+        ));
+
+        let mut removed = keyring.open_item(&vault.id, &v2).unwrap();
+        removed.ssh_key = None;
+        let v3 = keyring.seal_item(&vault.id, Some(&v2), removed).unwrap();
+        assert!(keyring.open_item(&vault.id, &v3).unwrap().ssh_key.is_none());
+        assert!(keyring.open_item_ssh_key(&vault.id, &v3).unwrap().is_none());
+    }
+
+    #[test]
+    fn imports_an_ssh_key_and_stores_it_once() {
+        let keyring = unlocked();
+        let (vault, _) = keyring.create_vault("Personal").unwrap();
+        let source = zvault_ssh::SshKey::generate("laptop", 0).unwrap();
+        let mut fields = login();
+        let mut imported = SshKeyFields::default();
+        imported.private_key = source.private_key_openssh().to_string();
+        fields.ssh_key = Some(imported);
+        let item = keyring.seal_item(&vault.id, None, fields).unwrap();
+        let key = keyring
+            .open_item(&vault.id, &item)
+            .unwrap()
+            .ssh_key
+            .clone()
+            .unwrap();
+        assert_eq!(key.fingerprint, source.public().unwrap().fingerprint);
+        assert_eq!(key.comment, "laptop");
+
+        let plaintext = ItemPlaintext {
+            v: 1,
+            kind: ITEM_KIND_LOGIN.into(),
+            fields: login(),
+            passkey: None,
+            ssh_key: Some(source),
+        };
+        let json = serde_json::to_string(&plaintext).unwrap();
+        assert_eq!(json.matches("\"sshKey\"").count(), 1);
+        let back: ItemPlaintext = serde_json::from_str(&json).unwrap();
+        assert!(back.ssh_key.is_some());
     }
 
     #[test]
@@ -830,6 +1044,7 @@ mod tests {
             kind: ITEM_KIND_LOGIN.into(),
             fields: login(),
             passkey: Some(zvault_passkeys::Passkey::generate("example.com", "a", 0).unwrap()),
+            ssh_key: None,
         };
         let json = serde_json::to_string(&plaintext).unwrap();
         assert_eq!(json.matches("\"passkey\"").count(), 1);

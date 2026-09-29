@@ -12,6 +12,7 @@ export 'rust/api/vault.dart'
         ItemSummary,
         OneTimeCode,
         PasskeyDetail,
+        SshKeyDetail,
         TotpSetup,
         VaultSummary;
 

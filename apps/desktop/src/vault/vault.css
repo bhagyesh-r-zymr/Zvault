@@ -139,6 +139,13 @@
   max-width: 200px;
 }
 
+.ssh-public-key {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: all;
+}
+
 textarea.mono {
   font: 500 12px var(--mono);
 }

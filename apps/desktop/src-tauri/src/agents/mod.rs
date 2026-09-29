@@ -184,7 +184,7 @@ impl AgentHub {
     }
 }
 
-mod server;
+pub(crate) mod server;
 
 pub use server::start;
 

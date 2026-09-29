@@ -117,18 +117,27 @@ export function serveZv(
   const apply: ApplyChange = (change) => applyChange(sync, ready, change, secretSync);
 
   let vaultSync: VaultSync | null = null;
-  const openVault = async (): Promise<VaultSync> => {
+  /** `offlineOk`: use the last synced items when the server can't be reached. */
+  const openVault = async (offlineOk = false): Promise<VaultSync> => {
     if (!vault) throw new Error('The vault is not available in this window.');
     // Opening again after a lock puts the vault key back in the keyring.
-    const summary = await openDefaultVault(vault.api, vault.core);
+    let summary;
+    try {
+      summary = await openDefaultVault(vault.api, vault.core);
+    } catch (e) {
+      if (offlineOk && vaultSync) return vaultSync;
+      throw e;
+    }
     if (vaultSync?.vault.id !== summary.id)
       vaultSync = new VaultSync(vault.api, vault.core, summary);
-    await vaultSync.pull();
+    const pulled = vaultSync.pull();
+    await (offlineOk ? pulled.catch(() => undefined) : pulled);
     return vaultSync;
   };
 
   const items: HandleItem = async (op) => {
-    const v = await openVault();
+    // SSH keeps working offline with the keys already synced.
+    const v = await openVault(op.op === 'sshKeys');
     switch (op.op) {
       case 'list':
         return {
@@ -154,6 +163,14 @@ export function serveZv(
         await v.remove(item.id);
         return { message: `Deleted the item “${item.summary.title}”.` };
       }
+      case 'sshKeys':
+        return {
+          vaultId: v.vault.id,
+          sshKeys: v
+            .items()
+            .filter((i) => i.summary.hasSshKey)
+            .map((i) => v.cipher(i.id)),
+        };
     }
   };
 

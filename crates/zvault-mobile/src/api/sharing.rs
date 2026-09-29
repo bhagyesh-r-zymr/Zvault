@@ -332,6 +332,7 @@ mod tests {
             notes: String::new(),
             totp: "otpauth://totp/x?secret=JBSWY3DPEHPK3PXP".into(),
             passkey: None,
+            ssh_key: None,
         }
     }
 

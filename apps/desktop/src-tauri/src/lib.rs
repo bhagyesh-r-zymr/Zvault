@@ -21,6 +21,7 @@ mod remembered;
 mod secret_sync;
 mod session;
 mod sharing;
+mod ssh_agent;
 mod stay_unlocked;
 mod team;
 mod tokens;
@@ -63,6 +64,7 @@ pub fn run() {
         .manage(Keyring::default())
         .manage(autolock::AppState::new())
         .manage(agents::AgentHub::default())
+        .manage(ssh_agent::SshAgent::default())
         .manage(updater::PendingUpdate::default())
         .manage(pairing::PendingPairing::default())
         .manage(recovery::RecoveryState::default())
@@ -70,6 +72,7 @@ pub fn run() {
             commands::load_settings(app.handle());
             autolock::start(app.handle());
             agents::start(app.handle());
+            ssh_agent::start(app.handle());
             browser_host::register();
             Ok(())
         })
@@ -168,6 +171,8 @@ pub fn run() {
             agents::agent_list_respond,
             agents::agent_write_respond,
             agents::agent_ui_respond,
+            ssh_agent::ssh_agent_status,
+            ssh_agent::ssh_agent_set_enabled,
             cli_install::cli_status,
             cli_install::cli_install,
             updater::update_check,

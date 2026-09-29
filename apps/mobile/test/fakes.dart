@@ -53,6 +53,7 @@ class FakeCore extends Core {
       url: null,
       hasTotp: d.hasTotp,
       hasPasskey: d.passkey != null,
+      hasSshKey: d.sshKey != null,
     );
   }
 
@@ -173,6 +174,7 @@ VaultItem item(
   String username, {
   bool totp = false,
   bool passkey = false,
+  bool sshKey = false,
 }) => VaultItem(
   vaultId: 'v1',
   vaultName: 'Personal',
@@ -184,6 +186,7 @@ VaultItem item(
     url: null,
     hasTotp: totp,
     hasPasskey: passkey,
+    hasSshKey: sshKey,
   ),
 );
 

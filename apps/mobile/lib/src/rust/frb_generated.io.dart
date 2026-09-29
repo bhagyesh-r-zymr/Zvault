@@ -43,6 +43,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   SecretShare dco_decode_box_autoadd_secret_share(dynamic raw);
 
   @protected
+  SshKeyDetail dco_decode_box_autoadd_ssh_key_detail(dynamic raw);
+
+  @protected
   EnvironmentView dco_decode_environment_view(dynamic raw);
 
   @protected
@@ -79,6 +82,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PasskeyDetail? dco_decode_opt_box_autoadd_passkey_detail(dynamic raw);
 
   @protected
+  SshKeyDetail? dco_decode_opt_box_autoadd_ssh_key_detail(dynamic raw);
+
+  @protected
   PairedAccount dco_decode_paired_account(dynamic raw);
 
   @protected
@@ -92,6 +98,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   SharingIdentity dco_decode_sharing_identity(dynamic raw);
+
+  @protected
+  SshKeyDetail dco_decode_ssh_key_detail(dynamic raw);
 
   @protected
   TotpSetup dco_decode_totp_setup(dynamic raw);
@@ -129,6 +138,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   SecretShare sse_decode_box_autoadd_secret_share(SseDeserializer deserializer);
+
+  @protected
+  SshKeyDetail sse_decode_box_autoadd_ssh_key_detail(
+    SseDeserializer deserializer,
+  );
 
   @protected
   EnvironmentView sse_decode_environment_view(SseDeserializer deserializer);
@@ -171,6 +185,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  SshKeyDetail? sse_decode_opt_box_autoadd_ssh_key_detail(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   PairedAccount sse_decode_paired_account(SseDeserializer deserializer);
 
   @protected
@@ -184,6 +203,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   SharingIdentity sse_decode_sharing_identity(SseDeserializer deserializer);
+
+  @protected
+  SshKeyDetail sse_decode_ssh_key_detail(SseDeserializer deserializer);
 
   @protected
   TotpSetup sse_decode_totp_setup(SseDeserializer deserializer);
@@ -230,6 +252,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_secret_share(
     SecretShare self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ssh_key_detail(
+    SshKeyDetail self,
     SseSerializer serializer,
   );
 
@@ -282,6 +310,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_ssh_key_detail(
+    SshKeyDetail? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_paired_account(PairedAccount self, SseSerializer serializer);
 
   @protected
@@ -298,6 +332,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     SharingIdentity self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_ssh_key_detail(SshKeyDetail self, SseSerializer serializer);
 
   @protected
   void sse_encode_totp_setup(TotpSetup self, SseSerializer serializer);

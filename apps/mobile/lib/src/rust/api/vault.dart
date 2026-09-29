@@ -155,6 +155,7 @@ class ItemDetail {
   final String notes;
   final bool hasTotp;
   final PasskeyDetail? passkey;
+  final SshKeyDetail? sshKey;
 
   const ItemDetail({
     required this.title,
@@ -164,6 +165,7 @@ class ItemDetail {
     required this.notes,
     required this.hasTotp,
     this.passkey,
+    this.sshKey,
   });
 
   @override
@@ -174,7 +176,8 @@ class ItemDetail {
       urls.hashCode ^
       notes.hashCode ^
       hasTotp.hashCode ^
-      passkey.hashCode;
+      passkey.hashCode ^
+      sshKey.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -187,7 +190,8 @@ class ItemDetail {
           urls == other.urls &&
           notes == other.notes &&
           hasTotp == other.hasTotp &&
-          passkey == other.passkey;
+          passkey == other.passkey &&
+          sshKey == other.sshKey;
 }
 
 /// What the item list shows. The password stays in Rust.
@@ -197,6 +201,7 @@ class ItemSummary {
   final String? url;
   final bool hasTotp;
   final bool hasPasskey;
+  final bool hasSshKey;
 
   const ItemSummary({
     required this.title,
@@ -204,6 +209,7 @@ class ItemSummary {
     this.url,
     required this.hasTotp,
     required this.hasPasskey,
+    required this.hasSshKey,
   });
 
   @override
@@ -212,7 +218,8 @@ class ItemSummary {
       username.hashCode ^
       url.hashCode ^
       hasTotp.hashCode ^
-      hasPasskey.hashCode;
+      hasPasskey.hashCode ^
+      hasSshKey.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -223,7 +230,8 @@ class ItemSummary {
           username == other.username &&
           url == other.url &&
           hasTotp == other.hasTotp &&
-          hasPasskey == other.hasPasskey;
+          hasPasskey == other.hasPasskey &&
+          hasSshKey == other.hasSshKey;
 }
 
 class OneTimeCode {
@@ -290,6 +298,50 @@ class PasskeyDetail {
           userName == other.userName &&
           credentialId == other.credentialId &&
           publicKey == other.publicKey &&
+          createdAt == other.createdAt;
+}
+
+/// An item's SSH key without its private key, which stays in Rust. The
+/// phone only shows it; signing happens in the Mac app's SSH agent.
+class SshKeyDetail {
+  /// One `authorized_keys` line: `ssh-ed25519 AAAA… comment`.
+  final String publicKey;
+
+  /// `SHA256:…`.
+  final String fingerprint;
+
+  /// Such as `Ed25519` or `RSA 4096`.
+  final String keyType;
+  final String comment;
+
+  /// Unix seconds.
+  final PlatformInt64 createdAt;
+
+  const SshKeyDetail({
+    required this.publicKey,
+    required this.fingerprint,
+    required this.keyType,
+    required this.comment,
+    required this.createdAt,
+  });
+
+  @override
+  int get hashCode =>
+      publicKey.hashCode ^
+      fingerprint.hashCode ^
+      keyType.hashCode ^
+      comment.hashCode ^
+      createdAt.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SshKeyDetail &&
+          runtimeType == other.runtimeType &&
+          publicKey == other.publicKey &&
+          fingerprint == other.fingerprint &&
+          keyType == other.keyType &&
+          comment == other.comment &&
           createdAt == other.createdAt;
 }
 

@@ -206,6 +206,16 @@ class _ItemRow extends StatelessWidget {
                     color: c.accent,
                   ),
                 ),
+              if (s.hasSshKey)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Icon(
+                    Icons.terminal_rounded,
+                    key: Key('ssh-key-${item.id}'),
+                    size: 18,
+                    color: c.accent,
+                  ),
+                ),
               if (s.hasTotp)
                 Padding(
                   padding: const EdgeInsets.only(left: 8),

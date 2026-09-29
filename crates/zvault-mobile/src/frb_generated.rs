@@ -1079,6 +1079,7 @@ impl SseDecode for crate::api::vault::ItemDetail {
         let mut var_notes = <String>::sse_decode(deserializer);
         let mut var_hasTotp = <bool>::sse_decode(deserializer);
         let mut var_passkey = <Option<crate::api::vault::PasskeyDetail>>::sse_decode(deserializer);
+        let mut var_sshKey = <Option<crate::api::vault::SshKeyDetail>>::sse_decode(deserializer);
         return crate::api::vault::ItemDetail {
             title: var_title,
             username: var_username,
@@ -1087,6 +1088,7 @@ impl SseDecode for crate::api::vault::ItemDetail {
             notes: var_notes,
             has_totp: var_hasTotp,
             passkey: var_passkey,
+            ssh_key: var_sshKey,
         };
     }
 }
@@ -1099,12 +1101,14 @@ impl SseDecode for crate::api::vault::ItemSummary {
         let mut var_url = <Option<String>>::sse_decode(deserializer);
         let mut var_hasTotp = <bool>::sse_decode(deserializer);
         let mut var_hasPasskey = <bool>::sse_decode(deserializer);
+        let mut var_hasSshKey = <bool>::sse_decode(deserializer);
         return crate::api::vault::ItemSummary {
             title: var_title,
             username: var_username,
             url: var_url,
             has_totp: var_hasTotp,
             has_passkey: var_hasPasskey,
+            has_ssh_key: var_hasSshKey,
         };
     }
 }
@@ -1212,6 +1216,17 @@ impl SseDecode for Option<crate::api::vault::PasskeyDetail> {
     }
 }
 
+impl SseDecode for Option<crate::api::vault::SshKeyDetail> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::vault::SshKeyDetail>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for crate::api::pairing::PairedAccount {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1294,6 +1309,24 @@ impl SseDecode for crate::api::sharing::SharingIdentity {
         return crate::api::sharing::SharingIdentity {
             public_key: var_publicKey,
             fingerprint: var_fingerprint,
+        };
+    }
+}
+
+impl SseDecode for crate::api::vault::SshKeyDetail {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_publicKey = <String>::sse_decode(deserializer);
+        let mut var_fingerprint = <String>::sse_decode(deserializer);
+        let mut var_keyType = <String>::sse_decode(deserializer);
+        let mut var_comment = <String>::sse_decode(deserializer);
+        let mut var_createdAt = <i64>::sse_decode(deserializer);
+        return crate::api::vault::SshKeyDetail {
+            public_key: var_publicKey,
+            fingerprint: var_fingerprint,
+            key_type: var_keyType,
+            comment: var_comment,
+            created_at: var_createdAt,
         };
     }
 }
@@ -1444,6 +1477,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::vault::ItemDetail {
             self.notes.into_into_dart().into_dart(),
             self.has_totp.into_into_dart().into_dart(),
             self.passkey.into_into_dart().into_dart(),
+            self.ssh_key.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1465,6 +1499,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::vault::ItemSummary {
             self.url.into_into_dart().into_dart(),
             self.has_totp.into_into_dart().into_dart(),
             self.has_passkey.into_into_dart().into_dart(),
+            self.has_ssh_key.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1667,6 +1702,30 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::sharing::SharingIdentity>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::vault::SshKeyDetail {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.public_key.into_into_dart().into_dart(),
+            self.fingerprint.into_into_dart().into_dart(),
+            self.key_type.into_into_dart().into_dart(),
+            self.comment.into_into_dart().into_dart(),
+            self.created_at.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::vault::SshKeyDetail
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::vault::SshKeyDetail>
+    for crate::api::vault::SshKeyDetail
+{
+    fn into_into_dart(self) -> crate::api::vault::SshKeyDetail {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::vault::TotpSetup {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -1753,6 +1812,7 @@ impl SseEncode for crate::api::vault::ItemDetail {
         <String>::sse_encode(self.notes, serializer);
         <bool>::sse_encode(self.has_totp, serializer);
         <Option<crate::api::vault::PasskeyDetail>>::sse_encode(self.passkey, serializer);
+        <Option<crate::api::vault::SshKeyDetail>>::sse_encode(self.ssh_key, serializer);
     }
 }
 
@@ -1764,6 +1824,7 @@ impl SseEncode for crate::api::vault::ItemSummary {
         <Option<String>>::sse_encode(self.url, serializer);
         <bool>::sse_encode(self.has_totp, serializer);
         <bool>::sse_encode(self.has_passkey, serializer);
+        <bool>::sse_encode(self.has_ssh_key, serializer);
     }
 }
 
@@ -1846,6 +1907,16 @@ impl SseEncode for Option<crate::api::vault::PasskeyDetail> {
     }
 }
 
+impl SseEncode for Option<crate::api::vault::SshKeyDetail> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::vault::SshKeyDetail>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for crate::api::pairing::PairedAccount {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1896,6 +1967,17 @@ impl SseEncode for crate::api::sharing::SharingIdentity {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.public_key, serializer);
         <String>::sse_encode(self.fingerprint, serializer);
+    }
+}
+
+impl SseEncode for crate::api::vault::SshKeyDetail {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.public_key, serializer);
+        <String>::sse_encode(self.fingerprint, serializer);
+        <String>::sse_encode(self.key_type, serializer);
+        <String>::sse_encode(self.comment, serializer);
+        <i64>::sse_encode(self.created_at, serializer);
     }
 }
 

@@ -155,6 +155,10 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
               const SizedBox(height: 16),
             ],
             if (d == null && _error == null) const Center(child: CircularProgressIndicator()),
+            if (d?.sshKey case final sshKey?) ...[
+              _SshKeyPanel(sshKey: sshKey, onCopy: _copy),
+              const SizedBox(height: 12),
+            ],
             if (d?.passkey case final passkey?) ...[
               _PasskeyPanel(
                 passkey: passkey,
@@ -449,6 +453,94 @@ class _PasskeyPanelState extends State<_PasskeyPanel> {
             label: 'credential id',
             onCopy: () => widget.onCopy('Credential ID', p.credentialId),
             child: Text(_short(p.credentialId), style: mono),
+          ),
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+            child: Row(
+              children: [
+                Icon(Icons.lock_outline_rounded, size: 16, color: c.muted),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Private key encrypted in this item',
+                    style: TextStyle(fontSize: 13, color: c.muted),
+                  ),
+                ),
+                Text(
+                  'Created ${created.day}/${created.month}/${created.year}',
+                  style: TextStyle(fontSize: 12, color: c.muted),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// An item's SSH key, view only. Only public details reach Dart; signing
+/// happens in the Mac app's SSH agent.
+class _SshKeyPanel extends StatelessWidget {
+  const _SshKeyPanel({required this.sshKey, required this.onCopy});
+
+  final SshKeyDetail sshKey;
+  final Future<void> Function(String label, String value) onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.zv;
+    final k = sshKey;
+    final created = DateTime.fromMillisecondsSinceEpoch(k.createdAt * 1000);
+    final mono = Zv.monoStyle.copyWith(fontSize: 13, fontWeight: FontWeight.w500, color: c.ink);
+    return Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: c.accentSoft,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.terminal_rounded, size: 20, color: c.accent),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'SSH key · ${k.keyType}',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: c.ink),
+                      ),
+                      Text(
+                        'Signs for ssh and git from the Zvault Mac app',
+                        style: TextStyle(fontSize: 12.5, color: c.muted),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(),
+          _Field(
+            label: 'public key',
+            onCopy: () => onCopy('Public key', k.publicKey),
+            child: Text(k.publicKey, key: const Key('ssh-public-key'), style: mono),
+          ),
+          const Divider(),
+          _Field(
+            label: 'fingerprint',
+            onCopy: () => onCopy('Fingerprint', k.fingerprint),
+            child: Text(k.fingerprint, style: mono),
           ),
           const Divider(),
           Padding(

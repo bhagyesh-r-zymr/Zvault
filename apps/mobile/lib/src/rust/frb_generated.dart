@@ -1104,6 +1104,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SshKeyDetail dco_decode_box_autoadd_ssh_key_detail(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_ssh_key_detail(raw);
+  }
+
+  @protected
   EnvironmentView dco_decode_environment_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -1125,8 +1131,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ItemDetail dco_decode_item_detail(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return ItemDetail(
       title: dco_decode_String(arr[0]),
       username: dco_decode_String(arr[1]),
@@ -1135,6 +1141,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       notes: dco_decode_String(arr[4]),
       hasTotp: dco_decode_bool(arr[5]),
       passkey: dco_decode_opt_box_autoadd_passkey_detail(arr[6]),
+      sshKey: dco_decode_opt_box_autoadd_ssh_key_detail(arr[7]),
     );
   }
 
@@ -1142,14 +1149,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ItemSummary dco_decode_item_summary(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return ItemSummary(
       title: dco_decode_String(arr[0]),
       username: dco_decode_String(arr[1]),
       url: dco_decode_opt_String(arr[2]),
       hasTotp: dco_decode_bool(arr[3]),
       hasPasskey: dco_decode_bool(arr[4]),
+      hasSshKey: dco_decode_bool(arr[5]),
     );
   }
 
@@ -1225,6 +1233,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SshKeyDetail? dco_decode_opt_box_autoadd_ssh_key_detail(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_ssh_key_detail(raw);
+  }
+
+  @protected
   PairedAccount dco_decode_paired_account(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -1294,6 +1308,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return SharingIdentity(
       publicKey: dco_decode_String(arr[0]),
       fingerprint: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
+  SshKeyDetail dco_decode_ssh_key_detail(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return SshKeyDetail(
+      publicKey: dco_decode_String(arr[0]),
+      fingerprint: dco_decode_String(arr[1]),
+      keyType: dco_decode_String(arr[2]),
+      comment: dco_decode_String(arr[3]),
+      createdAt: dco_decode_i_64(arr[4]),
     );
   }
 
@@ -1385,6 +1414,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SshKeyDetail sse_decode_box_autoadd_ssh_key_detail(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_ssh_key_detail(deserializer));
+  }
+
+  @protected
   EnvironmentView sse_decode_environment_view(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_metaJson = sse_decode_String(deserializer);
@@ -1408,6 +1445,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_notes = sse_decode_String(deserializer);
     var var_hasTotp = sse_decode_bool(deserializer);
     var var_passkey = sse_decode_opt_box_autoadd_passkey_detail(deserializer);
+    var var_sshKey = sse_decode_opt_box_autoadd_ssh_key_detail(deserializer);
     return ItemDetail(
       title: var_title,
       username: var_username,
@@ -1416,6 +1454,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       notes: var_notes,
       hasTotp: var_hasTotp,
       passkey: var_passkey,
+      sshKey: var_sshKey,
     );
   }
 
@@ -1427,12 +1466,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_url = sse_decode_opt_String(deserializer);
     var var_hasTotp = sse_decode_bool(deserializer);
     var var_hasPasskey = sse_decode_bool(deserializer);
+    var var_hasSshKey = sse_decode_bool(deserializer);
     return ItemSummary(
       title: var_title,
       username: var_username,
       url: var_url,
       hasTotp: var_hasTotp,
       hasPasskey: var_hasPasskey,
+      hasSshKey: var_hasSshKey,
     );
   }
 
@@ -1536,6 +1577,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SshKeyDetail? sse_decode_opt_box_autoadd_ssh_key_detail(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_ssh_key_detail(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   PairedAccount sse_decode_paired_account(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_email = sse_decode_String(deserializer);
@@ -1610,6 +1664,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return SharingIdentity(
       publicKey: var_publicKey,
       fingerprint: var_fingerprint,
+    );
+  }
+
+  @protected
+  SshKeyDetail sse_decode_ssh_key_detail(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_publicKey = sse_decode_String(deserializer);
+    var var_fingerprint = sse_decode_String(deserializer);
+    var var_keyType = sse_decode_String(deserializer);
+    var var_comment = sse_decode_String(deserializer);
+    var var_createdAt = sse_decode_i_64(deserializer);
+    return SshKeyDetail(
+      publicKey: var_publicKey,
+      fingerprint: var_fingerprint,
+      keyType: var_keyType,
+      comment: var_comment,
+      createdAt: var_createdAt,
     );
   }
 
@@ -1706,6 +1777,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_ssh_key_detail(
+    SshKeyDetail self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_ssh_key_detail(self, serializer);
+  }
+
+  @protected
   void sse_encode_environment_view(
     EnvironmentView self,
     SseSerializer serializer,
@@ -1731,6 +1811,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.notes, serializer);
     sse_encode_bool(self.hasTotp, serializer);
     sse_encode_opt_box_autoadd_passkey_detail(self.passkey, serializer);
+    sse_encode_opt_box_autoadd_ssh_key_detail(self.sshKey, serializer);
   }
 
   @protected
@@ -1741,6 +1822,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_String(self.url, serializer);
     sse_encode_bool(self.hasTotp, serializer);
     sse_encode_bool(self.hasPasskey, serializer);
+    sse_encode_bool(self.hasSshKey, serializer);
   }
 
   @protected
@@ -1825,6 +1907,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_ssh_key_detail(
+    SshKeyDetail? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_ssh_key_detail(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_paired_account(PairedAccount self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.email, serializer);
@@ -1873,6 +1968,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.publicKey, serializer);
     sse_encode_String(self.fingerprint, serializer);
+  }
+
+  @protected
+  void sse_encode_ssh_key_detail(SshKeyDetail self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.publicKey, serializer);
+    sse_encode_String(self.fingerprint, serializer);
+    sse_encode_String(self.keyType, serializer);
+    sse_encode_String(self.comment, serializer);
+    sse_encode_i_64(self.createdAt, serializer);
   }
 
   @protected

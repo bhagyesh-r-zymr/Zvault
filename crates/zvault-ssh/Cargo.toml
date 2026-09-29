@@ -1,0 +1,23 @@
+[package]
+name = "zvault-ssh"
+version = "0.0.0"
+description = "SSH keys stored in vault items (Ed25519 generation, OpenSSH import, fingerprints) and the SSH agent protocol the desktop app serves. Private keys stay on the user's device."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ssh-key = { version = "0.6", default-features = false, features = ["std", "ed25519", "p256", "p384", "rsa", "encryption", "getrandom"] }
+rsa = { version = "0.9", default-features = false, features = ["std"] }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+ssh-encoding = { version = "0.2", features = ["alloc"] }
+thiserror = "2"
+zeroize = { version = "1.8", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"
+
+[lints]
+workspace = true

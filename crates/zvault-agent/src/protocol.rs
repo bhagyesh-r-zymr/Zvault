@@ -98,6 +98,8 @@ pub enum PurposeKind {
     Fill,
     /// The browser extension saves a login typed into a website.
     SaveLogin,
+    /// An SSH client asks the app's SSH agent to sign with a vault key.
+    SshSign,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

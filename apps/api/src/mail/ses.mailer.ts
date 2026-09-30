@@ -1,6 +1,7 @@
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import type { Env } from '../config/env.js';
 import { Mailer, type MailMessage } from './mailer.js';
+import { isSesVerified } from './ses-identity.js';
 
 /** Sends through the Amazon SES API using the ambient IAM role (ECS task role). */
 export class SesMailer extends Mailer {
@@ -29,5 +30,9 @@ export class SesMailer extends Mailer {
         },
       }),
     );
+  }
+
+  override isVerified(email: string): Promise<boolean> {
+    return isSesVerified(email);
   }
 }

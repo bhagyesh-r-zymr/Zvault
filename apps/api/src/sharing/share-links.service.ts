@@ -159,12 +159,14 @@ export class ShareLinksService {
 
   /**
    * In SES sandbox mode, the allowed emails with no sign they can get mail.
-   * Accounts and verified waitlist joiners have been through SES already.
+   * Accounts, verified waitlist joiners and SES-verified identities can get mail.
    */
   private async unverified(emails: string[] | undefined): Promise<string[]> {
     if (!this.env.MAIL_SANDBOX || !emails?.length) return [];
     const reachable = await this.store.knownReachableEmails(emails);
-    return emails.filter((e) => !reachable.has(e));
+    const rest = emails.filter((e) => !reachable.has(e));
+    const verified = await Promise.all(rest.map((e) => this.mailer.isVerified(e)));
+    return rest.filter((_, i) => !verified[i]);
   }
 
   private async openLinkFor(id: ShareId, accessToken: string): Promise<LinkRecord> {

@@ -1,6 +1,7 @@
 import nodemailer, { type Transporter } from 'nodemailer';
 import type { Env } from '../config/env.js';
 import { Mailer, type MailMessage } from './mailer.js';
+import { isSesVerified } from './ses-identity.js';
 
 /**
  * Sends over SMTP (Amazon SES, Postmark, Mailgun, ...). TLS is required unless
@@ -23,5 +24,9 @@ export class SmtpMailer extends Mailer {
 
   async send(message: MailMessage): Promise<void> {
     await this.transport.sendMail({ from: this.env.MAIL_FROM, ...message });
+  }
+
+  override isVerified(email: string): Promise<boolean> {
+    return isSesVerified(email);
   }
 }

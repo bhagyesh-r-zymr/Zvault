@@ -105,11 +105,13 @@ export function secretSharePayload(s: {
   note?: string | undefined;
   project: string;
   environment: string;
+  /** A 2FA secret: `value` is its `otpauth://totp/` URI. */
+  otp?: boolean | undefined;
 }): SharedItemPayload {
   return {
     v: 1,
     title: s.name || s.key,
-    password: s.value,
+    ...(s.otp ? { totp: s.value } : { password: s.value }),
     ...(s.note && { notes: s.note }),
     secret: { key: s.key, project: s.project, environment: s.environment },
   };

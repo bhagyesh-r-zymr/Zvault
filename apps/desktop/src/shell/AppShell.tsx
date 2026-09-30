@@ -296,7 +296,8 @@ export function AppShell(props: {
                           type="button"
                           className="nav-item sub"
                           aria-current={
-                            route.name === 'project' && route.projectId === p.id
+                            (route.name === 'project' || route.name === 'environments') &&
+                            route.projectId === p.id
                               ? 'page'
                               : undefined
                           }
@@ -315,21 +316,6 @@ export function AppShell(props: {
                         >
                           <Icon name="key" size={13} />
                           <span className="label">Secrets</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="nav-item sub"
-                          aria-current={
-                            route.name === 'environments' && route.projectId === p.id
-                              ? 'page'
-                              : undefined
-                          }
-                          onClick={() => setRoute({ name: 'environments', projectId: p.id })}
-                        >
-                          <Icon name="settings" size={13} />
-                          <span className="label">
-                            {p.environments.length === 0 ? 'Add environment' : 'Environments'}
-                          </span>
                         </button>
                         <button
                           type="button"
@@ -405,6 +391,9 @@ export function AppShell(props: {
                         setRoute({ name: 'project', projectId, envId })
                       }
                       onOpenAccess={() => setRoute({ name: 'access', projectId: route.projectId })}
+                      onManageEnvironments={() =>
+                        setRoute({ name: 'environments', projectId: route.projectId })
+                      }
                       sharing={sharing}
                     />
                   </TeamContext.Provider>

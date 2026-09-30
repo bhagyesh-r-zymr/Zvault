@@ -1,7 +1,8 @@
 import { secretSharePayload, type SharedItemPayload } from '@zvault/shared';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { SharingApi } from '../sharing/api.js';
 import { ShareItem } from '../sharing/ShareItem.js';
+import { OneTimePasswordCode } from '../otp/index.js';
 import { CopyButton, ErrorLine, SecretText, Sheet } from '../ui/controls.js';
 import { Icon } from '../ui/Icon.js';
 import {
@@ -71,6 +72,7 @@ export function ProjectsView(props: {
   onEnvChange: (envId: string) => void;
   onOpenProject: (projectId: string, envId: string) => void;
   onOpenAccess: () => void;
+  onManageEnvironments: () => void;
   /** Absent in previews; hides Share. */
   sharing?: SharingApi;
 }) {
@@ -161,12 +163,12 @@ export function ProjectsView(props: {
       onClick={() => setSelected(s.id)}
     >
       <span className="tile" style={{ width: 32, height: 32, borderRadius: 9 }}>
-        <Icon name="key" size={15} />
+        <Icon name={s.otp ? 'shield' : 'key'} size={15} />
       </span>
       <span className="row-main">
         <span className="row-title truncate">{s.name}</span>
         <span className="row-sub mono truncate" style={{ fontSize: 11 }}>
-          {s.key}
+          {s.otp ? '2FA code' : s.key}
         </span>
       </span>
       <Coverage project={project} secret={s} />
@@ -246,6 +248,17 @@ export function ProjectsView(props: {
                 {e.locked && <Icon name="lock" size={10} aria-label="No access" />}
               </button>
             ))}
+            {(project.owner || isOrgAdmin(team?.org ?? null)) && (
+              <button
+                type="button"
+                className="chip ghost"
+                title="Add, rename or remove environments"
+                aria-label="Manage environments"
+                onClick={props.onManageEnvironments}
+              >
+                <Icon name="settings" size={11} />
+              </button>
+            )}
           </div>
           {allTags.length > 0 && (
             <div className="tags" aria-label="Filter by tag">
@@ -285,10 +298,12 @@ export function ProjectsView(props: {
             project={project}
             env={env}
             secret={current}
+            envFiltered={filterEnv !== null}
             team={team}
             canEdit={canEdit}
             onEnvChange={props.onEnvChange}
             onOpenAccess={props.onOpenAccess}
+            onManageEnvironments={props.onManageEnvironments}
             {...(props.sharing && { sharing: props.sharing })}
           />
         ) : (
@@ -343,8 +358,11 @@ function SecretDetail(props: {
   team: ProjectTeam | undefined;
   /** Whether this account can change secrets in `env`; hides Delete when not. */
   canEdit: boolean;
+  /** A list filter already picked the environment, so no second switch. */
+  envFiltered: boolean;
   onEnvChange: (envId: string) => void;
   onOpenAccess: () => void;
+  onManageEnvironments: () => void;
   sharing?: SharingApi;
 }) {
   const { project, env, secret, sharing } = props;
@@ -392,6 +410,7 @@ function SecretDetail(props: {
           note: secret.note,
           project: project.name,
           environment: shared.name,
+          otp: secret.otp,
         }),
       });
     } catch (e) {
@@ -421,6 +440,10 @@ function SecretDetail(props: {
     return `${e.name}: set`;
   };
 
+  const otpCode = useCallback(
+    () => sync.totpCode(project.id, secret.id, source ?? env.id),
+    [sync, project.id, secret.id, source, env.id],
+  );
   const command = `zv run --env ${secret.key}=${secretRef(project, env, secret)} -- npm start`;
   const sharedEnv = project.environments.find((e) => e.id === share?.envId);
 
@@ -460,14 +483,20 @@ function SecretDetail(props: {
       <div className="detail-body">
         <div className="item-head">
           <span className="tile large">
-            <Icon name="key" size={24} />
+            <Icon name={secret.otp ? 'shield' : 'key'} size={24} />
           </span>
           <div>
             <h1>{secret.name}</h1>
             <div className="tags">
-              <span className="mono muted" style={{ fontSize: 12 }}>
-                {secret.key}
-              </span>
+              {secret.otp ? (
+                <span className="muted" style={{ fontSize: 12 }}>
+                  2FA code
+                </span>
+              ) : (
+                <span className="mono muted" style={{ fontSize: 12 }}>
+                  {secret.key}
+                </span>
+              )}
               {secret.tags.map((t) => (
                 <span key={t} className="chip">
                   #{t}
@@ -477,29 +506,31 @@ function SecretDetail(props: {
           </div>
         </div>
 
-        <div className="env-switch">
-          <span className="muted">Value in</span>
-          <div className="seg" role="tablist" aria-label="Environment">
-            {project.environments.map((e) => {
-              const set = !e.locked && valueSource(project, secret, e.id);
-              return (
-                <button
-                  key={e.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={e.id === env.id}
-                  title={statusOf(e)}
-                  data-unset={set ? undefined : 'true'}
-                  onClick={() => props.onEnvChange(e.id)}
-                >
-                  <EnvDot env={e} hollow={!set} />
-                  {e.short}
-                  {e.locked && <Icon name="lock" size={10} aria-label="No access" />}
-                </button>
-              );
-            })}
+        {!props.envFiltered && (
+          <div className="env-switch">
+            <span className="muted">Value in</span>
+            <div className="seg" role="tablist" aria-label="Environment">
+              {project.environments.map((e) => {
+                const set = !e.locked && valueSource(project, secret, e.id);
+                return (
+                  <button
+                    key={e.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={e.id === env.id}
+                    title={statusOf(e)}
+                    data-unset={set ? undefined : 'true'}
+                    onClick={() => props.onEnvChange(e.id)}
+                  >
+                    <EnvDot env={e} hollow={!set} />
+                    {e.short}
+                    {e.locked && <Icon name="lock" size={10} aria-label="No access" />}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="panel value-card">
           <span className="row-label">
@@ -513,13 +544,15 @@ function SecretDetail(props: {
                   <Icon name="lock" size={13} />
                   You don&apos;t have access to {env.name} values.
                 </span>
+              ) : source && secret.otp ? (
+                <OneTimePasswordCode key={source} getCode={otpCode} />
               ) : source ? (
                 <SecretText value={revealed ?? ''} masked={revealed === null} />
               ) : (
                 <span className="muted">Not set in {env.name}.</span>
               )}
             </div>
-            {source && (
+            {source && !secret.otp && (
               <div className="value-actions">
                 <button type="button" className="small" onClick={() => void reveal()}>
                   <Icon name={revealed !== null ? 'eyeOff' : 'eye'} size={13} />
@@ -549,7 +582,7 @@ function SecretDetail(props: {
           <SecretAccessList team={props.team} project={project} env={env} />
         </div>
 
-        {source && (
+        {source && !secret.otp && (
           <div className="command-pill">
             <span className="muted">Terminal</span>
             <span className="mono truncate">

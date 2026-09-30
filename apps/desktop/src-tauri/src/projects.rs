@@ -510,6 +510,23 @@ pub fn secret_value_open(
         .map(|v| v.to_string())
 }
 
+/// The current 2FA code of a project secret whose value is an `otpauth://`
+/// URI, so the setup key stays in Rust while the code is on screen.
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub fn secret_totp_code(
+    keyring: tauri::State<'_, Keyring>,
+    project_id: String,
+    secret_id: String,
+    environment_id: String,
+    encrypted_value: Blob,
+) -> Result<crate::otp::OtpCode> {
+    let uri =
+        keyring.open_secret_value(&project_id, &secret_id, &environment_id, &encrypted_value)?;
+    let totp = zvault_otp::Totp::parse(&uri)?;
+    Ok(crate::otp::OtpCode::now(&totp))
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;

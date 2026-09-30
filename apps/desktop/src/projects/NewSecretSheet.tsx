@@ -5,6 +5,7 @@ import { Icon } from '../ui/Icon.js';
 import { writeError } from './api.js';
 import { useProjects, useProjectsSync, useTeam } from './context.js';
 import type { Project } from './model.js';
+import { OneTimePasswordEditor } from '../otp/index.js';
 import { EnvDot } from './ProjectsView.js';
 import { canEditEnv } from './teamModel.js';
 
@@ -33,6 +34,7 @@ export function NewSecretSheet(props: {
   const [name, setName] = useState('');
   const [envVar, setEnvVar] = useState('');
   const [envVarTouched, setEnvVarTouched] = useState(false);
+  const [kind, setKind] = useState<'secret' | 'otp'>('secret');
   const [folder, setFolder] = useState('');
   const [values, setValues] = useState<Record<string, string>>({});
   const [tags, setTags] = useState<string[]>([]);
@@ -70,7 +72,12 @@ export function NewSecretSheet(props: {
     if (!SecretKeyName.safeParse(envVar).success) {
       return setError('Give it a variable name, such as STRIPE_SECRET_KEY.');
     }
-    if (filled.length === 0) return setError('Add a value for at least one environment.');
+    if (filled.length === 0)
+      return setError(
+        kind === 'otp'
+          ? 'Add a 2FA setup for at least one environment.'
+          : 'Add a value for at least one environment.',
+      );
     const folderName = folder.trim();
     const existing = project.folders.find(
       (f) => f.name.toLowerCase() === folderName.toLowerCase() || f.slug === slugify(folderName),
@@ -89,6 +96,7 @@ export function NewSecretSheet(props: {
         key: envVar,
         folderId,
         tags,
+        kind,
         values: Object.fromEntries(filled.map((env) => [env.id, values[env.id]!.trim()])),
       });
       props.onCreated({ projectId, secretId, envIds: filled.map((env) => env.id) });
@@ -109,6 +117,30 @@ export function NewSecretSheet(props: {
         onSubmit={(e) => void submit(e)}
         style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
       >
+        <div className="seg" role="tablist" aria-label="Kind of secret">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={kind === 'secret'}
+            onClick={() => {
+              setKind('secret');
+              setValues({});
+            }}
+          >
+            <Icon name="key" size={13} /> Secret
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={kind === 'otp'}
+            onClick={() => {
+              setKind('otp');
+              setValues({});
+            }}
+          >
+            <Icon name="shield" size={13} /> 2FA code
+          </button>
+        </div>
         <div className="grid-2">
           <div className="field">
             <label htmlFor={ids.name}>Name</label>
@@ -116,7 +148,7 @@ export function NewSecretSheet(props: {
               id={ids.name}
               value={name}
               autoFocus
-              placeholder="Stripe secret key"
+              placeholder={kind === 'otp' ? 'GitHub 2FA' : 'Stripe secret key'}
               onChange={(e) => {
                 setName(e.target.value);
                 if (!envVarTouched) setEnvVar(envVarOf(e.target.value));
@@ -175,7 +207,7 @@ export function NewSecretSheet(props: {
 
         <div>
           <div className="section-label">
-            <span>Value per environment</span>
+            <span>{kind === 'otp' ? '2FA setup per environment' : 'Value per environment'}</span>
             {newEnv === null && project.owner && (
               <button
                 type="button"
@@ -196,25 +228,36 @@ export function NewSecretSheet(props: {
                     <EnvDot env={env} />
                     {env.name}
                   </span>
-                  <input
-                    type="password"
-                    aria-label={`${env.name} value`}
-                    autoComplete="off"
-                    disabled={readOnly(env)}
-                    value={values[env.id] ?? ''}
-                    placeholder={
-                      env.locked
-                        ? 'No access'
-                        : readOnly(env)
-                          ? 'View only'
-                          : parent
-                            ? `Same as ${parent.name}`
-                            : i === 0
-                              ? 'Paste the value'
-                              : 'Not set'
-                    }
-                    onChange={(e) => setValues({ ...values, [env.id]: e.target.value })}
-                  />
+                  {kind === 'otp' ? (
+                    readOnly(env) ? (
+                      <span className="muted">{env.locked ? 'No access' : 'View only'}</span>
+                    ) : (
+                      <OneTimePasswordEditor
+                        value={values[env.id] ?? ''}
+                        onChange={(uri) => setValues({ ...values, [env.id]: uri })}
+                      />
+                    )
+                  ) : (
+                    <input
+                      type="password"
+                      aria-label={`${env.name} value`}
+                      autoComplete="off"
+                      disabled={readOnly(env)}
+                      value={values[env.id] ?? ''}
+                      placeholder={
+                        env.locked
+                          ? 'No access'
+                          : readOnly(env)
+                            ? 'View only'
+                            : parent
+                              ? `Same as ${parent.name}`
+                              : i === 0
+                                ? 'Paste the value'
+                                : 'Not set'
+                      }
+                      onChange={(e) => setValues({ ...values, [env.id]: e.target.value })}
+                    />
+                  )}
                   {readOnly(env) && (
                     <span
                       title={

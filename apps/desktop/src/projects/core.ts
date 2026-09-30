@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import type { OtpCode } from '../vault/core.js';
 import type {
   AddEnvironmentWrapsRequest,
   AddProjectWrapsRequest,
@@ -95,6 +96,13 @@ export interface ProjectsCore {
     environmentId: string,
     encryptedValue: EncryptedBlob,
   ): Promise<string>;
+  /** The current 2FA code of a value that holds an `otpauth://` URI; the URI stays in Rust. */
+  totpCode(
+    projectId: string,
+    secretId: string,
+    environmentId: string,
+    encryptedValue: EncryptedBlob,
+  ): Promise<OtpCode>;
 }
 
 export const projectsCore: ProjectsCore = {
@@ -112,6 +120,8 @@ export const projectsCore: ProjectsCore = {
     invoke('secret_value_seal', { projectId, secretId, environmentId, value }),
   openValue: (projectId, secretId, environmentId, encryptedValue) =>
     invoke('secret_value_open', { projectId, secretId, environmentId, encryptedValue }),
+  totpCode: (projectId, secretId, environmentId, encryptedValue) =>
+    invoke('secret_totp_code', { projectId, secretId, environmentId, encryptedValue }),
 };
 
 /** A value an approver releases, as its ciphertext from the project sync. */

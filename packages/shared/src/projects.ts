@@ -162,6 +162,11 @@ export const SecretMeta = z.object({
   folderId: RecordId.nullable().default(null),
   tags: z.array(Tag).max(32).default([]),
   note: z.string().max(4000).optional(),
+  /**
+   * `otp`: each environment's value is an `otpauth://totp/` URI and the apps
+   * show a live 2FA code instead of the value. Absent means an ordinary secret.
+   */
+  kind: z.enum(['secret', 'otp']).optional(),
 });
 export type SecretMeta = z.infer<typeof SecretMeta>;
 

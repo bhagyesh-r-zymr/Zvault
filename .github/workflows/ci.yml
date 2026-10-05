@@ -199,7 +199,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@cargo-llvm-cov
       - name: Run tests with coverage
-        run: cargo llvm-cov --workspace --locked --lcov --output-path lcov.info
+        # Gate: the crates/* libraries and the zv CLI (not the Tauri app, and
+        # not flutter_rust_bridge's generated glue) must stay above the floor.
+        run: |
+          cargo llvm-cov --workspace --locked \
+            --ignore-filename-regex '(frb_generated\.rs|/apps/)' \
+            --fail-under-lines 85 \
+            --lcov --output-path lcov.info
       - name: Coverage summary
         run: |
           {

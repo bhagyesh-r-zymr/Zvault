@@ -2,6 +2,7 @@ packages:
   - apps/*
   - packages/*
   - infra
+  - e2e
 
 # Only these packages may run install scripts (supply-chain hardening).
 onlyBuiltDependencies:

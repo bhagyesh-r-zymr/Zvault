@@ -1,0 +1,51 @@
+name: E2E (web)
+
+# Playwright against the landing page and the share page. Linux only, and only
+# when something it covers changes.
+on:
+  pull_request:
+    paths:
+      - 'apps/site/**'
+      - 'apps/share-web/**'
+      - 'packages/shared/**'
+      - 'e2e/**'
+      - '.github/workflows/e2e-web.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/site/**'
+      - 'apps/share-web/**'
+      - 'e2e/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  playwright:
+    name: Playwright (site + share page)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @zvault/shared build
+      - run: pnpm --filter @zvault/e2e exec playwright install --with-deps chromium
+      - run: pnpm --filter @zvault/e2e test:web
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 14

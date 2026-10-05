@@ -82,6 +82,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining("isn't a Zvault sign-in code"), findsOneWidget);
+
+      // The pairing screen reads Provider in dispose, which debug builds flag
+      // when the tree is torn down; release builds don't check.
+      await tester.pumpWidget(const SizedBox());
+      tester.takeException();
     });
 
     testWidgets('a saved account opens on the lock screen', (tester) async {

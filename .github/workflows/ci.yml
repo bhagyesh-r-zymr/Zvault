@@ -140,6 +140,81 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
 
+  # Coverage is reported, not enforced yet: the numbers go to the job summary
+  # and the lcov files to an artifact, so gates can be set from a real baseline.
+  coverage-ts:
+    name: Coverage (TypeScript)
+    needs: changes
+    if: needs.changes.outputs.node == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @zvault/shared build
+      - name: Run tests with coverage
+        run: pnpm --filter @zvault/shared --filter @zvault/api --filter @zvault/desktop --filter @zvault/share-web --filter @zvault/extension --workspace-concurrency=1 run test:coverage
+      - name: Coverage summary
+        if: always()
+        run: |
+          {
+            echo '### TypeScript coverage (lines)'
+            echo
+            echo '| Package | Lines | Branches | Functions |'
+            echo '| --- | --- | --- | --- |'
+            for f in packages/shared apps/api apps/desktop apps/share-web apps/extension; do
+              s="$f/coverage/coverage-summary.json"
+              [ -f "$s" ] && jq -r --arg n "$f" '"| \($n) | \(.total.lines.pct)% | \(.total.branches.pct)% | \(.total.functions.pct)% |"' "$s"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-typescript
+          path: |
+            packages/*/coverage/lcov.info
+            apps/*/coverage/lcov.info
+          retention-days: 14
+
+  coverage-rust:
+    name: Coverage (Rust)
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Run tests with coverage
+        run: cargo llvm-cov --workspace --locked --lcov --output-path lcov.info
+      - name: Coverage summary
+        run: |
+          {
+            echo '### Rust coverage'
+            echo
+            echo '```'
+            cargo llvm-cov report --summary-only | cut -c1-120
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-rust
+          path: lcov.info
+          retention-days: 14
+
   macos:
     name: macOS desktop (clippy, test)
     # macOS minutes count 10x against the private-repo allowance, so this runs
@@ -185,7 +260,15 @@ jobs:
       - run: flutter pub get
       - run: dart format --output=none --set-exit-if-changed lib/main.dart lib/src/*.dart lib/src/screens test
       - run: flutter analyze
-      - run: flutter test
+      - run: flutter test --coverage
+      - name: Coverage summary
+        run: |
+          awk -F: '/^LF:/{t+=$2} /^LH:/{h+=$2} END{if(t>0) printf "### Android coverage (lines)\n\n%.1f%% (%d of %d)\n", 100*h/t, h, t}' coverage/lcov.info >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-android
+          path: apps/mobile/coverage/lcov.info
+          retention-days: 14
       - name: Build the APK
         run: flutter build apk --release --target-platform android-arm64,android-x64
       - uses: actions/upload-artifact@v4

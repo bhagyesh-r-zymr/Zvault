@@ -20,13 +20,15 @@
     "dev": "tsc -p tsconfig.build.json --watch",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.provider=v8 --coverage.reporter=text-summary --coverage.reporter=json-summary --coverage.reporter=lcov --coverage.include='src/**/*.ts' --coverage.exclude='**/*.test.*'"
   },
   "dependencies": {
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^22.20.4",
+    "@vitest/coverage-v8": "^5.0.3",
     "vitest": "^5.0.1"
   }
 }

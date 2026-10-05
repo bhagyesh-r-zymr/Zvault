@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "node --env-file-if-exists=.env --import @swc-node/register/esm-register src/db/migrate.ts"
+    "db:migrate": "node --env-file-if-exists=.env --import @swc-node/register/esm-register src/db/migrate.ts",
+    "test:coverage": "vitest run --coverage --coverage.provider=v8 --coverage.reporter=text-summary --coverage.reporter=json-summary --coverage.reporter=lcov --coverage.include='src/**/*.ts' --coverage.exclude='**/*.test.*'"
   },
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.1139.0",
@@ -40,6 +41,7 @@
     "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",
+    "@vitest/coverage-v8": "^5.0.3",
     "drizzle-kit": "^0.31.11",
     "supertest": "^7.3.0",
     "unplugin-swc": "^2.0.0",

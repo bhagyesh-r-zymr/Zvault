@@ -10,7 +10,8 @@
     "tauri": "tauri",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "test:coverage": "vitest run --coverage --coverage.provider=v8 --coverage.reporter=text-summary --coverage.reporter=json-summary --coverage.reporter=lcov --coverage.include='src/**/*.{ts,tsx}' --coverage.exclude='**/*.test.*' --passWithNoTests"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
@@ -25,6 +26,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
+    "@vitest/coverage-v8": "^5.0.3",
     "vite": "^8.3.1",
     "vitest": "^5.0.1"
   }

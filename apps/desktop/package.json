@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "test:coverage": "vitest run --coverage --coverage.provider=v8 --coverage.reporter=text-summary --coverage.reporter=json-summary --coverage.reporter=lcov --coverage.include='src/**/*.{ts,tsx}' --coverage.exclude='**/*.test.*' --passWithNoTests"
+    "test:coverage": "vitest run --coverage --coverage.thresholds.lines=80 --coverage.thresholds.statements=80 --coverage.thresholds.functions=80 --coverage.thresholds.branches=75 --coverage.provider=v8 --coverage.reporter=text-summary --coverage.reporter=json-summary --coverage.reporter=lcov --coverage.include='src/**/*.{ts,tsx}' --coverage.exclude='**/*.test.*' --passWithNoTests"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
@@ -23,10 +23,14 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.5",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "@vitest/coverage-v8": "^5.0.3",
+    "happy-dom": "^20.14.5",
     "vite": "^8.3.1",
     "vitest": "^5.0.1"
   }

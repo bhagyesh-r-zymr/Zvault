@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage --coverage.provider=v8 --coverage.reporter=text-summary --coverage.reporter=json-summary --coverage.reporter=lcov --coverage.include='src/**/*.ts' --coverage.exclude='**/*.test.*'"
+    "test:coverage": "vitest run --coverage --coverage.thresholds.lines=80 --coverage.thresholds.statements=80 --coverage.thresholds.functions=80 --coverage.thresholds.branches=75 --coverage.provider=v8 --coverage.reporter=text-summary --coverage.reporter=json-summary --coverage.reporter=lcov --coverage.include='src/**/*.ts' --coverage.exclude='**/*.test.*'"
   },
   "devDependencies": {
     "@types/chrome": "^0.3.3",

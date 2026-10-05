@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node", "@wdio/globals/types", "@wdio/mocha-framework"],
+    "skipLibCheck": true,
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules"]
+}

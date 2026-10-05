@@ -5,3 +5,6 @@ apps/desktop/src-tauri/gen
 apps/desktop/src-tauri/icons
 infra/cdk.out
 apps/mobile
+e2e/.share-dist
+e2e/test-results
+e2e/playwright-report

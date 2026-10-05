@@ -149,3 +149,124 @@ fn http() -> reqwest::Client {
         .build()
         .unwrap_or_default()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn github() -> Target {
+        Target::Github {
+            id: "t1".into(),
+            repo: "acme/web".into(),
+            environment: None,
+        }
+    }
+
+    fn aws_target() -> Target {
+        Target::Aws {
+            id: "t2".into(),
+            region: "ap-south-1".into(),
+            secret_name: "web/prod".into(),
+        }
+    }
+
+    fn aws_credential() -> Credential {
+        Credential::Aws {
+            access_key_id: "AKIAEXAMPLE".into(),
+            secret_access_key: "secret".into(),
+            session_token: None,
+        }
+    }
+
+    fn github_credential() -> Credential {
+        Credential::Github {
+            token: "ghp_example".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn push_needs_a_valid_target() {
+        let bad = Target::Github {
+            id: "t".into(),
+            repo: "nope".into(),
+            environment: None,
+        };
+        let err = push(&bad, &github_credential(), &[], &[])
+            .await
+            .unwrap_err();
+        assert!(matches!(err, Error::Target(TargetError::Repo)));
+        assert!(err.to_string().contains("owner/name"));
+    }
+
+    #[tokio::test]
+    async fn push_asks_for_the_matching_provider() {
+        let err = push(&github(), &aws_credential(), &[], &[])
+            .await
+            .unwrap_err();
+        assert_eq!(err.to_string(), "connect GitHub first");
+        let err = push(&aws_target(), &github_credential(), &[], &[])
+            .await
+            .unwrap_err();
+        assert_eq!(err.to_string(), "connect AWS first");
+    }
+
+    #[test]
+    fn credentials_never_print_their_secrets() {
+        assert_eq!(
+            format!("{:?}", github_credential()),
+            "Credential::Github(..)"
+        );
+        assert_eq!(format!("{:?}", aws_credential()), "Credential::Aws(..)");
+    }
+
+    #[test]
+    fn credentials_round_trip_with_camel_case_fields() {
+        let json = serde_json::to_value(aws_credential()).unwrap();
+        assert_eq!(json["provider"], "aws");
+        assert_eq!(json["accessKeyId"], "AKIAEXAMPLE");
+        assert!(json.get("sessionToken").is_none());
+        let back: Credential = serde_json::from_value(json).unwrap();
+        assert!(matches!(back, Credential::Aws { .. }));
+
+        let gh: Credential =
+            serde_json::from_str(r#"{"provider":"github","token":"ghp_x"}"#).unwrap();
+        assert!(matches!(gh, Credential::Github { ref token } if token == "ghp_x"));
+    }
+
+    #[test]
+    fn reports_serialize_names_only() {
+        let report = Report {
+            pushed: vec!["A".into()],
+            removed: vec!["B".into()],
+            failed: vec![Failure {
+                name: "C".into(),
+                reason: "too long".into(),
+            }],
+        };
+        let json = serde_json::to_value(&report).unwrap();
+        assert_eq!(json["pushed"][0], "A");
+        assert_eq!(json["failed"][0]["reason"], "too long");
+        assert_eq!(Report::default(), Report::default());
+    }
+
+    #[test]
+    fn error_messages_tell_people_what_to_do() {
+        assert!(Error::Network("GitHub").to_string().contains("GitHub"));
+        let unauthorized = Error::Unauthorized {
+            provider: "AWS",
+            status: 403,
+        };
+        assert!(unauthorized.to_string().contains("403"));
+    }
+
+    #[tokio::test]
+    async fn network_errors_hide_the_cause() {
+        let err = reqwest::Client::new()
+            .get("http://127.0.0.1:1")
+            .send()
+            .await
+            .unwrap_err();
+        let mapped = Error::network("GitHub")(err);
+        assert!(matches!(mapped, Error::Network("GitHub")));
+    }
+}

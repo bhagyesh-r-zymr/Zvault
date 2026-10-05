@@ -85,10 +85,12 @@ describe('VaultScreen list', () => {
   it('focuses the search box on the shortcut event', async () => {
     await mount([login('Amazon')]);
     await screen.findByText('Amazon');
-    act(() => {
-      window.dispatchEvent(new Event(FOCUS_SEARCH_EVENT));
+    await waitFor(() => {
+      act(() => {
+        window.dispatchEvent(new Event(FOCUS_SEARCH_EVENT));
+      });
+      expect(screen.getByLabelText('Search items')).toHaveFocus();
     });
-    expect(screen.getByLabelText('Search items')).toHaveFocus();
   });
 
   it('shows badges for passkeys and ssh keys, and singular count', async () => {

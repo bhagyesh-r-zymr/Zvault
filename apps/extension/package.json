@@ -8,10 +8,12 @@
     "build": "tsc --noEmit && vite build && vite build --config vite.content.config.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.provider=v8 --coverage.reporter=text-summary --coverage.reporter=json-summary --coverage.reporter=lcov --coverage.include='src/**/*.ts' --coverage.exclude='**/*.test.*'"
   },
   "devDependencies": {
     "@types/chrome": "^0.3.3",
+    "@vitest/coverage-v8": "^5.0.3",
     "happy-dom": "^20.14.5",
     "vite": "^8.3.1",
     "vitest": "^5.0.1"

@@ -206,6 +206,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^5.0.3
         version: 5.0.3(vitest@5.0.1)
+      happy-dom:
+        specifier: ^20.14.5
+        version: 20.14.5
       vite:
         specifier: ^8.3.1
         version: 8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(tsx@4.23.15)

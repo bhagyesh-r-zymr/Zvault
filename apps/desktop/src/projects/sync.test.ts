@@ -108,6 +108,7 @@ const fakeCore: ProjectsCore = {
   openEntry: (_pid, _kind, _id, meta) => Promise.resolve(decode(meta)),
   sealValue: (_pid, _sid, envId, value) => Promise.resolve(blob(envId, { value })),
   openValue: (_pid, _sid, _envId, b) => Promise.resolve((decode(b) as { value: string }).value),
+  totpCode: () => Promise.resolve({ code: '123456', period: 30, remaining: 12 }),
 };
 
 /** Minimal server with the same revision, sequence and key-grant rules as the API. */
@@ -345,6 +346,7 @@ describe('ProjectsSync', () => {
       'zv://payments-api/production/billing/STRIPE_SECRET_KEY',
     );
     expect(await mine.openValue(projectId, secretId, prod!.id)).toBe('sk_live_1');
+    expect(secret.otp).toBeUndefined();
 
     // Five entries at two per page.
     const other = device(server);
@@ -352,6 +354,18 @@ describe('ProjectsSync', () => {
     expect(other.get().projects[0]!.environments).toHaveLength(3);
     expect(other.get().secrets[0]).toMatchObject({ name: 'Stripe secret key', key: secret.key });
     expect(await other.openValue(projectId, secretId, dev!.id)).toBe('sk_test_1');
+
+    // A 2FA secret carries its kind in the sealed metadata.
+    const otpId = await mine.createSecret(projectId, {
+      name: 'Zed 2FA',
+      key: 'GITHUB_2FA',
+      folderId: null,
+      tags: [],
+      kind: 'otp',
+      values: { [dev!.id]: 'otpauth://totp/GitHub:me?secret=JBSWY3DPEHPK3PXP' },
+    });
+    expect(mine.get().secrets.find((s) => s.id === otpId)?.otp).toBe(true);
+    expect((await mine.totpCode(projectId, otpId, dev!.id)).code).toBe('123456');
   });
 
   it('shows environments without a key grant as locked, without their values', async () => {

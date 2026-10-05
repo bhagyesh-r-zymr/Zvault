@@ -89,6 +89,8 @@ export interface ProjectSecret {
   folder: Folder | null;
   tags: string[];
   note?: string;
+  /** A 2FA secret: its values are one-time-password setups, shown as live codes. */
+  otp?: boolean;
   /** Sealed value per environment id, for environments this account can read. */
   values: Record<string, EncryptedBlob | undefined>;
 }
@@ -174,6 +176,7 @@ export function toView(states: Iterable<ProjectState>): ProjectsView {
         folder: folders.find((f) => f.id === sec.meta.folderId) ?? null,
         tags: sec.meta.tags,
         ...(sec.meta.note && { note: sec.meta.note }),
+        ...(sec.meta.kind === 'otp' && { otp: true }),
         values: sec.values,
       });
     }

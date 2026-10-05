@@ -1,3 +1,4 @@
+import type { OtpCode } from '../vault/core.js';
 import {
   EnvironmentMeta,
   FolderMeta,
@@ -32,6 +33,8 @@ export interface NewSecret {
   folderId: string | null;
   tags: string[];
   note?: string;
+  /** `otp`: every value is an `otpauth://` URI shown as a live 2FA code. */
+  kind?: 'secret' | 'otp';
   /** Plaintext value per environment id. Sealed in Rust before it leaves. */
   values: Record<string, string>;
 }
@@ -428,6 +431,7 @@ export class ProjectsSync {
       folderId: secret.folderId,
       tags: secret.tags,
       ...(secret.note && { note: secret.note }),
+      ...(secret.kind === 'otp' && { kind: 'otp' }),
     });
     const sealed = await this.core.sealEntry(projectId, 'secret', null, meta);
     const values: Record<string, EncryptedBlob> = {};
@@ -589,6 +593,13 @@ export class ProjectsSync {
   /** Deletes one trashed secret for good, or empties the project's trash (`secretId` null). */
   purge(projectId: string, secretId: string | null): Promise<void> {
     return this.api.purgeTrash(projectId, secretId);
+  }
+
+  /** The live 2FA code of a secret in the environment that holds its setup. */
+  totpCode(projectId: string, secretId: string, environmentId: string): Promise<OtpCode> {
+    const blob = this.projects.get(projectId)?.secrets.get(secretId)?.values[environmentId];
+    if (!blob) return Promise.reject(new Error('This value is not available.'));
+    return this.core.totpCode(projectId, secretId, environmentId, blob);
   }
 
   /**

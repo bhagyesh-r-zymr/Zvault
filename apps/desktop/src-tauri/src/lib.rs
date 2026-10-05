@@ -112,6 +112,7 @@ pub fn run() {
             vault::item_totp_code,
             vault::item_passkey_test,
             vault::item_share_payload,
+            projects::secret_totp_code,
             otp::otp_parse,
             otp::otp_code,
             pairing::pairing_begin,

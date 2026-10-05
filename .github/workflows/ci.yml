@@ -269,6 +269,8 @@ jobs:
           name: coverage-android
           path: apps/mobile/coverage/lcov.info
           retention-days: 14
+      - name: Coverage gate (80% of hand-written Dart lines)
+        run: python3 tool/check_coverage.py 80
       - name: Build the APK
         run: flutter build apk --release --target-platform android-arm64,android-x64
       - uses: actions/upload-artifact@v4

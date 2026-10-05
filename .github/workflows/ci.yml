@@ -275,6 +275,8 @@ jobs:
           name: coverage-android
           path: apps/mobile/coverage/lcov.info
           retention-days: 14
+      - name: Coverage gate (80% of hand-written Dart lines)
+        run: python3 tool/check_coverage.py 80
       - name: Build the APK
         run: flutter build apk --release --target-platform android-arm64,android-x64
       - uses: actions/upload-artifact@v4
@@ -282,3 +284,47 @@ jobs:
           name: zvault-android
           path: apps/mobile/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 14
+
+  # The real Rust core and the app on an Android emulator. Slower than the
+  # widget tests (it builds the native library and boots a device), so it only
+  # runs when the Android app or its Rust core changes.
+  mobile-integration:
+    name: Android app (emulator integration test)
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.5
+          channel: stable
+          cache: true
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-linux-android
+      # Hardware acceleration for the emulator on GitHub's Linux runners.
+      - name: Enable KVM
+        working-directory: .
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - run: flutter pub get
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          working-directory: apps/mobile
+          script: flutter test integration_test --no-pub
